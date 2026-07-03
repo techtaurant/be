@@ -55,7 +55,7 @@ jobs:
                   retention-days: 30
 
             - name: 테스트 커버리지를 PR에 코멘트로 등록
-              if: always()
+              if: ${{ success() && hashFiles('build/reports/jacoco/test/jacocoTestReport.xml') != '' }}
               id: jacoco
               uses: madrapps/jacoco-report@v1.2
               with:
