@@ -47,7 +47,15 @@ class LinkCrawlDocumentParser(
         batch: LinkCrawlBatch,
         pageUrl: String,
     ): String? {
-        val linkElement = resolveElement(item, batch.articleLinkSelector) ?: return null
+        return extractArticleUrl(item, LinkCrawlSelectors.from(batch), pageUrl)
+    }
+
+    fun extractArticleUrl(
+        item: Element,
+        selectors: LinkCrawlSelectors,
+        pageUrl: String,
+    ): String? {
+        val linkElement = resolveElement(item, selectors.articleLinkSelector) ?: return null
         val href = linkElement.attr("href").trim()
         if (href.isBlank()) {
             return null
@@ -63,13 +71,21 @@ class LinkCrawlDocumentParser(
         batch: LinkCrawlBatch,
         pageUrl: String,
     ): LinkFailedJobDraft? {
-        val articleUrl = extractArticleUrl(item, batch, pageUrl) ?: return null
+        return extractFailedJobDraft(item, LinkCrawlSelectors.from(batch), pageUrl)
+    }
+
+    fun extractFailedJobDraft(
+        item: Element,
+        selectors: LinkCrawlSelectors,
+        pageUrl: String,
+    ): LinkFailedJobDraft? {
+        val articleUrl = extractArticleUrl(item, selectors, pageUrl) ?: return null
         val title =
-            resolveText(item, batch.titleSelector)
+            resolveText(item, selectors.titleSelector)
                 ?.trim()
                 ?.takeIf(String::isNotEmpty)
                 ?.let { title -> LinkCrawlFailedJob.truncateTitle(title) }
-        val summary = batch.summarySelector?.let { resolveText(item, it) }?.trim()?.takeIf(String::isNotEmpty)
+        val summary = selectors.summarySelector?.let { resolveText(item, it) }?.trim()?.takeIf(String::isNotEmpty)
 
         return LinkFailedJobDraft(
             articleUrl = articleUrl,
@@ -83,16 +99,24 @@ class LinkCrawlDocumentParser(
         batch: LinkCrawlBatch,
         pageUrl: String,
     ): LinkSnapshot? {
-        val absoluteUrl = extractArticleUrl(item, batch, pageUrl) ?: return null
+        return extractSnapshot(item, LinkCrawlSelectors.from(batch), pageUrl)
+    }
+
+    fun extractSnapshot(
+        item: Element,
+        selectors: LinkCrawlSelectors,
+        pageUrl: String,
+    ): LinkSnapshot? {
+        val absoluteUrl = extractArticleUrl(item, selectors, pageUrl) ?: return null
 
         val title =
-            resolveText(item, batch.titleSelector)
+            resolveText(item, selectors.titleSelector)
                 ?.takeIf { it.isNotBlank() }
                 ?: return null
 
-        val summary = batch.summarySelector?.let { resolveText(item, it) }.orEmpty()
+        val summary = selectors.summarySelector?.let { resolveText(item, it) }.orEmpty()
         val createdAt =
-            resolveCreatedAt(item, absoluteUrl, batch)
+            resolveCreatedAt(item, absoluteUrl, selectors)
                 ?: throw ApiException(LinkStatus.LINK_CRAWL_BATCH_CREATED_AT_REQUIRED)
 
         return LinkSnapshot(
@@ -118,14 +142,14 @@ class LinkCrawlDocumentParser(
     private fun resolveCreatedAt(
         item: Element,
         articleUrl: String,
-        batch: LinkCrawlBatch,
+        selectors: LinkCrawlSelectors,
     ): Instant? {
-        val createdAtFromListItem = parseCreatedAt(firstResolvedValue(item, batch.createdAtSelectors))
+        val createdAtFromListItem = parseCreatedAt(firstResolvedValue(item, selectors.createdAtSelectors))
         if (createdAtFromListItem != null) {
             return createdAtFromListItem
         }
 
-        return parseCreatedAtFromArticlePage(articleUrl, batch.createdAtSelectors)
+        return parseCreatedAtFromArticlePage(articleUrl, selectors.createdAtSelectors)
     }
 
     private fun resolveElement(

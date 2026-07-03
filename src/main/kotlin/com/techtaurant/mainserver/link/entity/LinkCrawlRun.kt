@@ -41,6 +41,10 @@ class LinkCrawlRun(
     var skippedCount: Int = 0,
     @Column(name = "failed_job_count", nullable = false)
     var failedJobCount: Int = 0,
+    @Column(name = "error_status_code")
+    var errorStatusCode: Int? = null,
+    @Column(name = "error_message", columnDefinition = "TEXT")
+    var errorMessage: String? = null,
     @Column(name = "started_at_utc", nullable = false)
     var startedAt: Instant,
     @Column(name = "finished_at_utc", nullable = false)

@@ -8,6 +8,8 @@ CREATE TABLE link_crawl_runs (
     existing_link_count INTEGER NOT NULL,
     skipped_count INTEGER NOT NULL,
     failed_job_count INTEGER NOT NULL,
+    error_status_code INTEGER,
+    error_message TEXT,
     started_at_utc TIMESTAMPTZ NOT NULL,
     finished_at_utc TIMESTAMPTZ NOT NULL,
     created_at_utc TIMESTAMPTZ NOT NULL,

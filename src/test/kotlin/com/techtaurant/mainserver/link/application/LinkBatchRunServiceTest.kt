@@ -23,6 +23,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import org.jsoup.HttpStatusException
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.junit.jupiter.api.DisplayName
@@ -37,6 +38,7 @@ import java.util.Optional
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 
 @DisplayName("LinkBatchRunService 테스트")
 class LinkBatchRunServiceTest {
@@ -59,10 +61,13 @@ class LinkBatchRunServiceTest {
             transactionOperations = ImmediateTransactionOperations(),
         )
 
-    private fun captureSavedRun(): CapturingSlot<LinkCrawlRun> {
+    private fun captureSavedRun(runId: UUID = UUID.randomUUID()): CapturingSlot<LinkCrawlRun> {
         val savedRun = slot<LinkCrawlRun>()
         every { linkCrawlRunRepository.save(capture(savedRun)) } answers {
-            savedRun.captured.apply { id = UUID.randomUUID() }
+            savedRun.captured.apply { id = runId }
+        }
+        every { linkCrawlRunRepository.findById(runId) } answers {
+            Optional.of(savedRun.captured)
         }
         return savedRun
     }
@@ -169,6 +174,28 @@ class LinkBatchRunServiceTest {
         assertEquals(LinkCrawlRunStatus.COMPLETED, savedRun.captured.status)
         assertEquals(0, savedRun.captured.failedJobCount)
         verify(exactly = 0) { linkCrawlFailedJobRepository.save(any()) }
+    }
+
+    @Test
+    @DisplayName("시작 페이지를 가져오지 못하면 실행 이력을 FAILED 상태로 기록하고 예외를 전파한다")
+    fun runRecordsFailedRunAndRethrowsWhenStartPageCannotBeFetched() {
+        val batchId = UUID.randomUUID()
+        val batch = createBatch(createdAtSelectors = ".created-date").apply { id = batchId }
+        val pageUrl = "https://example.com/articles?page=1"
+        val savedRun = captureSavedRun()
+        linkDocumentFetcher.setFailure(pageUrl, HttpStatusException("not found", 404, pageUrl))
+        every { linkCrawlBatchRepository.findById(batchId) } returns Optional.of(batch)
+
+        val exception =
+            assertFailsWith<ApiException> {
+                linkBatchRunService.run(batchId)
+            }
+
+        assertEquals(LinkStatus.LINK_CRAWL_BATCH_NOT_CRAWLABLE, exception.status)
+        assertEquals(LinkCrawlRunStatus.FAILED, savedRun.captured.status)
+        assertEquals(LinkStatus.LINK_CRAWL_BATCH_NOT_CRAWLABLE.getCustomStatusCode(), savedRun.captured.errorStatusCode)
+        assertEquals(exception.detail, savedRun.captured.errorMessage)
+        assertNotNull(batch.lastTriggeredAt)
     }
 
     @Test
@@ -288,6 +315,40 @@ class LinkBatchRunServiceTest {
                 retryableBefore = retryableBefore,
                 pageable = pageable,
             )
+        }
+    }
+
+    @Test
+    @DisplayName("수동 재시도도 배치 크기 조건으로 미해소 실패 잡을 조회한다")
+    fun retryRunFailedJobsLimitsManualRetryCandidates() {
+        val runId = UUID.randomUUID()
+        val batch = createBatch(createdAtSelectors = ".created-date")
+        val run =
+            LinkCrawlRun(
+                batch = batch,
+                triggerType = LinkCrawlRunTriggerType.MANUAL,
+                status = LinkCrawlRunStatus.UNRESOLVED,
+                failedJobCount = 1,
+                startedAt = Instant.parse("2026-07-02T10:00:00Z"),
+                finishedAt = Instant.parse("2026-07-02T10:00:00Z"),
+            ).apply { id = runId }
+        val pageable = PageRequest.of(0, 50)
+        every { linkCrawlRunRepository.existsById(runId) } returns true
+        every { linkCrawlRunRepository.findById(runId) } returns Optional.of(run)
+        every {
+            linkCrawlFailedJobRepository.findAllByRunIdAndResolvedFalseOrderByCreatedAtAsc(runId, pageable)
+        } returns emptyList()
+        every { linkCrawlFailedJobRepository.existsByRunIdAndResolvedFalse(runId) } returns false
+        every { linkCrawlFailedJobRepository.countByRunIdAndResolvedFalse(runId) } returns 0L
+
+        val response = linkBatchRunService.retryRunFailedJobs(runId)
+
+        assertEquals(0, response.retriedCount)
+        assertEquals(0, response.resolvedCount)
+        assertEquals(0, response.stillUnresolvedCount)
+        assertEquals(LinkCrawlRunStatus.RESOLVED, response.runStatus)
+        verify(exactly = 1) {
+            linkCrawlFailedJobRepository.findAllByRunIdAndResolvedFalseOrderByCreatedAtAsc(runId, pageable)
         }
     }
 
@@ -445,6 +506,7 @@ class LinkBatchRunServiceTest {
     private class StubLinkDocumentFetcher : LinkDocumentFetcher {
         var html: String = ""
         private val htmlByUrl = mutableMapOf<String, String>()
+        private val failureByUrl = mutableMapOf<String, Throwable>()
 
         fun setHtml(
             url: String,
@@ -453,7 +515,15 @@ class LinkBatchRunServiceTest {
             htmlByUrl[url] = value
         }
 
+        fun setFailure(
+            url: String,
+            throwable: Throwable,
+        ) {
+            failureByUrl[url] = throwable
+        }
+
         override fun fetch(url: String): Document {
+            failureByUrl[url]?.let { throw it }
             return Jsoup.parse(htmlByUrl[url] ?: html, url)
         }
     }

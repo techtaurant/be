@@ -11,6 +11,13 @@ import java.util.UUID
 interface LinkCrawlFailedJobRepository : JpaRepository<LinkCrawlFailedJob, UUID> {
     fun findAllByRunIdAndResolvedFalseOrderByCreatedAtAsc(runId: UUID): List<LinkCrawlFailedJob>
 
+    fun findAllByRunIdAndResolvedFalseOrderByCreatedAtAsc(
+        runId: UUID,
+        pageable: Pageable,
+    ): List<LinkCrawlFailedJob>
+
+    fun countByRunIdAndResolvedFalse(runId: UUID): Long
+
     @Query(
         """
         SELECT j

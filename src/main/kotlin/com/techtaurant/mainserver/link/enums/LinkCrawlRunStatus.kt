@@ -9,4 +9,7 @@ enum class LinkCrawlRunStatus {
 
     /** 실패 잡이 있었으나 재시도로 모두 해소된 상태 */
     RESOLVED,
+
+    /** 배치 실행 자체가 완료되지 못하고 실패한 상태 */
+    FAILED,
 }

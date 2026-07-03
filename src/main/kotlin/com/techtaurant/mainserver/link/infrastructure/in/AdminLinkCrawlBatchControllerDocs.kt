@@ -183,7 +183,7 @@ interface AdminLinkCrawlBatchControllerDocs {
 
     @Operation(
         summary = "실행 이력의 미해소 실패 잡 재시도",
-        description = "관리자가 특정 실행 이력의 미해소 실패 잡을 현재 배치 설정으로 일괄 재시도합니다. 성공한 잡은 해소 처리하고, 모두 해소되면 실행 이력 상태가 RESOLVED로 전환됩니다",
+        description = "관리자가 특정 실행 이력의 미해소 실패 잡을 현재 배치 설정으로 최대 50건씩 재시도합니다. 성공한 잡은 해소 처리하고, 모두 해소되면 실행 이력 상태가 RESOLVED로 전환됩니다",
     )
     @ApiErrorCodeResponses(
         [
