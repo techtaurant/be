@@ -7,6 +7,7 @@ import com.techtaurant.mainserver.link.entity.LinkCrawlFailedJob
 import com.techtaurant.mainserver.link.entity.LinkCrawlRun
 import com.techtaurant.mainserver.link.entity.UserLink
 import com.techtaurant.mainserver.link.enums.LinkCrawlRunStatus
+import com.techtaurant.mainserver.link.enums.LinkCrawlRunTriggerType
 import com.techtaurant.mainserver.link.enums.LinkStatus
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlBatchRepository
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlFailedJobRepository
@@ -26,6 +27,12 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.springframework.data.domain.PageRequest
+import org.springframework.transaction.support.SimpleTransactionStatus
+import org.springframework.transaction.support.TransactionCallback
+import org.springframework.transaction.support.TransactionOperations
+import java.time.Duration
+import java.time.Instant
 import java.util.Optional
 import java.util.UUID
 import kotlin.test.assertEquals
@@ -49,6 +56,7 @@ class LinkBatchRunServiceTest {
             userLinkRepository = userLinkRepository,
             tagWriteService = tagWriteService,
             linkDocumentFetcher = linkDocumentFetcher,
+            transactionOperations = ImmediateTransactionOperations(),
         )
 
     private fun captureSavedRun(): CapturingSlot<LinkCrawlRun> {
@@ -258,6 +266,67 @@ class LinkBatchRunServiceTest {
         verify(exactly = 0) { linkRepository.save(any()) }
     }
 
+    @Test
+    @DisplayName("자동 재시도는 활성 배치, 백오프, 최대 실패 횟수, 배치 크기 조건으로 대상만 조회한다")
+    fun retryAllUnresolvedFailedJobsLimitsAutomaticRetryCandidates() {
+        val now = Instant.parse("2026-07-02T10:00:00Z")
+        val retryableBefore = now.minus(Duration.ofMinutes(30))
+        val pageable = PageRequest.of(0, 50)
+        every {
+            linkCrawlFailedJobRepository.findRetryableAutomaticJobs(
+                maxFailureCount = 3,
+                retryableBefore = retryableBefore,
+                pageable = pageable,
+            )
+        } returns emptyList()
+
+        linkBatchRunService.retryAllUnresolvedFailedJobs(now)
+
+        verify(exactly = 1) {
+            linkCrawlFailedJobRepository.findRetryableAutomaticJobs(
+                maxFailureCount = 3,
+                retryableBefore = retryableBefore,
+                pageable = pageable,
+            )
+        }
+    }
+
+    @Test
+    @DisplayName("자동 재시도 대상 조회 후 비활성화된 배치의 실패 잡은 재시도하지 않는다")
+    fun retryAllUnresolvedFailedJobsSkipsJobWhenBatchBecomesInactive() {
+        val now = Instant.parse("2026-07-02T10:00:00Z")
+        val batch = createBatch(createdAtSelectors = ".created-date").apply { active = false }
+        val run =
+            LinkCrawlRun(
+                batch = batch,
+                triggerType = LinkCrawlRunTriggerType.MANUAL,
+                status = LinkCrawlRunStatus.UNRESOLVED,
+                failedJobCount = 1,
+                startedAt = now.minus(Duration.ofHours(1)),
+                finishedAt = now.minus(Duration.ofHours(1)),
+            ).apply { id = UUID.randomUUID() }
+        val failedJob =
+            LinkCrawlFailedJob(
+                run = run,
+                sourcePage = 1,
+                sourcePageUrl = "https://example.com/articles?page=1",
+                articleUrl = "https://example.com/article/retry",
+                title = "재시도 대상",
+                summary = "재시도 대상 요약",
+                errorStatusCode = LinkStatus.LINK_CRAWL_BATCH_CREATED_AT_REQUIRED.getCustomStatusCode(),
+                errorMessage = "생성일 없음",
+                failureCount = 1,
+                lastFailedAt = now.minus(Duration.ofHours(1)),
+            ).apply { id = UUID.randomUUID() }
+        every { linkCrawlFailedJobRepository.findRetryableAutomaticJobs(any(), any(), any()) } returns listOf(failedJob)
+        every { linkCrawlFailedJobRepository.findById(failedJob.id!!) } returns Optional.of(failedJob)
+
+        linkBatchRunService.retryAllUnresolvedFailedJobs(now)
+
+        verify(exactly = 0) { linkRepository.findByUrl(any()) }
+        verify(exactly = 0) { linkCrawlFailedJobRepository.save(any()) }
+    }
+
     private fun createBatch(createdAtSelectors: String): LinkCrawlBatch {
         return LinkCrawlBatch(
             companyUser =
@@ -386,6 +455,12 @@ class LinkBatchRunServiceTest {
 
         override fun fetch(url: String): Document {
             return Jsoup.parse(htmlByUrl[url] ?: html, url)
+        }
+    }
+
+    private class ImmediateTransactionOperations : TransactionOperations {
+        override fun <T : Any?> execute(action: TransactionCallback<T>): T? {
+            return action.doInTransaction(SimpleTransactionStatus())
         }
     }
 }

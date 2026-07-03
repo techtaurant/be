@@ -6,6 +6,7 @@ import com.techtaurant.mainserver.link.entity.Link
 import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
 import com.techtaurant.mainserver.link.entity.UserLink
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlBatchRepository
+import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlFailedJobRepository
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlRunRepository
 import com.techtaurant.mainserver.link.infrastructure.out.LinkRepository
 import com.techtaurant.mainserver.link.infrastructure.out.UserLinkRepository
@@ -54,6 +55,9 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
 
     @Autowired
     private lateinit var linkCrawlRunRepository: LinkCrawlRunRepository
+
+    @Autowired
+    private lateinit var linkCrawlFailedJobRepository: LinkCrawlFailedJobRepository
 
     @Autowired
     private lateinit var jwtTokenProvider: JwtTokenProvider
@@ -141,6 +145,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
                           </body>
                         </html>
                         """.trimIndent()
+                    99 -> longTitlePageHtml()
                     else -> null
                 }
 
@@ -243,6 +248,49 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
         assertEquals(1, pageRequestCount(2))
         assertTrue(linkRepository.findAllWithTags().all { link -> link.tags.none { it.name == "new-tag" } })
         assertEquals(null, tagRepository.findByName("new-tag"))
+    }
+
+    @Test
+    @DisplayName("수집 링크 필드가 DB 길이를 초과해도 정상 링크와 실패 잡을 함께 기록한다")
+    fun runRecordsFailedJobAndKeepsValidLinksWhenCrawledFieldsExceedDatabaseLimits() {
+        val batch =
+            linkCrawlBatchRepository.save(
+                LinkCrawlBatch(
+                    companyUser = companyUser,
+                    name = "긴 제목 실패 기록 배치",
+                    baseUrl = crawlerBaseUrl,
+                    pageUriTemplate = "/category/engineering?page={page}",
+                    itemSelector = ".article-card",
+                    articleLinkSelector = "a.article-link",
+                    titleSelector = ".title",
+                    summarySelector = ".summary",
+                    createdAtSelectors = "div.o6bzluc",
+                    cronExpression = "0 0 * * * *",
+                    startPage = 99,
+                    active = true,
+                    tagNames = "engineering",
+                ),
+            )
+
+        given()
+            .header("Authorization", "Bearer $adminAccessToken")
+            .`when`()
+            .post("/admin/link-crawl-batches/${batch.id}/run")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data.collectedCount", equalTo(1))
+            .body("data.newLinkCount", equalTo(1))
+            .body("data.failedJobCount", equalTo(2))
+
+        val savedLinks = linkRepository.findAll()
+        assertEquals(1, savedLinks.size)
+        assertEquals("$crawlerBaseUrl/article/valid-after-long-title", savedLinks.single().url)
+
+        val savedRun = linkCrawlRunRepository.findAllByBatchIdOrderByStartedAtDesc(batch.id!!).single()
+        val failedJobs = linkCrawlFailedJobRepository.findAllByRunIdAndResolvedFalseOrderByCreatedAtAsc(savedRun.id!!)
+        assertEquals(2, failedJobs.size)
+        assertTrue(failedJobs.any { it.articleUrl == "$crawlerBaseUrl/article/too-long-title" && it.title?.length == 200 })
+        assertTrue(failedJobs.any { it.articleUrl.length == 2048 && it.title == "URL 길이 초과 글" })
     }
 
     @Test
@@ -524,6 +572,38 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
         userLinkRepository.saveAndFlush(UserLink(user = sourceCompanyUser, link = link))
 
         return link
+    }
+
+    private fun longTitlePageHtml(): String {
+        val tooLongTitle = "가".repeat(201)
+        val tooLongUrl = "/article/${"u".repeat(2050)}"
+        return """
+            <html>
+              <body>
+                <div class="article-card">
+                  <a class="article-link" href="/article/too-long-title">
+                    <div class="title">$tooLongTitle</div>
+                    <div class="summary">DB 제목 길이를 초과하는 글입니다.</div>
+                    <div class="published-date o6bzluc">2026년 4월 17일</div>
+                  </a>
+                </div>
+                <div class="article-card">
+                  <a class="article-link" href="$tooLongUrl">
+                    <div class="title">URL 길이 초과 글</div>
+                    <div class="summary">DB URL 길이를 초과하는 글입니다.</div>
+                    <div class="published-date o6bzluc">2026년 4월 17일</div>
+                  </a>
+                </div>
+                <div class="article-card">
+                  <a class="article-link" href="/article/valid-after-long-title">
+                    <div class="title">긴 제목 뒤 정상 글</div>
+                    <div class="summary">앞선 실패 뒤에도 저장되어야 하는 글입니다.</div>
+                    <div class="published-date o6bzluc">2026년 4월 16일</div>
+                  </a>
+                </div>
+              </body>
+            </html>
+            """.trimIndent()
     }
 
     private fun pageRequestCount(page: Int): Int {

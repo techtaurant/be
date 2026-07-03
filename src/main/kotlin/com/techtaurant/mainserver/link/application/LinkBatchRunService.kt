@@ -25,9 +25,12 @@ import com.techtaurant.mainserver.user.entity.User
 import org.jsoup.HttpStatusException
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionOperations
 import java.net.URI
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -45,9 +48,17 @@ class LinkBatchRunService(
     private val userLinkRepository: UserLinkRepository,
     private val tagWriteService: TagWriteService,
     private val linkDocumentFetcher: LinkDocumentFetcher,
+    private val transactionOperations: TransactionOperations,
 ) {
     companion object {
         private val ABSOLUTE_DATE_REGEX = Regex("""^\s*(\d{4})\s*(?:[./-]|년)\s*(\d{1,2})\s*(?:[./-]|월)\s*(\d{1,2})\s*(?:일)?\s*\.?\s*$""")
+        private const val LINK_TITLE_MAX_LENGTH = 200
+        private const val LINK_URL_MAX_LENGTH = 2048
+        private const val FAILED_JOB_TITLE_MAX_LENGTH = 200
+        private const val FAILED_JOB_URL_MAX_LENGTH = 2048
+        private const val AUTOMATIC_RETRY_MAX_FAILURE_COUNT = 3
+        private const val AUTOMATIC_RETRY_BATCH_SIZE = 50
+        private val AUTOMATIC_RETRY_BACKOFF = Duration.ofMinutes(30)
     }
 
     @Transactional
@@ -134,15 +145,19 @@ class LinkBatchRunService(
         )
     }
 
-    @Transactional
-    fun retryAllUnresolvedFailedJobs() {
-        val unresolvedJobs = linkCrawlFailedJobRepository.findAllByResolvedFalseOrderByCreatedAtAsc()
-        if (unresolvedJobs.isEmpty()) {
-            return
-        }
+    fun retryAllUnresolvedFailedJobs(now: Instant = Instant.now()) {
+        val retryableJobs =
+            linkCrawlFailedJobRepository.findRetryableAutomaticJobs(
+                maxFailureCount = AUTOMATIC_RETRY_MAX_FAILURE_COUNT,
+                retryableBefore = now.minus(AUTOMATIC_RETRY_BACKOFF),
+                pageable = PageRequest.of(0, AUTOMATIC_RETRY_BATCH_SIZE),
+            )
 
-        unresolvedJobs.forEach { retryFailedJob(it) }
-        unresolvedJobs.map(LinkCrawlFailedJob::run).distinctBy(LinkCrawlRun::id).forEach(::refreshRunStatus)
+        retryableJobs.mapNotNull { it.id }.forEach { failedJobId ->
+            transactionOperations.execute<Unit> {
+                retryAutomaticFailedJob(failedJobId, now)
+            }
+        }
     }
 
     fun validateCrawlable(batch: LinkCrawlBatch) {
@@ -305,6 +320,7 @@ class LinkBatchRunService(
         batch: LinkCrawlBatch,
         tagResolver: LinkTagResolver,
     ): LinkCollectionResult {
+        validateSnapshotCanBeSaved(snapshot)
         val existingLink = linkRepository.findByUrl(snapshot.url)
         if (existingLink == null) {
             val savedLink = saveNewLink(snapshot, tagResolver.resolve())
@@ -318,6 +334,15 @@ class LinkBatchRunService(
             LinkCollectionResult.ConnectedExistingLink
         } else {
             LinkCollectionResult.UpdatedExistingLink
+        }
+    }
+
+    private fun validateSnapshotCanBeSaved(snapshot: LinkSnapshot) {
+        if (snapshot.title.length > LINK_TITLE_MAX_LENGTH) {
+            throw IllegalArgumentException("링크 제목은 ${LINK_TITLE_MAX_LENGTH}자를 초과할 수 없습니다")
+        }
+        if (snapshot.url.length > LINK_URL_MAX_LENGTH) {
+            throw IllegalArgumentException("링크 URL은 ${LINK_URL_MAX_LENGTH}자를 초과할 수 없습니다")
         }
     }
 
@@ -409,6 +434,26 @@ class LinkBatchRunService(
         linkCrawlFailedJobRepository.save(failedJob)
     }
 
+    private fun retryAutomaticFailedJob(
+        failedJobId: UUID,
+        now: Instant,
+    ) {
+        val failedJob = linkCrawlFailedJobRepository.findById(failedJobId).orElse(null) ?: return
+        if (!failedJob.canRetryAutomatically(now)) {
+            return
+        }
+
+        retryFailedJob(failedJob)
+        refreshRunStatus(failedJob.run)
+    }
+
+    private fun LinkCrawlFailedJob.canRetryAutomatically(now: Instant): Boolean {
+        return !resolved &&
+            run.batch.active &&
+            failureCount < AUTOMATIC_RETRY_MAX_FAILURE_COUNT &&
+            !lastFailedAt.plus(AUTOMATIC_RETRY_BACKOFF).isAfter(now)
+    }
+
     private fun refreshRunStatus(run: LinkCrawlRun) {
         val runId = run.id ?: return
         run.status =
@@ -458,15 +503,17 @@ class LinkBatchRunService(
     ) {
         val runId = run.id ?: throw IllegalStateException("실행 ID가 없습니다")
         val now = Instant.now()
+        val failedJobDraft = failedJobRecord.draft.toPersistableFailedJobDraft()
+        val sourcePageUrl = failedJobRecord.sourcePageUrl.take(FAILED_JOB_URL_MAX_LENGTH)
         val errorStatusCode = failedJobRecord.exception.toErrorStatusCode()
         val errorMessage = failedJobRecord.exception.toErrorMessage()
         val failedJob =
-            linkCrawlFailedJobRepository.findByRunIdAndArticleUrl(runId, failedJobRecord.draft.articleUrl)
+            linkCrawlFailedJobRepository.findByRunIdAndArticleUrl(runId, failedJobDraft.articleUrl)
                 ?.apply {
                     this.sourcePage = failedJobRecord.sourcePage
-                    this.sourcePageUrl = failedJobRecord.sourcePageUrl
-                    this.title = failedJobRecord.draft.title
-                    this.summary = failedJobRecord.draft.summary
+                    this.sourcePageUrl = sourcePageUrl
+                    this.title = failedJobDraft.title
+                    this.summary = failedJobDraft.summary
                     this.errorStatusCode = errorStatusCode
                     this.errorMessage = errorMessage
                     this.failureCount += 1
@@ -475,10 +522,10 @@ class LinkBatchRunService(
                 ?: LinkCrawlFailedJob(
                     run = run,
                     sourcePage = failedJobRecord.sourcePage,
-                    sourcePageUrl = failedJobRecord.sourcePageUrl,
-                    articleUrl = failedJobRecord.draft.articleUrl,
-                    title = failedJobRecord.draft.title,
-                    summary = failedJobRecord.draft.summary,
+                    sourcePageUrl = sourcePageUrl,
+                    articleUrl = failedJobDraft.articleUrl,
+                    title = failedJobDraft.title,
+                    summary = failedJobDraft.summary,
                     errorStatusCode = errorStatusCode,
                     errorMessage = errorMessage,
                     lastFailedAt = now,
@@ -525,7 +572,7 @@ class LinkBatchRunService(
         pageUrl: String,
     ): LinkFailedJobDraft? {
         val articleUrl = extractArticleUrl(item, batch, pageUrl) ?: return null
-        val title = resolveText(item, batch.titleSelector)?.trim()?.takeIf(String::isNotEmpty)?.take(200)
+        val title = resolveText(item, batch.titleSelector)?.trim()?.takeIf(String::isNotEmpty)?.take(FAILED_JOB_TITLE_MAX_LENGTH)
         val summary = batch.summarySelector?.let { resolveText(item, it) }?.trim()?.takeIf(String::isNotEmpty)
 
         return LinkFailedJobDraft(
@@ -698,8 +745,8 @@ class LinkBatchRunService(
     ) {
         fun toFailedJobDraft(): LinkFailedJobDraft =
             LinkFailedJobDraft(
-                articleUrl = url,
-                title = title.take(200),
+                articleUrl = url.take(FAILED_JOB_URL_MAX_LENGTH),
+                title = title.take(FAILED_JOB_TITLE_MAX_LENGTH),
                 summary = summary.takeIf(String::isNotBlank),
             )
     }
@@ -708,7 +755,13 @@ class LinkBatchRunService(
         val articleUrl: String,
         val title: String?,
         val summary: String?,
-    )
+    ) {
+        fun toPersistableFailedJobDraft(): LinkFailedJobDraft =
+            copy(
+                articleUrl = articleUrl.take(FAILED_JOB_URL_MAX_LENGTH),
+                title = title?.take(FAILED_JOB_TITLE_MAX_LENGTH),
+            )
+    }
 
     private data class LinkFailedJobRecord(
         val draft: LinkFailedJobDraft,
