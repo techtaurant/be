@@ -28,11 +28,11 @@ class LinkCrawlFailedJob(
     var run: LinkCrawlRun,
     @Column(name = "source_page", nullable = false)
     var sourcePage: Int,
-    @Column(name = "source_page_url", nullable = false, length = 2048)
+    @Column(name = "source_page_url", nullable = false, length = URL_MAX_LENGTH)
     var sourcePageUrl: String,
-    @Column(name = "article_url", nullable = false, length = 2048)
+    @Column(name = "article_url", nullable = false, length = URL_MAX_LENGTH)
     var articleUrl: String,
-    @Column(length = 200)
+    @Column(length = TITLE_MAX_LENGTH)
     var title: String? = null,
     @Column(columnDefinition = "TEXT")
     var summary: String? = null,
@@ -48,4 +48,13 @@ class LinkCrawlFailedJob(
     var resolvedAt: Instant? = null,
     @Column(name = "last_failed_at_utc", nullable = false)
     var lastFailedAt: Instant = Instant.now(),
-) : EntityBase()
+) : EntityBase() {
+    companion object {
+        const val TITLE_MAX_LENGTH = 200
+        const val URL_MAX_LENGTH = 2048
+
+        fun truncateTitle(title: String?): String? = title?.take(TITLE_MAX_LENGTH)
+
+        fun truncateUrl(url: String): String = url.take(URL_MAX_LENGTH)
+    }
+}

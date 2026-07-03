@@ -42,8 +42,8 @@ data class LinkCrawlRunResponse(
             hasUnresolvedFailedJobs: Boolean,
         ): LinkCrawlRunResponse {
             return LinkCrawlRunResponse(
-                id = run.id ?: throw IllegalStateException("실행 ID가 없습니다"),
-                batchId = run.batch.id ?: throw IllegalStateException("배치 ID가 없습니다"),
+                id = run.id!!,
+                batchId = run.batch.id!!,
                 triggerType = run.triggerType,
                 status = run.status,
                 collectedCount = run.collectedCount,

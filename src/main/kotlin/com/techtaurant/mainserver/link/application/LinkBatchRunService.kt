@@ -22,21 +22,11 @@ import com.techtaurant.mainserver.link.infrastructure.out.UserLinkRepository
 import com.techtaurant.mainserver.post.application.TagWriteService
 import com.techtaurant.mainserver.post.entity.Tag
 import com.techtaurant.mainserver.user.entity.User
-import org.jsoup.HttpStatusException
-import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
-import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionOperations
-import java.net.URI
-import java.time.Duration
 import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
-import java.time.ZonedDateTime
 import java.util.UUID
 
 @Service
@@ -50,16 +40,7 @@ class LinkBatchRunService(
     private val linkDocumentFetcher: LinkDocumentFetcher,
     private val transactionOperations: TransactionOperations,
 ) {
-    companion object {
-        private val ABSOLUTE_DATE_REGEX = Regex("""^\s*(\d{4})\s*(?:[./-]|년)\s*(\d{1,2})\s*(?:[./-]|월)\s*(\d{1,2})\s*(?:일)?\s*\.?\s*$""")
-        private const val LINK_TITLE_MAX_LENGTH = 200
-        private const val LINK_URL_MAX_LENGTH = 2048
-        private const val FAILED_JOB_TITLE_MAX_LENGTH = 200
-        private const val FAILED_JOB_URL_MAX_LENGTH = 2048
-        private const val AUTOMATIC_RETRY_MAX_FAILURE_COUNT = 3
-        private const val AUTOMATIC_RETRY_BATCH_SIZE = 50
-        private val AUTOMATIC_RETRY_BACKOFF = Duration.ofMinutes(30)
-    }
+    private val crawlDocumentParser = LinkCrawlDocumentParser(linkDocumentFetcher)
 
     @Transactional
     fun run(
@@ -148,9 +129,9 @@ class LinkBatchRunService(
     fun retryAllUnresolvedFailedJobs(now: Instant = Instant.now()) {
         val retryableJobs =
             linkCrawlFailedJobRepository.findRetryableAutomaticJobs(
-                maxFailureCount = AUTOMATIC_RETRY_MAX_FAILURE_COUNT,
-                retryableBefore = now.minus(AUTOMATIC_RETRY_BACKOFF),
-                pageable = PageRequest.of(0, AUTOMATIC_RETRY_BATCH_SIZE),
+                maxFailureCount = LinkCrawlFailedJobRetryPolicy.MAX_FAILURE_COUNT,
+                retryableBefore = LinkCrawlFailedJobRetryPolicy.retryableBefore(now),
+                pageable = LinkCrawlFailedJobRetryPolicy.pageRequest(),
             )
 
         retryableJobs.mapNotNull { it.id }.forEach { failedJobId ->
@@ -161,11 +142,11 @@ class LinkBatchRunService(
     }
 
     fun validateCrawlable(batch: LinkCrawlBatch) {
-        val pageUrl = buildPageUrl(batch.baseUrl, batch.pageUriTemplate, batch.startPage)
-        val document = fetchPageOrNull(pageUrl) ?: throw ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_CRAWLABLE)
+        val pageUrl = crawlDocumentParser.buildPageUrl(batch.baseUrl, batch.pageUriTemplate, batch.startPage)
+        val document = crawlDocumentParser.fetchPageOrNull(pageUrl) ?: throw ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_CRAWLABLE)
         val hasCrawlableItem =
             document.select(batch.itemSelector)
-                .any { item -> extractSnapshot(item, batch, pageUrl) != null }
+                .any { item -> crawlDocumentParser.extractSnapshot(item, batch, pageUrl) != null }
 
         if (!hasCrawlableItem) {
             throw ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_CRAWLABLE)
@@ -204,8 +185,8 @@ class LinkBatchRunService(
         page: Int,
         seenFailedArticleUrls: MutableSet<String>,
     ): LinkPageCrawlResult? {
-        val pageUrl = buildPageUrl(batch.baseUrl, batch.pageUriTemplate, page)
-        val document = fetchPageOrNull(pageUrl) ?: return null
+        val pageUrl = crawlDocumentParser.buildPageUrl(batch.baseUrl, batch.pageUriTemplate, page)
+        val document = crawlDocumentParser.fetchPageOrNull(pageUrl) ?: return null
         var pageResult = emptyPageCrawlResult()
 
         document.select(batch.itemSelector).forEach { item ->
@@ -288,9 +269,9 @@ class LinkBatchRunService(
     ): LinkCollectionResult {
         val snapshot =
             try {
-                extractSnapshot(item, batch, pageUrl) ?: return LinkCollectionResult.Skipped
+                crawlDocumentParser.extractSnapshot(item, batch, pageUrl) ?: return LinkCollectionResult.Skipped
             } catch (exception: Exception) {
-                val failedJobDraft = extractFailedJobDraft(item, batch, pageUrl) ?: return LinkCollectionResult.Skipped
+                val failedJobDraft = crawlDocumentParser.extractFailedJobDraft(item, batch, pageUrl) ?: return LinkCollectionResult.Skipped
                 return LinkCollectionResult.Failed(
                     LinkFailedJobRecord(
                         draft = failedJobDraft,
@@ -320,7 +301,6 @@ class LinkBatchRunService(
         batch: LinkCrawlBatch,
         tagResolver: LinkTagResolver,
     ): LinkCollectionResult {
-        validateSnapshotCanBeSaved(snapshot)
         val existingLink = linkRepository.findByUrl(snapshot.url)
         if (existingLink == null) {
             val savedLink = saveNewLink(snapshot, tagResolver.resolve())
@@ -334,15 +314,6 @@ class LinkBatchRunService(
             LinkCollectionResult.ConnectedExistingLink
         } else {
             LinkCollectionResult.UpdatedExistingLink
-        }
-    }
-
-    private fun validateSnapshotCanBeSaved(snapshot: LinkSnapshot) {
-        if (snapshot.title.length > LINK_TITLE_MAX_LENGTH) {
-            throw IllegalArgumentException("링크 제목은 ${LINK_TITLE_MAX_LENGTH}자를 초과할 수 없습니다")
-        }
-        if (snapshot.url.length > LINK_URL_MAX_LENGTH) {
-            throw IllegalArgumentException("링크 URL은 ${LINK_URL_MAX_LENGTH}자를 초과할 수 없습니다")
         }
     }
 
@@ -390,17 +361,6 @@ class LinkBatchRunService(
         return false
     }
 
-    private fun fetchPageOrNull(pageUrl: String): Document? {
-        return runCatching { linkDocumentFetcher.fetch(pageUrl) }
-            .getOrElse { exception ->
-                if (exception is HttpStatusException) {
-                    null
-                } else {
-                    throw exception
-                }
-            }
-    }
-
     private fun retryFailedJob(failedJob: LinkCrawlFailedJob): Boolean {
         val batch = failedJob.run.batch
         val tagResolver = LinkTagResolver(resolveLinkTagNames(batch.tagNames), tagWriteService::resolveTags)
@@ -439,19 +399,12 @@ class LinkBatchRunService(
         now: Instant,
     ) {
         val failedJob = linkCrawlFailedJobRepository.findById(failedJobId).orElse(null) ?: return
-        if (!failedJob.canRetryAutomatically(now)) {
+        if (!LinkCrawlFailedJobRetryPolicy.canRetryAutomatically(failedJob, now)) {
             return
         }
 
         retryFailedJob(failedJob)
         refreshRunStatus(failedJob.run)
-    }
-
-    private fun LinkCrawlFailedJob.canRetryAutomatically(now: Instant): Boolean {
-        return !resolved &&
-            run.batch.active &&
-            failureCount < AUTOMATIC_RETRY_MAX_FAILURE_COUNT &&
-            !lastFailedAt.plus(AUTOMATIC_RETRY_BACKOFF).isAfter(now)
     }
 
     private fun refreshRunStatus(run: LinkCrawlRun) {
@@ -467,12 +420,12 @@ class LinkBatchRunService(
     private fun resolveSnapshotForFailedJob(failedJob: LinkCrawlFailedJob): LinkSnapshot {
         val batch = failedJob.run.batch
         val snapshotFromSourcePage =
-            fetchPageOrNull(failedJob.sourcePageUrl)
+            crawlDocumentParser.fetchPageOrNull(failedJob.sourcePageUrl)
                 ?.select(batch.itemSelector)
                 ?.firstNotNullOfOrNull { item ->
-                    val articleUrl = extractArticleUrl(item, batch, failedJob.sourcePageUrl)
+                    val articleUrl = crawlDocumentParser.extractArticleUrl(item, batch, failedJob.sourcePageUrl)
                     if (articleUrl == failedJob.articleUrl) {
-                        extractSnapshot(item, batch, failedJob.sourcePageUrl)
+                        crawlDocumentParser.extractSnapshot(item, batch, failedJob.sourcePageUrl)
                     } else {
                         null
                     }
@@ -486,7 +439,7 @@ class LinkBatchRunService(
             failedJob.title?.trim()?.takeIf(String::isNotEmpty)
                 ?: throw ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_CRAWLABLE)
         val createdAt =
-            parseCreatedAtFromArticlePage(failedJob.articleUrl, batch.createdAtSelectors)
+            crawlDocumentParser.parseCreatedAtFromArticlePage(failedJob.articleUrl, batch.createdAtSelectors)
                 ?: throw ApiException(LinkStatus.LINK_CRAWL_BATCH_CREATED_AT_REQUIRED)
 
         return LinkSnapshot(
@@ -504,7 +457,7 @@ class LinkBatchRunService(
         val runId = run.id ?: throw IllegalStateException("실행 ID가 없습니다")
         val now = Instant.now()
         val failedJobDraft = failedJobRecord.draft.toPersistableFailedJobDraft()
-        val sourcePageUrl = failedJobRecord.sourcePageUrl.take(FAILED_JOB_URL_MAX_LENGTH)
+        val sourcePageUrl = LinkCrawlFailedJob.truncateUrl(failedJobRecord.sourcePageUrl)
         val errorStatusCode = failedJobRecord.exception.toErrorStatusCode()
         val errorMessage = failedJobRecord.exception.toErrorMessage()
         val failedJob =
@@ -550,184 +503,11 @@ class LinkBatchRunService(
         }
     }
 
-    private fun extractArticleUrl(
-        item: Element,
-        batch: LinkCrawlBatch,
-        pageUrl: String,
-    ): String? {
-        val linkElement = resolveElement(item, batch.articleLinkSelector) ?: return null
-        val href = linkElement.attr("href").trim()
-        if (href.isBlank()) {
-            return null
-        }
-
-        return linkElement.absUrl("href").ifBlank {
-            URI.create(pageUrl).resolve(href).toString()
-        }
-    }
-
-    private fun extractFailedJobDraft(
-        item: Element,
-        batch: LinkCrawlBatch,
-        pageUrl: String,
-    ): LinkFailedJobDraft? {
-        val articleUrl = extractArticleUrl(item, batch, pageUrl) ?: return null
-        val title = resolveText(item, batch.titleSelector)?.trim()?.takeIf(String::isNotEmpty)?.take(FAILED_JOB_TITLE_MAX_LENGTH)
-        val summary = batch.summarySelector?.let { resolveText(item, it) }?.trim()?.takeIf(String::isNotEmpty)
-
-        return LinkFailedJobDraft(
-            articleUrl = articleUrl,
-            title = title,
-            summary = summary,
-        )
-    }
-
-    private fun extractSnapshot(
-        item: Element,
-        batch: LinkCrawlBatch,
-        pageUrl: String,
-    ): LinkSnapshot? {
-        val absoluteUrl = extractArticleUrl(item, batch, pageUrl) ?: return null
-
-        val title =
-            resolveText(item, batch.titleSelector)
-                ?.takeIf { it.isNotBlank() }
-                ?: return null
-
-        val summary = batch.summarySelector?.let { resolveText(item, it) }.orEmpty()
-        val createdAt =
-            resolveCreatedAt(item, absoluteUrl, batch)
-                ?: throw ApiException(LinkStatus.LINK_CRAWL_BATCH_CREATED_AT_REQUIRED)
-
-        return LinkSnapshot(
-            title = title,
-            url = absoluteUrl,
-            summary = summary,
-            createdAt = createdAt,
-        )
-    }
-
-    /**
-     * 생성일을 목록 카드에서 먼저 찾고, 없으면 아티클 상세 페이지를 조회해 추출한다.
-     * 토스테크처럼 목록에는 날짜가 없고 상세 페이지에만 날짜가 있는 블로그를 지원한다.
-     *
-     * @param item 목록 페이지에서 선택된 카드 엘리먼트
-     * @param articleUrl 카드에서 추출한 아티클 상세 페이지의 절대 URL
-     * @param batch 생성일 셀렉터를 포함한 크롤 배치 설정
-     * @return 파싱된 생성일, 목록과 상세 페이지 어디에서도 찾지 못하면 null
-     */
-    private fun resolveCreatedAt(
-        item: Element,
-        articleUrl: String,
-        batch: LinkCrawlBatch,
-    ): Instant? {
-        val createdAtFromListItem = parseCreatedAt(firstResolvedValue(item, batch.createdAtSelectors))
-        if (createdAtFromListItem != null) {
-            return createdAtFromListItem
-        }
-
-        return parseCreatedAtFromArticlePage(articleUrl, batch.createdAtSelectors)
-    }
-
-    /**
-     * 아티클 상세 페이지를 조회해 생성일을 추출한다.
-     *
-     * @param articleUrl 조회할 아티클 상세 페이지의 절대 URL
-     * @param createdAtSelectors 줄바꿈으로 구분된 생성일 셀렉터 목록
-     * @return 파싱된 생성일, 셀렉터가 비었거나 상세 페이지 조회/파싱에 실패하면 null
-     */
-    private fun parseCreatedAtFromArticlePage(
-        articleUrl: String,
-        createdAtSelectors: String?,
-    ): Instant? {
-        if (createdAtSelectors.isNullOrBlank()) {
-            return null
-        }
-
-        val articleDocument = fetchPageOrNull(articleUrl) ?: return null
-        return parseCreatedAt(firstResolvedValue(articleDocument, createdAtSelectors))
-    }
-
     private fun resolveLinkTagNames(rawTagNames: String?): List<String> =
         rawTagNames.toLineList()
             .map(String::trim)
             .filter(String::isNotEmpty)
             .distinct()
-
-    private fun buildPageUrl(
-        baseUrl: String,
-        pageUriTemplate: String,
-        page: Int,
-    ): String {
-        val pageUri = pageUriTemplate.replace("{page}", page.toString())
-        return if (pageUri.startsWith("http://") || pageUri.startsWith("https://")) {
-            pageUri
-        } else {
-            URI.create(baseUrl).resolve(pageUri).toString()
-        }
-    }
-
-    private fun resolveElement(
-        root: Element,
-        selector: String?,
-    ): Element? {
-        if (selector.isNullOrBlank()) {
-            return null
-        }
-
-        return if (selector.trim() == ":self") {
-            root
-        } else {
-            root.selectFirst(selector)
-        }
-    }
-
-    private fun resolveText(
-        root: Element,
-        selector: String?,
-    ): String? {
-        return resolveElement(root, selector)?.text()?.trim()
-    }
-
-    private fun firstResolvedValue(
-        root: Element,
-        selectors: String?,
-    ): String? {
-        return selectors.toLineList()
-            .mapNotNull { selector ->
-                val element = resolveElement(root, selector)
-                val value =
-                    element?.attr("datetime")?.trim()
-                        ?.takeIf { it.isNotEmpty() }
-                        ?: element?.attr("content")?.trim()?.takeIf { it.isNotEmpty() }
-                        ?: element?.text()?.trim()?.takeIf { it.isNotEmpty() }
-                value
-            }.firstOrNull()
-    }
-
-    private fun parseCreatedAt(rawValue: String?): Instant? {
-        if (rawValue.isNullOrBlank()) {
-            return null
-        }
-
-        return runCatching { Instant.parse(rawValue) }.getOrNull()
-            ?: runCatching { OffsetDateTime.parse(rawValue).toInstant() }.getOrNull()
-            ?: runCatching { ZonedDateTime.parse(rawValue).toInstant() }.getOrNull()
-            ?: runCatching { LocalDateTime.parse(rawValue).toInstant(ZoneOffset.UTC) }.getOrNull()
-            ?: runCatching { LocalDate.parse(rawValue).atStartOfDay().toInstant(ZoneOffset.UTC) }.getOrNull()
-            ?: parseAbsoluteDate(rawValue)
-    }
-
-    private fun parseAbsoluteDate(rawValue: String): Instant? {
-        val match = ABSOLUTE_DATE_REGEX.matchEntire(rawValue) ?: return null
-        val (year, month, day) = match.destructured
-
-        return runCatching {
-            LocalDate.of(year.toInt(), month.toInt(), day.toInt())
-                .atStartOfDay()
-                .toInstant(ZoneOffset.UTC)
-        }.getOrNull()
-    }
 
     private fun String?.toLineList(): List<String> {
         return this?.lineSequence()
@@ -736,39 +516,6 @@ class LinkBatchRunService(
             ?.toList()
             ?: emptyList()
     }
-
-    private data class LinkSnapshot(
-        val title: String,
-        val url: String,
-        val summary: String,
-        val createdAt: Instant,
-    ) {
-        fun toFailedJobDraft(): LinkFailedJobDraft =
-            LinkFailedJobDraft(
-                articleUrl = url.take(FAILED_JOB_URL_MAX_LENGTH),
-                title = title.take(FAILED_JOB_TITLE_MAX_LENGTH),
-                summary = summary.takeIf(String::isNotBlank),
-            )
-    }
-
-    private data class LinkFailedJobDraft(
-        val articleUrl: String,
-        val title: String?,
-        val summary: String?,
-    ) {
-        fun toPersistableFailedJobDraft(): LinkFailedJobDraft =
-            copy(
-                articleUrl = articleUrl.take(FAILED_JOB_URL_MAX_LENGTH),
-                title = title?.take(FAILED_JOB_TITLE_MAX_LENGTH),
-            )
-    }
-
-    private data class LinkFailedJobRecord(
-        val draft: LinkFailedJobDraft,
-        val sourcePage: Int,
-        val sourcePageUrl: String,
-        val exception: Throwable,
-    )
 
     private data class LinkCrawlResult(
         val response: LinkBatchRunResponse,

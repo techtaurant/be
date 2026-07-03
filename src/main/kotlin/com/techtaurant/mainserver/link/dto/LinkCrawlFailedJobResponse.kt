@@ -44,9 +44,9 @@ data class LinkCrawlFailedJobResponse(
         fun from(failedJob: LinkCrawlFailedJob): LinkCrawlFailedJobResponse {
             val run = failedJob.run
             return LinkCrawlFailedJobResponse(
-                id = failedJob.id ?: throw IllegalStateException("실패 잡 ID가 없습니다"),
-                runId = run.id ?: throw IllegalStateException("실행 ID가 없습니다"),
-                batchId = run.batch.id ?: throw IllegalStateException("배치 ID가 없습니다"),
+                id = failedJob.id!!,
+                runId = run.id!!,
+                batchId = run.batch.id!!,
                 sourcePage = failedJob.sourcePage,
                 sourcePageUrl = failedJob.sourcePageUrl,
                 articleUrl = failedJob.articleUrl,
