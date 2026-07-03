@@ -50,8 +50,8 @@ class LinkCrawlFailedJob(
     var lastFailedAt: Instant = Instant.now(),
 ) : EntityBase() {
     companion object {
-        const val TITLE_MAX_LENGTH = 200
-        const val URL_MAX_LENGTH = 2048
+        const val TITLE_MAX_LENGTH = Link.TITLE_MAX_LENGTH
+        const val URL_MAX_LENGTH = Link.URL_MAX_LENGTH
 
         fun truncateTitle(title: String?): String? = title?.take(TITLE_MAX_LENGTH)
 

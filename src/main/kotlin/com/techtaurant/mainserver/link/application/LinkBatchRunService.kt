@@ -191,10 +191,7 @@ class LinkBatchRunService(
 
         document.select(batch.itemSelector).forEach { item ->
             val collectionResult = collectLinkFromCrawledItem(item, batch, tagResolver, page, pageUrl)
-            val hasNewFailedArticleUrl =
-                collectionResult is LinkCollectionResult.Failed &&
-                    seenFailedArticleUrls.add(collectionResult.failedJob.draft.articleUrl)
-            pageResult = pageResult.recordCollectionResult(collectionResult, hasNewFailedArticleUrl)
+            pageResult = pageResult.recordCollectionResult(collectionResult, seenFailedArticleUrls)
         }
 
         return pageResult
@@ -217,8 +214,11 @@ class LinkBatchRunService(
 
     private fun LinkPageCrawlResult.recordCollectionResult(
         result: LinkCollectionResult,
-        hasNewFailedArticleUrl: Boolean,
+        seenFailedArticleUrls: MutableSet<String>,
     ): LinkPageCrawlResult {
+        val hasNewFailedArticleUrl =
+            result is LinkCollectionResult.Failed &&
+                seenFailedArticleUrls.add(result.failedJob.draft.articleUrl)
         val updatedResponse =
             when (result) {
                 LinkCollectionResult.CreatedNewLink ->
