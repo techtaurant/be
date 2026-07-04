@@ -19,14 +19,17 @@ class LinkCrawlDocumentParser(
     private val linkDocumentFetcher: LinkDocumentFetcher,
 ) {
     fun fetchPageOrNull(pageUrl: String): Document? {
-        return runCatching { linkDocumentFetcher.fetch(pageUrl) }
-            .getOrElse { exception ->
-                if (exception is HttpStatusException) {
-                    null
-                } else {
-                    throw exception
-                }
-            }
+        return try {
+            linkDocumentFetcher.fetch(pageUrl)
+        } catch (exception: HttpStatusException) {
+            null
+        } catch (exception: Exception) {
+            throw ApiException(
+                LinkStatus.LINK_CRAWL_BATCH_NOT_CRAWLABLE,
+                exception,
+                exception.message ?: LinkStatus.LINK_CRAWL_BATCH_NOT_CRAWLABLE.getDescription(),
+            )
+        }
     }
 
     fun buildPageUrl(

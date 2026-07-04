@@ -49,16 +49,38 @@ class LinkBatchRunServiceTest {
     private val userLinkRepository: UserLinkRepository = mockk(relaxed = true)
     private val tagWriteService: TagWriteService = mockk(relaxed = true)
     private val linkDocumentFetcher = StubLinkDocumentFetcher()
+    private val transactionOperations = ImmediateTransactionOperations()
+    private val linkCrawlLinkCollector =
+        LinkCrawlLinkCollector(
+            linkRepository = linkRepository,
+            userLinkRepository = userLinkRepository,
+            tagWriteService = tagWriteService,
+        )
+    private val linkCrawlRunExecutor =
+        LinkCrawlRunExecutor(
+            linkCrawlRunRepository = linkCrawlRunRepository,
+            linkCrawlFailedJobRepository = linkCrawlFailedJobRepository,
+            linkCrawlLinkCollector = linkCrawlLinkCollector,
+            linkDocumentFetcher = linkDocumentFetcher,
+            transactionOperations = transactionOperations,
+        )
+    private val linkCrawlFailedJobRetryService =
+        LinkCrawlFailedJobRetryService(
+            linkCrawlRunRepository = linkCrawlRunRepository,
+            linkCrawlFailedJobRepository = linkCrawlFailedJobRepository,
+            linkCrawlLinkCollector = linkCrawlLinkCollector,
+            linkDocumentFetcher = linkDocumentFetcher,
+            transactionOperations = transactionOperations,
+        )
     private val linkBatchRunService =
         LinkBatchRunService(
             linkCrawlBatchRepository = linkCrawlBatchRepository,
             linkCrawlRunRepository = linkCrawlRunRepository,
             linkCrawlFailedJobRepository = linkCrawlFailedJobRepository,
-            linkRepository = linkRepository,
-            userLinkRepository = userLinkRepository,
-            tagWriteService = tagWriteService,
+            linkCrawlRunExecutor = linkCrawlRunExecutor,
+            linkCrawlFailedJobRetryService = linkCrawlFailedJobRetryService,
             linkDocumentFetcher = linkDocumentFetcher,
-            transactionOperations = ImmediateTransactionOperations(),
+            transactionOperations = transactionOperations,
         )
 
     private fun captureSavedRun(runId: UUID = UUID.randomUUID()): CapturingSlot<LinkCrawlRun> {
@@ -195,6 +217,28 @@ class LinkBatchRunServiceTest {
         assertEquals(LinkCrawlRunStatus.FAILED, savedRun.captured.status)
         assertEquals(LinkStatus.LINK_CRAWL_BATCH_NOT_CRAWLABLE.getCustomStatusCode(), savedRun.captured.errorStatusCode)
         assertEquals(exception.detail, savedRun.captured.errorMessage)
+        assertNotNull(batch.lastTriggeredAt)
+    }
+
+    @Test
+    @DisplayName("시작 페이지 조회 중 일반 예외가 발생해도 ApiException으로 전파하고 실행 이력을 FAILED 상태로 기록한다")
+    fun runRecordsFailedRunAndRethrowsApiExceptionWhenStartPageFetcherThrowsUnexpectedException() {
+        val batchId = UUID.randomUUID()
+        val batch = createBatch(createdAtSelectors = ".created-date").apply { id = batchId }
+        val pageUrl = "https://example.com/articles?page=1"
+        val savedRun = captureSavedRun()
+        linkDocumentFetcher.setFailure(pageUrl, IllegalStateException("connection reset"))
+        every { linkCrawlBatchRepository.findById(batchId) } returns Optional.of(batch)
+
+        val exception =
+            assertFailsWith<ApiException> {
+                linkBatchRunService.run(batchId)
+            }
+
+        assertEquals(LinkStatus.LINK_CRAWL_BATCH_NOT_CRAWLABLE, exception.status)
+        assertEquals(LinkCrawlRunStatus.FAILED, savedRun.captured.status)
+        assertEquals(LinkStatus.LINK_CRAWL_BATCH_NOT_CRAWLABLE.getCustomStatusCode(), savedRun.captured.errorStatusCode)
+        assertEquals("connection reset", savedRun.captured.errorMessage)
         assertNotNull(batch.lastTriggeredAt)
     }
 
