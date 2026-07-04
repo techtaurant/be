@@ -95,7 +95,7 @@ class LinkCrawlRunExecutor(
         var pageResult = emptyPageCrawlResult()
 
         document.select(batch.itemSelector).forEach { item ->
-            val collectionResult = collectLinkFromCrawledItem(item, batch, tagResolver, page, pageUrl)
+            val collectionResult = collectLinkFromCrawledItem(item, batch, tagResolver, pageUrl)
             pageResult = pageResult.recordCollectionResult(collectionResult, seenFailedArticleUrls)
         }
 
@@ -169,7 +169,6 @@ class LinkCrawlRunExecutor(
         item: Element,
         batch: LinkCrawlBatch,
         tagResolver: LinkTagResolver,
-        page: Int,
         pageUrl: String,
     ): LinkCollectionResult {
         val snapshot =
@@ -180,8 +179,6 @@ class LinkCrawlRunExecutor(
                 return LinkCollectionResult.Failed(
                     LinkFailedJobRecord(
                         draft = failedJobDraft,
-                        sourcePage = page,
-                        sourcePageUrl = pageUrl,
                         exception = exception,
                     ),
                 )
@@ -197,8 +194,6 @@ class LinkCrawlRunExecutor(
             LinkCollectionResult.Failed(
                 LinkFailedJobRecord(
                     draft = snapshot.toFailedJobDraft(),
-                    sourcePage = page,
-                    sourcePageUrl = pageUrl,
                     exception = exception,
                 ),
             )
@@ -235,16 +230,11 @@ class LinkCrawlRunExecutor(
         val runId = run.id ?: throw ApiException(DefaultStatus.SERVER_ERROR, "실행 ID가 없습니다")
         val now = Instant.now()
         val failedJobDraft = failedJobRecord.draft.toPersistableFailedJobDraft()
-        val sourcePageUrl = LinkCrawlFailedJob.truncateUrl(failedJobRecord.sourcePageUrl)
         val errorStatusCode = failedJobRecord.exception.toLinkCrawlErrorStatusCode()
         val errorMessage = failedJobRecord.exception.toLinkCrawlErrorMessage()
         val failedJob =
             linkCrawlFailedJobRepository.findByRunIdAndArticleUrl(runId, failedJobDraft.articleUrl)
                 ?.apply {
-                    this.sourcePage = failedJobRecord.sourcePage
-                    this.sourcePageUrl = sourcePageUrl
-                    this.title = failedJobDraft.title
-                    this.summary = failedJobDraft.summary
                     this.errorStatusCode = errorStatusCode
                     this.errorMessage = errorMessage
                     this.failureCount += 1
@@ -252,11 +242,7 @@ class LinkCrawlRunExecutor(
                 }
                 ?: LinkCrawlFailedJob(
                     run = run,
-                    sourcePage = failedJobRecord.sourcePage,
-                    sourcePageUrl = sourcePageUrl,
                     articleUrl = failedJobDraft.articleUrl,
-                    title = failedJobDraft.title,
-                    summary = failedJobDraft.summary,
                     errorStatusCode = errorStatusCode,
                     errorMessage = errorMessage,
                     lastFailedAt = now,

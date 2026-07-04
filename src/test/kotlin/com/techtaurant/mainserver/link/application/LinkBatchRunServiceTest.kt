@@ -276,11 +276,8 @@ class LinkBatchRunServiceTest {
             linkCrawlFailedJobRepository.save(
                 match {
                     it.run.batch.id == batchId &&
-                        it.sourcePage == 1 &&
-                        it.sourcePageUrl == pageUrl &&
                         it.articleUrl == "https://example.com/article/missing-date" &&
-                        it.title == "생성일 없는 글" &&
-                        !it.resolved &&
+                        it.resolvedAt == null &&
                         it.errorStatusCode == LinkStatus.LINK_CRAWL_BATCH_CREATED_AT_REQUIRED.getCustomStatusCode()
                 },
             )
@@ -380,10 +377,10 @@ class LinkBatchRunServiceTest {
         every { linkCrawlRunRepository.existsById(runId) } returns true
         every { linkCrawlRunRepository.findById(runId) } returns Optional.of(run)
         every {
-            linkCrawlFailedJobRepository.findAllByRunIdAndResolvedFalseOrderByCreatedAtAsc(runId, pageable)
+            linkCrawlFailedJobRepository.findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId, pageable)
         } returns emptyList()
-        every { linkCrawlFailedJobRepository.existsByRunIdAndResolvedFalse(runId) } returns false
-        every { linkCrawlFailedJobRepository.countByRunIdAndResolvedFalse(runId) } returns 0L
+        every { linkCrawlFailedJobRepository.existsByRunIdAndResolvedAtIsNull(runId) } returns false
+        every { linkCrawlFailedJobRepository.countByRunIdAndResolvedAtIsNull(runId) } returns 0L
 
         val response = linkBatchRunService.retryRunFailedJobs(runId)
 
@@ -392,7 +389,7 @@ class LinkBatchRunServiceTest {
         assertEquals(0, response.stillUnresolvedCount)
         assertEquals(LinkCrawlRunStatus.RESOLVED, response.runStatus)
         verify(exactly = 1) {
-            linkCrawlFailedJobRepository.findAllByRunIdAndResolvedFalseOrderByCreatedAtAsc(runId, pageable)
+            linkCrawlFailedJobRepository.findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId, pageable)
         }
     }
 
@@ -413,11 +410,7 @@ class LinkBatchRunServiceTest {
         val failedJob =
             LinkCrawlFailedJob(
                 run = run,
-                sourcePage = 1,
-                sourcePageUrl = "https://example.com/articles?page=1",
                 articleUrl = "https://example.com/article/retry",
-                title = "재시도 대상",
-                summary = "재시도 대상 요약",
                 errorStatusCode = LinkStatus.LINK_CRAWL_BATCH_CREATED_AT_REQUIRED.getCustomStatusCode(),
                 errorMessage = "생성일 없음",
                 failureCount = 1,

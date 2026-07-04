@@ -2,7 +2,6 @@ package com.techtaurant.mainserver.link.application
 
 import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
-import com.techtaurant.mainserver.link.entity.LinkCrawlFailedJob
 import com.techtaurant.mainserver.link.enums.LinkStatus
 import org.jsoup.HttpStatusException
 import org.jsoup.nodes.Document
@@ -83,17 +82,9 @@ class LinkCrawlDocumentParser(
         pageUrl: String,
     ): LinkFailedJobDraft? {
         val articleUrl = extractArticleUrl(item, selectors, pageUrl) ?: return null
-        val title =
-            resolveText(item, selectors.titleSelector)
-                ?.trim()
-                ?.takeIf(String::isNotEmpty)
-                ?.let { title -> LinkCrawlFailedJob.truncateTitle(title) }
-        val summary = selectors.summarySelector?.let { resolveText(item, it) }?.trim()?.takeIf(String::isNotEmpty)
 
         return LinkFailedJobDraft(
             articleUrl = articleUrl,
-            title = title,
-            summary = summary,
         )
     }
 
@@ -125,6 +116,28 @@ class LinkCrawlDocumentParser(
         return LinkSnapshot(
             title = title,
             url = absoluteUrl,
+            summary = summary,
+            createdAt = createdAt,
+        )
+    }
+
+    fun extractSnapshotFromArticlePage(
+        articleUrl: String,
+        selectors: LinkCrawlSelectors,
+    ): LinkSnapshot? {
+        val articleDocument = fetchPageOrNull(articleUrl) ?: return null
+        val title =
+            resolveText(articleDocument, selectors.titleSelector)
+                ?.takeIf { it.isNotBlank() }
+                ?: return null
+        val summary = selectors.summarySelector?.let { resolveText(articleDocument, it) }.orEmpty()
+        val createdAt =
+            parseCreatedAt(firstResolvedValue(articleDocument, selectors.createdAtSelectors))
+                ?: throw ApiException(LinkStatus.LINK_CRAWL_BATCH_CREATED_AT_REQUIRED)
+
+        return LinkSnapshot(
+            title = title,
+            url = articleUrl,
             summary = summary,
             createdAt = createdAt,
         )

@@ -33,26 +33,19 @@ data class LinkSnapshot(
     fun toFailedJobDraft(): LinkFailedJobDraft =
         LinkFailedJobDraft(
             articleUrl = LinkCrawlFailedJob.truncateUrl(url),
-            title = LinkCrawlFailedJob.truncateTitle(title),
-            summary = summary.takeIf(String::isNotBlank),
         )
 }
 
 data class LinkFailedJobDraft(
     val articleUrl: String,
-    val title: String?,
-    val summary: String?,
 ) {
     fun toPersistableFailedJobDraft(): LinkFailedJobDraft =
         copy(
             articleUrl = LinkCrawlFailedJob.truncateUrl(articleUrl),
-            title = LinkCrawlFailedJob.truncateTitle(title),
         )
 }
 
 data class LinkFailedJobRecord(
     val draft: LinkFailedJobDraft,
-    val sourcePage: Int,
-    val sourcePageUrl: String,
     val exception: Throwable,
 )

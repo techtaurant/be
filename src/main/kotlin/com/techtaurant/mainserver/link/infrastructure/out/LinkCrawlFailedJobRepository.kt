@@ -9,14 +9,14 @@ import java.time.Instant
 import java.util.UUID
 
 interface LinkCrawlFailedJobRepository : JpaRepository<LinkCrawlFailedJob, UUID> {
-    fun findAllByRunIdAndResolvedFalseOrderByCreatedAtAsc(runId: UUID): List<LinkCrawlFailedJob>
+    fun findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId: UUID): List<LinkCrawlFailedJob>
 
-    fun findAllByRunIdAndResolvedFalseOrderByCreatedAtAsc(
+    fun findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(
         runId: UUID,
         pageable: Pageable,
     ): List<LinkCrawlFailedJob>
 
-    fun countByRunIdAndResolvedFalse(runId: UUID): Long
+    fun countByRunIdAndResolvedAtIsNull(runId: UUID): Long
 
     @Query(
         """
@@ -24,7 +24,7 @@ interface LinkCrawlFailedJobRepository : JpaRepository<LinkCrawlFailedJob, UUID>
         FROM LinkCrawlFailedJob j
         JOIN j.run r
         JOIN r.batch b
-        WHERE j.resolved = false
+        WHERE j.resolvedAt IS NULL
           AND b.active = true
           AND j.failureCount < :maxFailureCount
           AND j.lastFailedAt <= :retryableBefore
@@ -37,7 +37,7 @@ interface LinkCrawlFailedJobRepository : JpaRepository<LinkCrawlFailedJob, UUID>
         pageable: Pageable,
     ): List<LinkCrawlFailedJob>
 
-    fun existsByRunIdAndResolvedFalse(runId: UUID): Boolean
+    fun existsByRunIdAndResolvedAtIsNull(runId: UUID): Boolean
 
     fun findByRunIdAndArticleUrl(
         runId: UUID,
@@ -45,7 +45,7 @@ interface LinkCrawlFailedJobRepository : JpaRepository<LinkCrawlFailedJob, UUID>
     ): LinkCrawlFailedJob?
 
     @Query(
-        "SELECT DISTINCT j.run.id FROM LinkCrawlFailedJob j WHERE j.run.id IN :runIds AND j.resolved = false",
+        "SELECT DISTINCT j.run.id FROM LinkCrawlFailedJob j WHERE j.run.id IN :runIds AND j.resolvedAt IS NULL",
     )
     fun findRunIdsWithUnresolvedJobs(runIds: Collection<UUID>): Set<UUID>
 }

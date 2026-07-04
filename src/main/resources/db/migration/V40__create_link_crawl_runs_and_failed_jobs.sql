@@ -21,15 +21,10 @@ CREATE INDEX idx_link_crawl_runs_batch_id_started_at ON link_crawl_runs(batch_id
 CREATE TABLE link_crawl_failed_jobs (
     id UUID PRIMARY KEY,
     run_id UUID NOT NULL REFERENCES link_crawl_runs(id) ON DELETE CASCADE,
-    source_page INTEGER NOT NULL,
-    source_page_url VARCHAR(2048) NOT NULL,
     article_url VARCHAR(2048) NOT NULL,
-    title VARCHAR(200),
-    summary TEXT,
     error_status_code INTEGER NOT NULL,
     error_message TEXT NOT NULL,
     failure_count INTEGER NOT NULL DEFAULT 1,
-    resolved BOOLEAN NOT NULL DEFAULT FALSE,
     resolved_at_utc TIMESTAMPTZ,
     last_failed_at_utc TIMESTAMPTZ NOT NULL,
     created_at_utc TIMESTAMPTZ NOT NULL,
@@ -38,5 +33,5 @@ CREATE TABLE link_crawl_failed_jobs (
 );
 
 CREATE INDEX idx_link_crawl_failed_jobs_run_id ON link_crawl_failed_jobs(run_id);
-CREATE INDEX idx_link_crawl_failed_jobs_unresolved ON link_crawl_failed_jobs(run_id) WHERE resolved = FALSE;
+CREATE INDEX idx_link_crawl_failed_jobs_unresolved ON link_crawl_failed_jobs(run_id) WHERE resolved_at_utc IS NULL;
 CREATE INDEX idx_link_crawl_failed_jobs_created_at ON link_crawl_failed_jobs(created_at_utc);

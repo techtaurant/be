@@ -160,6 +160,41 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             exchange.sendResponseHeaders(HttpStatus.OK.value(), bytes.size.toLong())
             exchange.responseBody.use { body -> body.write(bytes) }
         }
+        httpServer.createContext("/article") { exchange ->
+            val html =
+                when (exchange.requestURI.path) {
+                    "/article/metric-review" ->
+                        articleDetailHtml(
+                            title = "Metric Review, 실행을 이끌다",
+                            summary = "인사이트는 있는데 실행이 느릴 때, 지표 리뷰로 실행 리듬을 만든 이야기입니다.",
+                            createdAtText = "2026년 4월 20일",
+                        )
+                    "/article/starrocks" ->
+                        articleDetailHtml(
+                            title = "StarRocks 운영기",
+                            summary = "서비스 쿼리가 밀리기 시작했을 때 우리가 선택한 멀티테넌트 격리 전략을 정리했습니다.",
+                            createdAtText = "2026년 4월 19일",
+                        )
+                    "/article/cache-layer" ->
+                        articleDetailHtml(
+                            title = "Cache Layer 개선기",
+                            summary = "반복 조회 부하를 낮추기 위해 캐시 계층을 재설계한 경험을 정리했습니다.",
+                            createdAtText = "2026년 4월 18일",
+                        )
+                    else -> null
+                }
+
+            if (html == null) {
+                exchange.sendResponseHeaders(HttpStatus.NOT_FOUND.value(), -1)
+                exchange.close()
+                return@createContext
+            }
+
+            val bytes = html.toByteArray(StandardCharsets.UTF_8)
+            exchange.responseHeaders.add("Content-Type", "text/html; charset=utf-8")
+            exchange.sendResponseHeaders(HttpStatus.OK.value(), bytes.size.toLong())
+            exchange.responseBody.use { body -> body.write(bytes) }
+        }
         httpServer.start()
 
         crawlerBaseUrl = "http://localhost:${httpServer.address.port}"
@@ -287,10 +322,10 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
         assertEquals("$crawlerBaseUrl/article/valid-after-long-title", savedLinks.single().url)
 
         val savedRun = linkCrawlRunRepository.findAllByBatchIdOrderByStartedAtDesc(batch.id!!).single()
-        val failedJobs = linkCrawlFailedJobRepository.findAllByRunIdAndResolvedFalseOrderByCreatedAtAsc(savedRun.id!!)
+        val failedJobs = linkCrawlFailedJobRepository.findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(savedRun.id!!)
         assertEquals(2, failedJobs.size)
-        assertTrue(failedJobs.any { it.articleUrl == "$crawlerBaseUrl/article/too-long-title" && it.title?.length == 200 })
-        assertTrue(failedJobs.any { it.articleUrl.length == 2048 && it.title == "URL 길이 초과 글" })
+        assertTrue(failedJobs.any { it.articleUrl == "$crawlerBaseUrl/article/too-long-title" })
+        assertTrue(failedJobs.any { it.articleUrl.length == 2048 })
     }
 
     @Test
@@ -382,7 +417,8 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             .body("data", hasSize<Any>(3))
             .body("data[0].runId", equalTo(runId.toString()))
             .body("data[0].batchId", equalTo(batch.id.toString()))
-            .body("data[0].resolved", equalTo(false))
+            .body("data[0]", not(hasKey("resolved")))
+            .body("data[0].resolvedAt", equalTo(null))
             .body("data[0].failureCount", equalTo(1))
             .body("data[0].errorStatusCode", equalTo(6006))
 
@@ -601,6 +637,22 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
                     <div class="published-date o6bzluc">2026년 4월 16일</div>
                   </a>
                 </div>
+              </body>
+            </html>
+            """.trimIndent()
+    }
+
+    private fun articleDetailHtml(
+        title: String,
+        summary: String,
+        createdAtText: String,
+    ): String {
+        return """
+            <html>
+              <body>
+                <div class="title">$title</div>
+                <div class="summary">$summary</div>
+                <div class="o6bzluc">$createdAtText</div>
               </body>
             </html>
             """.trimIndent()

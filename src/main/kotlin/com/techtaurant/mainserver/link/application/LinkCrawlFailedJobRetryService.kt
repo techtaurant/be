@@ -55,7 +55,7 @@ class LinkCrawlFailedJobRetryService(
             }
 
             linkCrawlFailedJobRepository
-                .findAllByRunIdAndResolvedFalseOrderByCreatedAtAsc(runId, LinkCrawlFailedJobRetryPolicy.pageRequest())
+                .findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId, LinkCrawlFailedJobRetryPolicy.pageRequest())
                 .mapNotNull { it.id }
         } ?: emptyList()
     }
@@ -77,7 +77,7 @@ class LinkCrawlFailedJobRetryService(
         val snapshotResult = runCatching { resolveSnapshotForFailedJob(retryContext) }
         return transactionOperations.execute<Boolean> {
             val failedJob = linkCrawlFailedJobRepository.findById(failedJobId).orElse(null) ?: return@execute false
-            if (failedJob.resolved) {
+            if (failedJob.resolvedAt != null) {
                 refreshRunStatus(failedJob.run)
                 return@execute false
             }
@@ -116,7 +116,6 @@ class LinkCrawlFailedJobRetryService(
     }
 
     private fun markResolved(failedJob: LinkCrawlFailedJob) {
-        failedJob.resolved = true
         failedJob.resolvedAt = Instant.now()
         linkCrawlFailedJobRepository.save(failedJob)
     }
@@ -137,7 +136,7 @@ class LinkCrawlFailedJobRetryService(
         run.status =
             when {
                 run.status == LinkCrawlRunStatus.FAILED -> LinkCrawlRunStatus.FAILED
-                linkCrawlFailedJobRepository.existsByRunIdAndResolvedFalse(runId) -> LinkCrawlRunStatus.UNRESOLVED
+                linkCrawlFailedJobRepository.existsByRunIdAndResolvedAtIsNull(runId) -> LinkCrawlRunStatus.UNRESOLVED
                 run.failedJobCount > 0 -> LinkCrawlRunStatus.RESOLVED
                 else -> LinkCrawlRunStatus.COMPLETED
             }
@@ -148,7 +147,7 @@ class LinkCrawlFailedJobRetryService(
             val run = findRunOrThrow(runId)
             refreshRunStatus(run)
             LinkFailedJobRetrySummary(
-                stillUnresolvedCount = linkCrawlFailedJobRepository.countByRunIdAndResolvedFalse(runId).toInt(),
+                stillUnresolvedCount = linkCrawlFailedJobRepository.countByRunIdAndResolvedAtIsNull(runId).toInt(),
                 runStatus = run.status,
             )
         } ?: throw ApiException(DefaultStatus.SERVER_ERROR, "실패 잡 재시도 결과를 요약하지 못했습니다")
@@ -161,51 +160,18 @@ class LinkCrawlFailedJobRetryService(
     }
 
     private fun resolveSnapshotForFailedJob(retryContext: LinkFailedJobRetryContext): LinkSnapshot {
-        val snapshotFromSourcePage =
-            crawlDocumentParser.fetchPageOrNull(retryContext.sourcePageUrl)
-                ?.select(retryContext.selectors.itemSelector)
-                ?.firstNotNullOfOrNull { item ->
-                    val articleUrl = crawlDocumentParser.extractArticleUrl(item, retryContext.selectors, retryContext.sourcePageUrl)
-                    if (articleUrl == retryContext.articleUrl) {
-                        crawlDocumentParser.extractSnapshot(item, retryContext.selectors, retryContext.sourcePageUrl)
-                    } else {
-                        null
-                    }
-                }
-
-        if (snapshotFromSourcePage != null) {
-            return snapshotFromSourcePage
-        }
-
-        val title =
-            retryContext.title?.trim()?.takeIf(String::isNotEmpty)
-                ?: throw ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_CRAWLABLE)
-        val createdAt =
-            crawlDocumentParser.parseCreatedAtFromArticlePage(retryContext.articleUrl, retryContext.selectors.createdAtSelectors)
-                ?: throw ApiException(LinkStatus.LINK_CRAWL_BATCH_CREATED_AT_REQUIRED)
-
-        return LinkSnapshot(
-            title = title,
-            url = retryContext.articleUrl,
-            summary = retryContext.summary.orEmpty(),
-            createdAt = createdAt,
-        )
+        return crawlDocumentParser.extractSnapshotFromArticlePage(retryContext.articleUrl, retryContext.selectors)
+            ?: throw ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_CRAWLABLE)
     }
 
     private data class LinkFailedJobRetryContext(
         val articleUrl: String,
-        val sourcePageUrl: String,
-        val title: String?,
-        val summary: String?,
         val selectors: LinkCrawlSelectors,
     ) {
         companion object {
             fun from(failedJob: LinkCrawlFailedJob): LinkFailedJobRetryContext {
                 return LinkFailedJobRetryContext(
                     articleUrl = failedJob.articleUrl,
-                    sourcePageUrl = failedJob.sourcePageUrl,
-                    title = failedJob.title,
-                    summary = failedJob.summary,
                     selectors = LinkCrawlSelectors.from(failedJob.run.batch),
                 )
             }
