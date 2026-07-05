@@ -8,6 +8,9 @@ import com.techtaurant.mainserver.link.dto.CreateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.link.dto.LinkBatchRunResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlBatchListItemResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlBatchResponse
+import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobResponse
+import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobRetryResponse
+import com.techtaurant.mainserver.link.dto.LinkCrawlRunResponse
 import com.techtaurant.mainserver.link.dto.UpdateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.security.SecurityConstants
 import jakarta.validation.Valid
@@ -59,5 +62,29 @@ class AdminLinkCrawlBatchController(
         @PathVariable batchId: UUID,
     ): ApiResponse<LinkBatchRunResponse> {
         return ApiResponse.ok(linkBatchRunService.run(batchId))
+    }
+
+    @ApiErrorResponses(includeAuthenticationErrors = true)
+    @GetMapping("${SecurityConstants.ADMIN_API_PREFIX}/link-crawl-batches/{batchId}/runs")
+    override fun getRuns(
+        @PathVariable batchId: UUID,
+    ): ApiResponse<List<LinkCrawlRunResponse>> {
+        return ApiResponse.ok(linkBatchRunService.getRuns(batchId))
+    }
+
+    @ApiErrorResponses(includeAuthenticationErrors = true)
+    @GetMapping("${SecurityConstants.ADMIN_API_PREFIX}/link-crawl-runs/{runId}/failed-jobs")
+    override fun getRunFailedJobs(
+        @PathVariable runId: UUID,
+    ): ApiResponse<List<LinkCrawlFailedJobResponse>> {
+        return ApiResponse.ok(linkBatchRunService.getUnresolvedFailedJobs(runId))
+    }
+
+    @ApiErrorResponses(includeAuthenticationErrors = true)
+    @PostMapping("${SecurityConstants.ADMIN_API_PREFIX}/link-crawl-runs/{runId}/failed-jobs/retry")
+    override fun retryRunFailedJobs(
+        @PathVariable runId: UUID,
+    ): ApiResponse<LinkCrawlFailedJobRetryResponse> {
+        return ApiResponse.ok(linkBatchRunService.retryRunFailedJobs(runId))
     }
 }

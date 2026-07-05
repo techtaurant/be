@@ -12,4 +12,6 @@ data class LinkBatchRunResponse(
     val existingLinkCount: Int,
     @field:Schema(description = "selector 미일치 등으로 건너뛴 수")
     val skippedCount: Int,
+    @field:Schema(description = "실패 잡으로 기록된 링크 수")
+    val failedJobCount: Int = 0,
 )

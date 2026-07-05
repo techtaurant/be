@@ -14,6 +14,7 @@ enum class LinkStatus(
     INVALID_LINK_CURSOR(HttpStatus.BAD_REQUEST.value(), 6005, "유효한 링크 커서가 아닙니다"),
     LINK_CRAWL_BATCH_CREATED_AT_REQUIRED(HttpStatus.BAD_REQUEST.value(), 6006, "링크 수집 배치에서 생성일을 수집할 수 없습니다"),
     LINK_CRAWL_BATCH_NOT_CRAWLABLE(HttpStatus.BAD_REQUEST.value(), 6007, "링크 수집 배치를 크롤링할 수 없습니다"),
+    LINK_CRAWL_RUN_NOT_FOUND(HttpStatus.NOT_FOUND.value(), 6008, "링크 수집 실행 이력을 찾을 수 없습니다"),
     ;
 
     override fun getHttpStatusCode(): Int {

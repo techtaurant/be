@@ -6,6 +6,8 @@ import com.techtaurant.mainserver.link.entity.Link
 import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
 import com.techtaurant.mainserver.link.entity.UserLink
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlBatchRepository
+import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlFailedJobRepository
+import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlRunRepository
 import com.techtaurant.mainserver.link.infrastructure.out.LinkRepository
 import com.techtaurant.mainserver.link.infrastructure.out.UserLinkRepository
 import com.techtaurant.mainserver.post.infrastructure.out.TagRepository
@@ -50,6 +52,12 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
 
     @Autowired
     private lateinit var linkCrawlBatchRepository: LinkCrawlBatchRepository
+
+    @Autowired
+    private lateinit var linkCrawlRunRepository: LinkCrawlRunRepository
+
+    @Autowired
+    private lateinit var linkCrawlFailedJobRepository: LinkCrawlFailedJobRepository
 
     @Autowired
     private lateinit var jwtTokenProvider: JwtTokenProvider
@@ -137,6 +145,42 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
                           </body>
                         </html>
                         """.trimIndent()
+                    99 -> longTitlePageHtml()
+                    else -> null
+                }
+
+            if (html == null) {
+                exchange.sendResponseHeaders(HttpStatus.NOT_FOUND.value(), -1)
+                exchange.close()
+                return@createContext
+            }
+
+            val bytes = html.toByteArray(StandardCharsets.UTF_8)
+            exchange.responseHeaders.add("Content-Type", "text/html; charset=utf-8")
+            exchange.sendResponseHeaders(HttpStatus.OK.value(), bytes.size.toLong())
+            exchange.responseBody.use { body -> body.write(bytes) }
+        }
+        httpServer.createContext("/article") { exchange ->
+            val html =
+                when (exchange.requestURI.path) {
+                    "/article/metric-review" ->
+                        articleDetailHtml(
+                            title = "Metric Review, 실행을 이끌다",
+                            summary = "인사이트는 있는데 실행이 느릴 때, 지표 리뷰로 실행 리듬을 만든 이야기입니다.",
+                            createdAtText = "2026년 4월 20일",
+                        )
+                    "/article/starrocks" ->
+                        articleDetailHtml(
+                            title = "StarRocks 운영기",
+                            summary = "서비스 쿼리가 밀리기 시작했을 때 우리가 선택한 멀티테넌트 격리 전략을 정리했습니다.",
+                            createdAtText = "2026년 4월 19일",
+                        )
+                    "/article/cache-layer" ->
+                        articleDetailHtml(
+                            title = "Cache Layer 개선기",
+                            summary = "반복 조회 부하를 낮추기 위해 캐시 계층을 재설계한 경험을 정리했습니다.",
+                            createdAtText = "2026년 4월 18일",
+                        )
                     else -> null
                 }
 
@@ -242,6 +286,49 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
     }
 
     @Test
+    @DisplayName("수집 링크 필드가 DB 길이를 초과해도 정상 링크와 실패 잡을 함께 기록한다")
+    fun runRecordsFailedJobAndKeepsValidLinksWhenCrawledFieldsExceedDatabaseLimits() {
+        val batch =
+            linkCrawlBatchRepository.save(
+                LinkCrawlBatch(
+                    companyUser = companyUser,
+                    name = "긴 제목 실패 기록 배치",
+                    baseUrl = crawlerBaseUrl,
+                    pageUriTemplate = "/category/engineering?page={page}",
+                    itemSelector = ".article-card",
+                    articleLinkSelector = "a.article-link",
+                    titleSelector = ".title",
+                    summarySelector = ".summary",
+                    createdAtSelectors = "div.o6bzluc",
+                    cronExpression = "0 0 * * * *",
+                    startPage = 99,
+                    active = true,
+                    tagNames = "engineering",
+                ),
+            )
+
+        given()
+            .header("Authorization", "Bearer $adminAccessToken")
+            .`when`()
+            .post("/admin/link-crawl-batches/${batch.id}/run")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data.collectedCount", equalTo(1))
+            .body("data.newLinkCount", equalTo(1))
+            .body("data.failedJobCount", equalTo(2))
+
+        val savedLinks = linkRepository.findAll()
+        assertEquals(1, savedLinks.size)
+        assertEquals("$crawlerBaseUrl/article/valid-after-long-title", savedLinks.single().url)
+
+        val savedRun = linkCrawlRunRepository.findAllByBatchIdOrderByStartedAtDesc(batch.id!!).single()
+        val failedJobs = linkCrawlFailedJobRepository.findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(savedRun.id!!)
+        assertEquals(2, failedJobs.size)
+        assertTrue(failedJobs.any { it.articleUrl == "$crawlerBaseUrl/article/too-long-title" })
+        assertTrue(failedJobs.any { it.articleUrl.length == 2048 })
+    }
+
+    @Test
     @DisplayName("배치 등록 시 생성일을 수집할 수 없으면 등록이 실패한다")
     fun createBatchFailsWhenCreatedAtCannotBeCollected() {
         given()
@@ -275,8 +362,8 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    @DisplayName("배치 실행 중 생성일을 수집할 수 없으면 배치가 실패한다")
-    fun runBatchFailsWhenCreatedAtCannotBeCollected() {
+    @DisplayName("관리자는 실행 이력을 조회하고 미해소 실패 잡을 재시도해 모두 해소되면 RESOLVED 상태가 된다")
+    fun adminCanReviewRunsAndRetryUnresolvedFailedJobsUntilResolved() {
         val batch =
             linkCrawlBatchRepository.save(
                 LinkCrawlBatch(
@@ -301,11 +388,73 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             .`when`()
             .post("/admin/link-crawl-batches/${batch.id}/run")
             .then()
-            .statusCode(HttpStatus.BAD_REQUEST.value())
-            .body("status", equalTo(6006))
+            .statusCode(HttpStatus.OK.value())
+            .body("data.collectedCount", equalTo(0))
+            .body("data.newLinkCount", equalTo(0))
+            .body("data.failedJobCount", equalTo(3))
 
-        assertEquals(1, pageRequestCount(1))
-        assertTrue(linkRepository.findAll().isEmpty())
+        given()
+            .header("Authorization", "Bearer $adminAccessToken")
+            .`when`()
+            .get("/admin/link-crawl-batches/${batch.id}/runs")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data", hasSize<Any>(1))
+            .body("data[0].batchId", equalTo(batch.id.toString()))
+            .body("data[0].triggerType", equalTo("MANUAL"))
+            .body("data[0].status", equalTo("UNRESOLVED"))
+            .body("data[0].failedJobCount", equalTo(3))
+            .body("data[0].hasUnresolvedFailedJobs", equalTo(true))
+
+        val runId = linkCrawlRunRepository.findAllByBatchIdOrderByStartedAtDesc(batch.id!!).single().id!!
+
+        given()
+            .header("Authorization", "Bearer $adminAccessToken")
+            .`when`()
+            .get("/admin/link-crawl-runs/$runId/failed-jobs")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data", hasSize<Any>(3))
+            .body("data[0].runId", equalTo(runId.toString()))
+            .body("data[0].batchId", equalTo(batch.id.toString()))
+            .body("data[0]", not(hasKey("resolved")))
+            .body("data[0].resolvedAt", equalTo(null))
+            .body("data[0].failureCount", equalTo(1))
+            .body("data[0].errorStatusCode", equalTo(6006))
+
+        batch.createdAtSelectors = "div.o6bzluc"
+        linkCrawlBatchRepository.saveAndFlush(batch)
+
+        given()
+            .header("Authorization", "Bearer $adminAccessToken")
+            .`when`()
+            .post("/admin/link-crawl-runs/$runId/failed-jobs/retry")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data.retriedCount", equalTo(3))
+            .body("data.resolvedCount", equalTo(3))
+            .body("data.stillUnresolvedCount", equalTo(0))
+            .body("data.runStatus", equalTo("RESOLVED"))
+
+        assertEquals(3, linkRepository.findAll().size)
+
+        given()
+            .header("Authorization", "Bearer $adminAccessToken")
+            .`when`()
+            .get("/admin/link-crawl-runs/$runId/failed-jobs")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data", hasSize<Any>(0))
+
+        given()
+            .header("Authorization", "Bearer $adminAccessToken")
+            .`when`()
+            .get("/admin/link-crawl-batches/${batch.id}/runs")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data", hasSize<Any>(1))
+            .body("data[0].status", equalTo("RESOLVED"))
+            .body("data[0].hasUnresolvedFailedJobs", equalTo(false))
     }
 
     @Test
@@ -459,6 +608,54 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
         userLinkRepository.saveAndFlush(UserLink(user = sourceCompanyUser, link = link))
 
         return link
+    }
+
+    private fun longTitlePageHtml(): String {
+        val tooLongTitle = "가".repeat(201)
+        val tooLongUrl = "/article/${"u".repeat(2050)}"
+        return """
+            <html>
+              <body>
+                <div class="article-card">
+                  <a class="article-link" href="/article/too-long-title">
+                    <div class="title">$tooLongTitle</div>
+                    <div class="summary">DB 제목 길이를 초과하는 글입니다.</div>
+                    <div class="published-date o6bzluc">2026년 4월 17일</div>
+                  </a>
+                </div>
+                <div class="article-card">
+                  <a class="article-link" href="$tooLongUrl">
+                    <div class="title">URL 길이 초과 글</div>
+                    <div class="summary">DB URL 길이를 초과하는 글입니다.</div>
+                    <div class="published-date o6bzluc">2026년 4월 17일</div>
+                  </a>
+                </div>
+                <div class="article-card">
+                  <a class="article-link" href="/article/valid-after-long-title">
+                    <div class="title">긴 제목 뒤 정상 글</div>
+                    <div class="summary">앞선 실패 뒤에도 저장되어야 하는 글입니다.</div>
+                    <div class="published-date o6bzluc">2026년 4월 16일</div>
+                  </a>
+                </div>
+              </body>
+            </html>
+            """.trimIndent()
+    }
+
+    private fun articleDetailHtml(
+        title: String,
+        summary: String,
+        createdAtText: String,
+    ): String {
+        return """
+            <html>
+              <body>
+                <div class="title">$title</div>
+                <div class="summary">$summary</div>
+                <div class="o6bzluc">$createdAtText</div>
+              </body>
+            </html>
+            """.trimIndent()
     }
 
     private fun pageRequestCount(page: Int): Int {
