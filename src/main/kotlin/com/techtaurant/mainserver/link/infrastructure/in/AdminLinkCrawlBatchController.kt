@@ -57,7 +57,7 @@ class AdminLinkCrawlBatchController(
     }
 
     @ApiErrorResponses(includeAuthenticationErrors = true)
-    @PostMapping("${SecurityConstants.ADMIN_API_PREFIX}/link-crawl-batches/{batchId}/run")
+    @PostMapping("${SecurityConstants.ADMIN_API_PREFIX}/link-crawl-batches/{batchId}/runs")
     override fun runBatch(
         @PathVariable batchId: UUID,
     ): ApiResponse<LinkBatchRunResponse> {
@@ -81,7 +81,7 @@ class AdminLinkCrawlBatchController(
     }
 
     @ApiErrorResponses(includeAuthenticationErrors = true)
-    @PostMapping("${SecurityConstants.ADMIN_API_PREFIX}/link-crawl-runs/{runId}/failed-jobs/retry")
+    @PostMapping("${SecurityConstants.ADMIN_API_PREFIX}/link-crawl-runs/{runId}/failed-job-retries")
     override fun retryRunFailedJobs(
         @PathVariable runId: UUID,
     ): ApiResponse<LinkCrawlFailedJobRetryResponse> {

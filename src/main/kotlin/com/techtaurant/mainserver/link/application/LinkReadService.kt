@@ -6,12 +6,10 @@ import com.techtaurant.mainserver.link.dto.LinkContentDetailResponse
 import com.techtaurant.mainserver.link.dto.LinkContentListItemResponse
 import com.techtaurant.mainserver.link.dto.LinkCursor
 import com.techtaurant.mainserver.link.dto.LinkCursorV1
-import com.techtaurant.mainserver.link.dto.LinkListItemResponse
 import com.techtaurant.mainserver.link.entity.Link
 import com.techtaurant.mainserver.link.enums.LinkPeriod
 import com.techtaurant.mainserver.link.enums.LinkSortType
 import com.techtaurant.mainserver.link.enums.LinkStatus
-import com.techtaurant.mainserver.link.infrastructure.out.LinkReadLogRepository
 import com.techtaurant.mainserver.link.infrastructure.out.LinkRepository
 import com.techtaurant.mainserver.link.infrastructure.out.UserLinkRepository
 import com.techtaurant.mainserver.user.enums.UserRole
@@ -27,7 +25,6 @@ import java.util.UUID
 class LinkReadService(
     private val linkRepository: LinkRepository,
     private val userLinkRepository: UserLinkRepository,
-    private val linkReadLogRepository: LinkReadLogRepository,
     private val userRepository: UserRepository,
 ) {
     fun getPublicLinkContents(
@@ -123,47 +120,6 @@ class LinkReadService(
         return LinkContentDetailResponse.from(
             link = link,
             sourceCompanyUserId = findSourceCompanyUserIdByLinkId(listOf(link))[link.id],
-        )
-    }
-
-    fun getCompanyLinks(
-        companyUserId: UUID,
-        userId: UUID,
-        cursor: String?,
-        size: Int,
-        tag: String?,
-    ): CursorPageResponse<LinkListItemResponse> {
-        validateCompany(companyUserId)
-
-        val linkPage =
-            getLinkPage(
-                cursor = cursor,
-                size = size,
-                sourceCompanyUserId = companyUserId,
-                tag = tag,
-            )
-        val contentLinks = linkPage.content
-        val linkIds = contentLinks.mapNotNull { it.id }
-        val sourceCompanyUserIdByLinkId = findSourceCompanyUserIdByLinkId(contentLinks)
-        val savedLinkIds = userLinkRepository.findByUserIdAndLinkIdIn(userId, linkIds).map { it.link.id!! }.toSet()
-        val readLinkIds = linkReadLogRepository.findByUserIdAndLinkIdIn(userId, linkIds).map { it.link.id!! }.toSet()
-
-        val content =
-            contentLinks.map { link ->
-                val linkId = link.id ?: throw ApiException(LinkStatus.LINK_NOT_FOUND)
-                LinkListItemResponse.from(
-                    link = link,
-                    sourceCompanyUserId = sourceCompanyUserIdByLinkId[linkId],
-                    isSaved = linkId in savedLinkIds,
-                    isRead = linkId in readLinkIds,
-                )
-            }
-
-        return CursorPageResponse(
-            content = content,
-            nextCursor = linkPage.nextCursor,
-            hasNext = linkPage.hasNext,
-            size = content.size,
         )
     }
 

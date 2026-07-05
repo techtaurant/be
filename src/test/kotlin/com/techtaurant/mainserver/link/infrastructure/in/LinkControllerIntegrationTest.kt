@@ -2,15 +2,21 @@ package com.techtaurant.mainserver.link.infrastructure.`in`
 
 import com.techtaurant.mainserver.base.IntegrationTest
 import com.techtaurant.mainserver.link.entity.Link
-import com.techtaurant.mainserver.link.entity.UserLink
+import com.techtaurant.mainserver.link.infrastructure.out.LinkLikeLogRepository
+import com.techtaurant.mainserver.link.infrastructure.out.LinkReadLogRepository
+import com.techtaurant.mainserver.link.infrastructure.out.LinkRepository
+import com.techtaurant.mainserver.link.infrastructure.out.UserLinkRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
 import com.techtaurant.mainserver.user.infrastructure.out.UserRepository
 import io.restassured.RestAssured.given
-import org.hamcrest.Matchers.equalTo
-import org.hamcrest.Matchers.hasSize
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -24,15 +30,20 @@ class LinkControllerIntegrationTest : IntegrationTest() {
     private lateinit var userRepository: UserRepository
 
     @Autowired
-    private lateinit var linkRepository: com.techtaurant.mainserver.link.infrastructure.out.LinkRepository
+    private lateinit var linkRepository: LinkRepository
 
     @Autowired
-    private lateinit var userLinkRepository: com.techtaurant.mainserver.link.infrastructure.out.UserLinkRepository
+    private lateinit var userLinkRepository: UserLinkRepository
+
+    @Autowired
+    private lateinit var linkReadLogRepository: LinkReadLogRepository
+
+    @Autowired
+    private lateinit var linkLikeLogRepository: LinkLikeLogRepository
 
     @Autowired
     private lateinit var jwtTokenProvider: JwtTokenProvider
 
-    private lateinit var companyUser: User
     private lateinit var normalUser: User
     private lateinit var accessToken: String
     private lateinit var firstLink: Link
@@ -40,18 +51,6 @@ class LinkControllerIntegrationTest : IntegrationTest() {
 
     @BeforeEach
     fun setUpTestData() {
-        companyUser =
-            userRepository.save(
-                User(
-                    name = "토스",
-                    email = "contact@toss.im",
-                    provider = OAuthProvider.SYSTEM,
-                    identifier = "company-toss",
-                    role = UserRole.COMPANY,
-                    profileImageUrl = "https://example.com/toss.png",
-                ),
-            )
-
         normalUser =
             userRepository.save(
                 User(
@@ -74,7 +73,6 @@ class LinkControllerIntegrationTest : IntegrationTest() {
                     summary = "지표 리뷰를 실행으로 연결한 사례입니다.",
                 ),
             )
-        userLinkRepository.save(UserLink(user = companyUser, link = firstLink))
 
         secondLink =
             linkRepository.save(
@@ -84,31 +82,19 @@ class LinkControllerIntegrationTest : IntegrationTest() {
                     summary = "멀티테넌트 워크로드 격리 전략을 소개합니다.",
                 ),
             )
-        userLinkRepository.save(UserLink(user = companyUser, link = secondLink))
     }
 
     @Test
-    @DisplayName("사용자는 회사 링크 목록을 조회하고 저장/읽음 상태를 확인할 수 있다")
-    fun userCanListCompanyLinksWithSavedAndReadFlags() {
-        given()
-            .header("Authorization", "Bearer $accessToken")
-            .`when`()
-            .get("/api/companies/${companyUser.id}/links?size=10")
-            .then()
-            .statusCode(HttpStatus.OK.value())
-            .body("data.content", hasSize<Any>(2))
-            .body("data.content.find { it.id == '${firstLink.id}' }.sourceCompanyUserId", equalTo(companyUser.id.toString()))
-            .body("data.content.find { it.id == '${firstLink.id}' }.isSaved", equalTo(false))
-            .body("data.content.find { it.id == '${firstLink.id}' }.isRead", equalTo(false))
-            .body("data.content.find { it.id == '${firstLink.id}' }.viewCount", equalTo(0))
-            .body("data.content.find { it.id == '${firstLink.id}' }.likeCount", equalTo(0))
-
+    @DisplayName("사용자는 링크를 저장하고 읽음 상태로 변경할 수 있다")
+    fun userCanSaveAndMarkLinkAsRead() {
         given()
             .header("Authorization", "Bearer $accessToken")
             .`when`()
             .post("/api/links/${firstLink.id}/save")
             .then()
             .statusCode(HttpStatus.CREATED.value())
+
+        assertNotNull(userLinkRepository.findByUserIdAndLinkId(normalUser.id!!, firstLink.id!!))
 
         given()
             .contentType("application/json")
@@ -119,14 +105,7 @@ class LinkControllerIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.OK.value())
 
-        given()
-            .header("Authorization", "Bearer $accessToken")
-            .`when`()
-            .get("/api/companies/${companyUser.id}/links?size=10")
-            .then()
-            .statusCode(HttpStatus.OK.value())
-            .body("data.content.find { it.id == '${firstLink.id}' }.isSaved", equalTo(true))
-            .body("data.content.find { it.id == '${firstLink.id}' }.isRead", equalTo(true))
+        assertTrue(linkReadLogRepository.existsByUserIdAndLinkId(normalUser.id!!, firstLink.id!!))
     }
 
     @Test
@@ -155,6 +134,8 @@ class LinkControllerIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.NO_CONTENT.value())
 
+        assertNull(userLinkRepository.findByUserIdAndLinkId(normalUser.id!!, secondLink.id!!))
+
         given()
             .contentType("application/json")
             .header("Authorization", "Bearer $accessToken")
@@ -164,14 +145,7 @@ class LinkControllerIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.OK.value())
 
-        given()
-            .header("Authorization", "Bearer $accessToken")
-            .`when`()
-            .get("/api/companies/${companyUser.id}/links?size=10")
-            .then()
-            .statusCode(HttpStatus.OK.value())
-            .body("data.content.find { it.id == '${secondLink.id}' }.isSaved", equalTo(false))
-            .body("data.content.find { it.id == '${secondLink.id}' }.isRead", equalTo(false))
+        assertFalse(linkReadLogRepository.existsByUserIdAndLinkId(normalUser.id!!, secondLink.id!!))
     }
 
     @Test
@@ -186,12 +160,9 @@ class LinkControllerIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.OK.value())
 
-        given()
-            .header("User-Agent", "RestAssured")
-            .`when`()
-            .post("/open-api/links/${firstLink.id}/view-logs")
-            .then()
-            .statusCode(HttpStatus.OK.value())
+        val likeLog = linkLikeLogRepository.findByLinkIdAndUserId(firstLink.id!!, normalUser.id!!)
+        assertNotNull(likeLog)
+        assertTrue(likeLog!!.isLiked)
 
         given()
             .header("User-Agent", "RestAssured")
@@ -201,12 +172,14 @@ class LinkControllerIntegrationTest : IntegrationTest() {
             .statusCode(HttpStatus.OK.value())
 
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .header("User-Agent", "RestAssured")
             .`when`()
-            .get("/api/companies/${companyUser.id}/links?size=10")
+            .post("/open-api/links/${firstLink.id}/view-logs")
             .then()
             .statusCode(HttpStatus.OK.value())
-            .body("data.content.find { it.id == '${firstLink.id}' }.likeCount", equalTo(1))
-            .body("data.content.find { it.id == '${firstLink.id}' }.viewCount", equalTo(2))
+
+        val link = linkRepository.findById(firstLink.id!!).orElseThrow()
+        assertEquals(1, link.likeCount)
+        assertEquals(2, link.viewCount)
     }
 }
