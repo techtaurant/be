@@ -1,0 +1,51 @@
+package com.techtaurant.mainserver.link.application
+
+import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
+import com.techtaurant.mainserver.link.entity.LinkCrawlFailedJob
+import java.time.Instant
+
+data class LinkCrawlSelectors(
+    val itemSelector: String,
+    val articleLinkSelector: String,
+    val titleSelector: String,
+    val summarySelector: String?,
+    val createdAtSelectors: String?,
+) {
+    companion object {
+        fun from(batch: LinkCrawlBatch): LinkCrawlSelectors {
+            return LinkCrawlSelectors(
+                itemSelector = batch.itemSelector,
+                articleLinkSelector = batch.articleLinkSelector,
+                titleSelector = batch.titleSelector,
+                summarySelector = batch.summarySelector,
+                createdAtSelectors = batch.createdAtSelectors,
+            )
+        }
+    }
+}
+
+data class LinkSnapshot(
+    val title: String,
+    val url: String,
+    val summary: String,
+    val createdAt: Instant,
+) {
+    fun toFailedJobDraft(): LinkFailedJobDraft =
+        LinkFailedJobDraft(
+            articleUrl = LinkCrawlFailedJob.truncateUrl(url),
+        )
+}
+
+data class LinkFailedJobDraft(
+    val articleUrl: String,
+) {
+    fun toPersistableFailedJobDraft(): LinkFailedJobDraft =
+        copy(
+            articleUrl = LinkCrawlFailedJob.truncateUrl(articleUrl),
+        )
+}
+
+data class LinkFailedJobRecord(
+    val draft: LinkFailedJobDraft,
+    val exception: Throwable,
+)

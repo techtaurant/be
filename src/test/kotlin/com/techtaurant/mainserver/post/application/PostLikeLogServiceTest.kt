@@ -4,6 +4,9 @@ import com.techtaurant.mainserver.base.IntegrationTest
 import com.techtaurant.mainserver.common.enums.LikeStatus
 import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.common.util.DateUtils
+import com.techtaurant.mainserver.notification.enums.NotificationTargetType
+import com.techtaurant.mainserver.notification.enums.NotificationType
+import com.techtaurant.mainserver.notification.infrastructure.out.NotificationRepository
 import com.techtaurant.mainserver.post.entity.Category
 import com.techtaurant.mainserver.post.entity.Post
 import com.techtaurant.mainserver.post.enums.PostStatus
@@ -61,6 +64,9 @@ class PostLikeLogServiceTest : IntegrationTest() {
 
     @Autowired
     private lateinit var entityManager: EntityManager
+
+    @Autowired
+    private lateinit var notificationRepository: NotificationRepository
 
     private lateinit var testUser: User
     private lateinit var testPost: Post
@@ -341,4 +347,78 @@ class PostLikeLogServiceTest : IntegrationTest() {
     private fun findDailyStats(statDate: LocalDate) =
         postDailyStatsRepository.findAll()
             .find { it.post.id == testPost.id && it.statDate.toString() == statDate.toString() }
+
+    @Test
+    @DisplayName("다른 사용자가 좋아요하면 게시물 작성자에게 POST_LIKE 알림이 생성된다")
+    fun recordLike_byOtherUser_createsPostLikeNotification() {
+        // Given - 작성자가 아닌 좋아요 사용자
+        val liker = createLiker()
+
+        // When - 좋아요 기록
+        postLikeLogService.recordLike(testPost.id!!, liker.id!!, LikeStatus.LIKE)
+        entityManager.flush()
+
+        // Then - 작성자(testUser)에게 POST_LIKE 알림 1건 생성
+        val notifications =
+            notificationRepository.findAllByTypeAndActorAndTarget(
+                NotificationType.POST_LIKE,
+                liker.id!!,
+                NotificationTargetType.POST,
+                testPost.id!!,
+            )
+        assertThat(notifications).hasSize(1)
+    }
+
+    @Test
+    @DisplayName("본인 게시물에 좋아요하면 알림이 생성되지 않는다")
+    fun recordLike_bySelf_doesNotCreateNotification() {
+        // When - 작성자 본인이 좋아요
+        postLikeLogService.recordLike(testPost.id!!, testUser.id!!, LikeStatus.LIKE)
+        entityManager.flush()
+
+        // Then - 알림 없음
+        val notifications =
+            notificationRepository.findAllByTypeAndActorAndTarget(
+                NotificationType.POST_LIKE,
+                testUser.id!!,
+                NotificationTargetType.POST,
+                testPost.id!!,
+            )
+        assertThat(notifications).isEmpty()
+    }
+
+    @Test
+    @DisplayName("좋아요를 취소하면 생성됐던 POST_LIKE 알림이 삭제된다")
+    fun recordLike_thenCancel_removesPostLikeNotification() {
+        // Given - 다른 사용자가 좋아요하여 알림 생성됨
+        val liker = createLiker()
+        postLikeLogService.recordLike(testPost.id!!, liker.id!!, LikeStatus.LIKE)
+        entityManager.flush()
+
+        // When - 좋아요 취소
+        postLikeLogService.recordLike(testPost.id!!, liker.id!!, LikeStatus.NONE)
+        entityManager.flush()
+
+        // Then - 알림 삭제됨
+        val notifications =
+            notificationRepository.findAllByTypeAndActorAndTarget(
+                NotificationType.POST_LIKE,
+                liker.id!!,
+                NotificationTargetType.POST,
+                testPost.id!!,
+            )
+        assertThat(notifications).isEmpty()
+    }
+
+    private fun createLiker(): User =
+        userRepository.save(
+            User(
+                name = "좋아요사용자",
+                email = "liker-${UUID.randomUUID()}@example.com",
+                provider = OAuthProvider.GOOGLE,
+                identifier = "liker-id-${UUID.randomUUID()}",
+                role = UserRole.USER,
+                profileImageUrl = "https://example.com/liker.jpg",
+            ),
+        )
 }

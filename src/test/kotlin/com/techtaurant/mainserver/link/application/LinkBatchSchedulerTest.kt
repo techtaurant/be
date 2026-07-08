@@ -2,6 +2,7 @@ package com.techtaurant.mainserver.link.application
 
 import com.techtaurant.mainserver.link.dto.LinkBatchRunResponse
 import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
+import com.techtaurant.mainserver.link.enums.LinkCrawlRunTriggerType
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlBatchRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.user.entity.User
@@ -31,11 +32,11 @@ class LinkBatchSchedulerTest {
     fun runDueBatchesRunsEligibleBatches() {
         val dueBatch = createBatch(cronExpression = "0 * * * * *")
         every { linkCrawlBatchRepository.findAllByActiveTrue() } returns listOf(dueBatch)
-        every { linkBatchRunService.run(dueBatch.id!!) } returns mockk()
+        every { linkBatchRunService.run(dueBatch.id!!, LinkCrawlRunTriggerType.SCHEDULED) } returns mockk()
 
         scheduler.runDueBatches(fixedNow)
 
-        verify(exactly = 1) { linkBatchRunService.run(dueBatch.id!!) }
+        verify(exactly = 1) { linkBatchRunService.run(dueBatch.id!!, LinkCrawlRunTriggerType.SCHEDULED) }
     }
 
     @Test
@@ -47,7 +48,7 @@ class LinkBatchSchedulerTest {
                 lastTriggeredAt = Instant.parse("2026-04-25T08:00:05Z"),
             )
         every { linkCrawlBatchRepository.findAllByActiveTrue() } returns listOf(alreadyTriggeredBatch)
-        every { linkBatchRunService.run(any()) } returns
+        every { linkBatchRunService.run(any(), any()) } returns
             LinkBatchRunResponse(
                 collectedCount = 0,
                 newLinkCount = 0,
@@ -57,7 +58,7 @@ class LinkBatchSchedulerTest {
 
         scheduler.runDueBatches(fixedNow)
 
-        verify(exactly = 0) { linkBatchRunService.run(any()) }
+        verify(exactly = 0) { linkBatchRunService.run(any(), any()) }
     }
 
     private fun createBatch(

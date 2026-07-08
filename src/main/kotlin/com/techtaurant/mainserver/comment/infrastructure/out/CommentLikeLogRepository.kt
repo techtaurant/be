@@ -1,7 +1,11 @@
 package com.techtaurant.mainserver.comment.infrastructure.out
 
 import com.techtaurant.mainserver.comment.entity.CommentLikeLog
+import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import java.util.*
 
 interface CommentLikeLogRepository : JpaRepository<CommentLikeLog, UUID> {
@@ -16,6 +20,21 @@ interface CommentLikeLogRepository : JpaRepository<CommentLikeLog, UUID> {
     fun findByCommentIdAndUserId(
         commentId: UUID,
         userId: UUID,
+    ): CommentLikeLog?
+
+    /**
+     * 특정 댓글·사용자의 좋아요 로그를 행 잠금(PESSIMISTIC_WRITE)으로 조회합니다.
+     * 좋아요 상태 전이를 직렬화하여 동시 요청(따닥) 시 중복 알림/중복 카운트를 방지합니다.
+     *
+     * @param commentId 댓글 ID
+     * @param userId 사용자 ID
+     * @return 좋아요 로그 (없으면 null)
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT l FROM CommentLikeLog l WHERE l.comment.id = :commentId AND l.user.id = :userId")
+    fun findByCommentIdAndUserIdForUpdate(
+        @Param("commentId") commentId: UUID,
+        @Param("userId") userId: UUID,
     ): CommentLikeLog?
 
     /**

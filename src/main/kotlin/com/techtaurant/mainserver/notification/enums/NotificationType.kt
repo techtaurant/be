@@ -5,4 +5,6 @@ enum class NotificationType {
     COMMENT_REPLY,
     FOLLOWER_POST,
     FOLLOW,
+    POST_LIKE,
+    COMMENT_LIKE,
 }

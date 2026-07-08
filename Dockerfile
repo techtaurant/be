@@ -22,8 +22,8 @@ COPY src src
 RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
     ./gradlew bootJar --no-daemon
 
-# Runtime stage: 타겟 플랫폼(arm64)의 JRE 이미지 사용
-FROM eclipse-temurin:17-jre
+# Runtime stage: Playwright와 버전을 맞춘 browser/system dependency 포함 이미지 사용
+FROM mcr.microsoft.com/playwright/java:v1.61.0-noble
 
 WORKDIR /app
 

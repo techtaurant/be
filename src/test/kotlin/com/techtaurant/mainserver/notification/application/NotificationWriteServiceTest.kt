@@ -166,6 +166,93 @@ class NotificationWriteServiceTest : IntegrationTest() {
         assertThat(savedRecipients).singleElement().extracting("recipientUser.id").isEqualTo(recipientUser.id)
     }
 
+    @Test
+    @DisplayName("게시물 좋아요 알림 생성 시 POST_LIKE 타입으로 actor와 post argument가 저장된다")
+    fun createPostLikeNotification_savesPostLikeNotification() {
+        val notificationId =
+            notificationWriteService.createPostLikeNotification(
+                actorUserId = actorUser.id!!,
+                recipientUserId = recipientUser.id!!,
+                postId = post.id!!,
+            )
+
+        val savedNotification = notificationRepository.findById(notificationId).orElseThrow()
+        val savedArguments = notificationArgumentRepository.findAllByNotificationIdOrderByCreatedAtAsc(notificationId)
+        val savedRecipients = notificationRecipientRepository.findAllByNotificationIdOrderByCreatedAtAsc(notificationId)
+
+        assertThat(savedNotification.type).isEqualTo(NotificationType.POST_LIKE)
+        assertThat(savedArguments)
+            .extracting("targetType", "targetId")
+            .containsExactlyInAnyOrder(
+                tuple(NotificationTargetType.USER, actorUser.id),
+                tuple(NotificationTargetType.POST, post.id),
+            )
+        assertThat(savedRecipients).singleElement().extracting("recipientUser.id").isEqualTo(recipientUser.id)
+    }
+
+    @Test
+    @DisplayName("댓글 좋아요 알림 생성 시 COMMENT_LIKE 타입으로 actor, post, comment argument가 저장된다")
+    fun createCommentLikeNotification_savesCommentLikeNotification() {
+        val notificationId =
+            notificationWriteService.createCommentLikeNotification(
+                actorUserId = actorUser.id!!,
+                recipientUserId = recipientUser.id!!,
+                postId = post.id!!,
+                commentId = comment.id!!,
+            )
+
+        val savedNotification = notificationRepository.findById(notificationId).orElseThrow()
+        val savedArguments = notificationArgumentRepository.findAllByNotificationIdOrderByCreatedAtAsc(notificationId)
+
+        assertThat(savedNotification.type).isEqualTo(NotificationType.COMMENT_LIKE)
+        assertThat(savedArguments)
+            .extracting("targetType", "targetId")
+            .containsExactlyInAnyOrder(
+                tuple(NotificationTargetType.USER, actorUser.id),
+                tuple(NotificationTargetType.POST, post.id),
+                tuple(NotificationTargetType.COMMENT, comment.id),
+            )
+    }
+
+    @Test
+    @DisplayName("게시물 좋아요 알림 삭제 시 동일 actor·post 알림만 제거되고 다른 actor 알림은 유지된다")
+    fun deletePostLikeNotification_removesOnlyMatchingNotification() {
+        val targetNotificationId =
+            notificationWriteService.createPostLikeNotification(
+                actorUserId = actorUser.id!!,
+                recipientUserId = recipientUser.id!!,
+                postId = post.id!!,
+            )
+        val otherNotificationId =
+            notificationWriteService.createPostLikeNotification(
+                actorUserId = secondRecipientUser.id!!,
+                recipientUserId = recipientUser.id!!,
+                postId = post.id!!,
+            )
+
+        notificationWriteService.deletePostLikeNotification(actorUserId = actorUser.id!!, postId = post.id!!)
+
+        assertThat(notificationRepository.findById(targetNotificationId)).isEmpty
+        assertThat(notificationRepository.findById(otherNotificationId)).isPresent
+    }
+
+    @Test
+    @DisplayName("댓글 좋아요 알림 삭제 시 동일 actor·comment 알림이 제거된다")
+    fun deleteCommentLikeNotification_removesMatchingNotification() {
+        val notificationId =
+            notificationWriteService.createCommentLikeNotification(
+                actorUserId = actorUser.id!!,
+                recipientUserId = recipientUser.id!!,
+                postId = post.id!!,
+                commentId = comment.id!!,
+            )
+
+        notificationWriteService.deleteCommentLikeNotification(actorUserId = actorUser.id!!, commentId = comment.id!!)
+
+        assertThat(notificationRepository.findById(notificationId)).isEmpty
+        assertThat(notificationArgumentRepository.findAllByNotificationIdOrderByCreatedAtAsc(notificationId)).isEmpty()
+    }
+
     private fun createUser(prefix: String): User {
         val uniqueSuffix = UUID.randomUUID().toString().take(8)
         return userRepository.save(

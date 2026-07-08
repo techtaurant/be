@@ -122,6 +122,83 @@ class NotificationWriteService(
         )
     }
 
+    @Transactional
+    fun createPostLikeNotification(
+        actorUserId: UUID,
+        recipientUserId: UUID,
+        postId: UUID,
+        locale: Locale? = null,
+    ): UUID {
+        val actor = resolveActor(actorUserId)
+        val recipients = resolveRecipients(listOf(recipientUserId))
+        resolvePost(postId)
+
+        return createNotification(
+            type = NotificationType.POST_LIKE,
+            recipients = recipients,
+            argumentSpecs =
+                listOf(
+                    NotificationArgumentSpec(NotificationTargetType.USER, actor.id!!),
+                    NotificationArgumentSpec(NotificationTargetType.POST, postId),
+                ),
+        )
+    }
+
+    @Transactional
+    fun createCommentLikeNotification(
+        actorUserId: UUID,
+        recipientUserId: UUID,
+        postId: UUID,
+        commentId: UUID,
+        locale: Locale? = null,
+    ): UUID {
+        val actor = resolveActor(actorUserId)
+        val recipients = resolveRecipients(listOf(recipientUserId))
+        resolvePost(postId)
+
+        resolveComment(commentId)
+
+        return createNotification(
+            type = NotificationType.COMMENT_LIKE,
+            recipients = recipients,
+            argumentSpecs =
+                listOf(
+                    NotificationArgumentSpec(NotificationTargetType.USER, actor.id!!),
+                    NotificationArgumentSpec(NotificationTargetType.POST, postId),
+                    NotificationArgumentSpec(NotificationTargetType.COMMENT, commentId),
+                ),
+        )
+    }
+
+    @Transactional
+    fun deletePostLikeNotification(
+        actorUserId: UUID,
+        postId: UUID,
+    ) {
+        deleteLikeNotification(NotificationType.POST_LIKE, actorUserId, NotificationTargetType.POST, postId)
+    }
+
+    @Transactional
+    fun deleteCommentLikeNotification(
+        actorUserId: UUID,
+        commentId: UUID,
+    ) {
+        deleteLikeNotification(NotificationType.COMMENT_LIKE, actorUserId, NotificationTargetType.COMMENT, commentId)
+    }
+
+    private fun deleteLikeNotification(
+        type: NotificationType,
+        actorUserId: UUID,
+        targetType: NotificationTargetType,
+        targetId: UUID,
+    ) {
+        val notifications =
+            notificationRepository.findAllByTypeAndActorAndTarget(type, actorUserId, targetType, targetId)
+        if (notifications.isNotEmpty()) {
+            notificationRepository.deleteAll(notifications)
+        }
+    }
+
     private fun createNotification(
         type: NotificationType,
         recipients: List<User>,
