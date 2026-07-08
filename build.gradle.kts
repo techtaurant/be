@@ -83,8 +83,11 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
 
-    // HTML Sanitization
+    // HTML Fetching and Sanitization
     implementation("org.jsoup:jsoup:1.18.3")
+    implementation("com.microsoft.playwright:playwright:1.61.0") {
+        exclude(group = "org.slf4j", module = "slf4j-simple")
+    }
 
     // Observability
     implementation("io.micrometer:micrometer-registry-prometheus")
