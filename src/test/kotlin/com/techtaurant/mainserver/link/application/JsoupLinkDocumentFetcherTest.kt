@@ -11,7 +11,7 @@ import kotlin.test.assertFailsWith
 
 @DisplayName("JsoupLinkDocumentFetcher 테스트")
 class JsoupLinkDocumentFetcherTest {
-    private val playwrightLinkDocumentFetcher: PlaywrightLinkDocumentFetcher = mockk()
+    private val playwrightLinkDocumentFetcher: LinkDocumentFetcher = mockk()
     private val fetcher = JsoupLinkDocumentFetcher(playwrightLinkDocumentFetcher)
 
     @Test

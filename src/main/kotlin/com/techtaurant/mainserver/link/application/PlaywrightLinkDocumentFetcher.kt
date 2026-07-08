@@ -13,8 +13,8 @@ import org.jsoup.nodes.Document
 import org.springframework.stereotype.Component
 
 @Component
-class PlaywrightLinkDocumentFetcher {
-    fun fetch(url: String): Document {
+class PlaywrightLinkDocumentFetcher : LinkDocumentFetcher {
+    override fun fetch(url: String): Document {
         val playwright = Playwright.create()
         try {
             val browser =

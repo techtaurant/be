@@ -2,11 +2,15 @@ package com.techtaurant.mainserver.link.application
 
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.context.annotation.Primary
 import org.springframework.stereotype.Component
 
+@Primary
 @Component
 class JsoupLinkDocumentFetcher(
-    private val playwrightLinkDocumentFetcher: PlaywrightLinkDocumentFetcher,
+    @Qualifier("playwrightLinkDocumentFetcher")
+    private val playwrightLinkDocumentFetcher: LinkDocumentFetcher,
 ) : LinkDocumentFetcher {
     override fun fetch(url: String): Document {
         return try {
