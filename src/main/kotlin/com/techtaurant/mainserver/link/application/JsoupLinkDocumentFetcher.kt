@@ -5,8 +5,26 @@ import org.jsoup.nodes.Document
 import org.springframework.stereotype.Component
 
 @Component
-class JsoupLinkDocumentFetcher : LinkDocumentFetcher {
+class JsoupLinkDocumentFetcher(
+    private val playwrightLinkDocumentFetcher: PlaywrightLinkDocumentFetcher,
+) : LinkDocumentFetcher {
     override fun fetch(url: String): Document {
-        return Jsoup.connect(url).get()
+        return try {
+            Jsoup.connect(url).get()
+        } catch (jsoupException: Exception) {
+            fetchWithPlaywright(url, jsoupException)
+        }
+    }
+
+    private fun fetchWithPlaywright(
+        url: String,
+        jsoupException: Exception,
+    ): Document {
+        return try {
+            playwrightLinkDocumentFetcher.fetch(url)
+        } catch (playwrightException: Exception) {
+            playwrightException.addSuppressed(jsoupException)
+            throw playwrightException
+        }
     }
 }
