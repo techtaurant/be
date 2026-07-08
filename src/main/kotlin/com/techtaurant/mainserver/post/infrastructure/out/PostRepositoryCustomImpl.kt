@@ -253,7 +253,7 @@ class PostRepositoryCustomImpl : PostRepositoryCustom {
             .map { post -> PostWithSortValue(post = post, sortValue = sortValueByPostId.getValue(post.id!!)) }
     }
 
-    override fun findVisiblePostDetailById(
+    override fun findPostDetailByIdForViewer(
         postId: UUID,
         viewerId: UUID?,
     ): Post? {

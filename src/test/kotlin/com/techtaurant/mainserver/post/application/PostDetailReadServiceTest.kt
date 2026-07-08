@@ -100,7 +100,7 @@ class PostDetailReadServiceTest {
                     status = PostStatusEnum.PUBLISHED,
                 ).apply { id = postId }
 
-            every { postRepository.findVisiblePostDetailById(postId, viewerId) } returns post
+            every { postRepository.findPostDetailByIdForViewer(postId, viewerId) } returns post
             every { postLikeLogRepository.findByPostIdAndUserId(postId, viewerId) } returns null
             every { postReadLogRepository.existsByPostIdAndUserId(postId, viewerId) } returns true
             every {
@@ -138,7 +138,7 @@ class PostDetailReadServiceTest {
                     status = PostStatusEnum.PUBLISHED,
                 ).apply { id = postId }
 
-            every { postRepository.findVisiblePostDetailById(postId, null) } returns post
+            every { postRepository.findPostDetailByIdForViewer(postId, null) } returns post
 
             // when
             val result = postDetailReadService.getPostDetail(postId, null, null, null)
@@ -163,7 +163,7 @@ class PostDetailReadServiceTest {
                 ).apply { id = postId }
             val likeLog = PostLikeLog(post = post, user = author, isLiked = true)
 
-            every { postRepository.findVisiblePostDetailById(postId, viewerId) } returns post
+            every { postRepository.findPostDetailByIdForViewer(postId, viewerId) } returns post
             every { postLikeLogRepository.findByPostIdAndUserId(postId, viewerId) } returns likeLog
             every { postReadLogRepository.existsByPostIdAndUserId(postId, viewerId) } returns false
 
@@ -190,7 +190,7 @@ class PostDetailReadServiceTest {
                     status = PostStatusEnum.PUBLISHED,
                 ).apply { id = postId }
 
-            every { postRepository.findVisiblePostDetailById(postId, null) } returns post
+            every { postRepository.findPostDetailByIdForViewer(postId, null) } returns post
             every {
                 attachmentService.getConfirmedAttachmentsByReferenceIds(listOf(author.id!!), AttachmentReferenceType.USER)
             } returns mapOf(author.id!! to listOf(profileAttachment))
@@ -220,7 +220,7 @@ class PostDetailReadServiceTest {
                     status = PostStatusEnum.PUBLISHED,
                 ).apply { id = postId }
 
-            every { postRepository.findVisiblePostDetailById(postId, null) } returns post
+            every { postRepository.findPostDetailByIdForViewer(postId, null) } returns post
 
             // when
             val result = postDetailReadService.getPublishedPostContentDetail(postId)

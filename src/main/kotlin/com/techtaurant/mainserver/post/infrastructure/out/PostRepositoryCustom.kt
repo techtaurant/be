@@ -39,7 +39,7 @@ interface PostRepositoryCustom {
         viewerId: UUID? = null,
     ): List<PostWithSortValue>
 
-    fun findVisiblePostDetailById(
+    fun findPostDetailByIdForViewer(
         postId: UUID,
         viewerId: UUID?,
     ): Post?

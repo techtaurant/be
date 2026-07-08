@@ -109,7 +109,8 @@ interface UserOpenApiControllerDocs {
         summary = "사용자 게시물 목록 조회",
         description =
             "[Deprecated] 이 API는 정적 콘텐츠, 공개 동적 메타데이터, 로그인 사용자 상태가 하나의 응답에 섞여 있습니다. " +
-                "사용자 게시물 정적 콘텐츠 목록은 GET /open-api/v2/users/{userId}/posts, 공개 동적 메타데이터는 " +
+                "내 게시물 목록은 GET /api/users/me/posts, 공개 사용자 게시물 정적 콘텐츠 목록은 GET /open-api/v2/posts?authorId=..., " +
+                "공개 동적 메타데이터는 " +
                 "GET /open-api/posts/metadatas?postIds=..., 작성자 이름과 프로필 이미지는 GET /open-api/users/profile-images?userIds=..., " +
                 "로그인 사용자 상태는 GET /api/posts/me/states?postIds=... API로 대체되었습니다. " +
                 "기존 호환을 위해 본인 조회 시 PRIVATE 포함 동작은 유지됩니다.",

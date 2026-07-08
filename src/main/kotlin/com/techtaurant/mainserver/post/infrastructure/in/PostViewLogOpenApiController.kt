@@ -30,7 +30,7 @@ class PostViewLogOpenApiController(
         request: HttpServletRequest,
         @AuthenticationPrincipal userId: UUID?,
     ): ApiResponse<Unit> {
-        postDetailReadService.getVisiblePostDetailById(postId, userId)
+        postDetailReadService.getAccessiblePostDetailById(postId, userId)
         postViewLogService.recordView(
             postId = postId,
             userId = userId,
