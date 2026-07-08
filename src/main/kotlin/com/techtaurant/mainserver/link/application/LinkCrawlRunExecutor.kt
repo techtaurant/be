@@ -58,15 +58,14 @@ class LinkCrawlRunExecutor(
     ): LinkCrawlResult {
         var crawlResponse = emptyCrawlResponse()
         val failedJobs = mutableListOf<LinkFailedJobRecord>()
-        val seenFailedArticleUrls = mutableSetOf<String>()
         var page = batch.startPage
 
         while (true) {
-            val pageResult = crawlPage(batch, tagResolver, page, seenFailedArticleUrls) ?: break
+            val pageResult = crawlPage(batch, tagResolver, page) ?: break
             crawlResponse = crawlResponse.mergePageResult(pageResult.response)
             failedJobs += pageResult.failedJobs
 
-            if (!pageResult.hasProgress) {
+            if (!pageResult.hasItems) {
                 break
             }
             page++
@@ -82,7 +81,6 @@ class LinkCrawlRunExecutor(
         batch: LinkCrawlBatch,
         tagResolver: LinkTagResolver,
         page: Int,
-        seenFailedArticleUrls: MutableSet<String>,
     ): LinkPageCrawlResult? {
         val pageUrl = crawlDocumentParser.buildPageUrl(batch.baseUrl, batch.pageUriTemplate, page)
         val document =
@@ -92,11 +90,12 @@ class LinkCrawlRunExecutor(
                 } else {
                     return null
                 }
-        var pageResult = emptyPageCrawlResult()
+        val items = document.select(batch.itemSelector)
+        var pageResult = emptyPageCrawlResult(hasItems = items.isNotEmpty())
 
-        document.select(batch.itemSelector).forEach { item ->
+        items.forEach { item ->
             val collectionResult = collectLinkFromCrawledItem(item, batch, tagResolver, pageUrl)
-            pageResult = pageResult.recordCollectionResult(collectionResult, seenFailedArticleUrls)
+            pageResult = pageResult.recordCollectionResult(collectionResult)
         }
 
         return pageResult
@@ -110,20 +109,14 @@ class LinkCrawlRunExecutor(
             skippedCount = 0,
         )
 
-    private fun emptyPageCrawlResult(): LinkPageCrawlResult =
+    private fun emptyPageCrawlResult(hasItems: Boolean): LinkPageCrawlResult =
         LinkPageCrawlResult(
             response = emptyCrawlResponse(),
             failedJobs = emptyList(),
-            hasProgress = false,
+            hasItems = hasItems,
         )
 
-    private fun LinkPageCrawlResult.recordCollectionResult(
-        result: LinkCollectionResult,
-        seenFailedArticleUrls: MutableSet<String>,
-    ): LinkPageCrawlResult {
-        val hasNewFailedArticleUrl =
-            result is LinkCollectionResult.Failed &&
-                seenFailedArticleUrls.add(result.failedJob.draft.articleUrl)
+    private fun LinkPageCrawlResult.recordCollectionResult(result: LinkCollectionResult): LinkPageCrawlResult {
         val updatedResponse =
             when (result) {
                 LinkCollectionResult.CreatedNewLink ->
@@ -152,7 +145,6 @@ class LinkCrawlRunExecutor(
                 } else {
                     failedJobs
                 },
-            hasProgress = hasProgress || result.hasProgress || hasNewFailedArticleUrl,
         )
     }
 
@@ -259,22 +251,20 @@ class LinkCrawlRunExecutor(
     private data class LinkPageCrawlResult(
         val response: LinkBatchRunResponse,
         val failedJobs: List<LinkFailedJobRecord>,
-        val hasProgress: Boolean,
+        val hasItems: Boolean,
     )
 
-    private sealed class LinkCollectionResult(
-        val hasProgress: Boolean,
-    ) {
-        data object CreatedNewLink : LinkCollectionResult(true)
+    private sealed class LinkCollectionResult {
+        data object CreatedNewLink : LinkCollectionResult()
 
-        data object ConnectedExistingLink : LinkCollectionResult(true)
+        data object ConnectedExistingLink : LinkCollectionResult()
 
-        data object UpdatedExistingLink : LinkCollectionResult(false)
+        data object UpdatedExistingLink : LinkCollectionResult()
 
-        data object Skipped : LinkCollectionResult(false)
+        data object Skipped : LinkCollectionResult()
 
         data class Failed(
             val failedJob: LinkFailedJobRecord,
-        ) : LinkCollectionResult(false)
+        ) : LinkCollectionResult()
     }
 }

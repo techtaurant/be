@@ -275,12 +275,12 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             .post("/admin/link-crawl-batches/$batchId/runs")
             .then()
             .statusCode(HttpStatus.OK.value())
-            .body("data.collectedCount", equalTo(2))
+            .body("data.collectedCount", equalTo(3))
             .body("data.newLinkCount", equalTo(0))
-            .body("data.existingLinkCount", equalTo(2))
+            .body("data.existingLinkCount", equalTo(3))
 
         assertEquals(3, pageRequestCount(1))
-        assertEquals(1, pageRequestCount(2))
+        assertEquals(2, pageRequestCount(2))
         assertTrue(linkRepository.findAllWithTags().all { link -> link.tags.none { it.name == "new-tag" } })
         assertEquals(null, tagRepository.findByName("new-tag"))
     }

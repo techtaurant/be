@@ -311,8 +311,8 @@ class LinkBatchRunServiceTest {
     }
 
     @Test
-    @DisplayName("반복 페이지가 이미 실패로 관측한 링크만 포함하면 다음 페이지를 조회하지 않는다")
-    fun runStopsWhenRepeatedPageContainsOnlyAlreadyFailedLink() {
+    @DisplayName("반복 페이지가 이미 실패로 관측한 링크만 포함해도 다음 페이지 수집을 계속한다")
+    fun runContinuesWhenRepeatedPageContainsOnlyAlreadyFailedLink() {
         val batchId = UUID.randomUUID()
         val batch = createBatch(createdAtSelectors = ".created-date").apply { id = batchId }
         val firstPageUrl = "https://example.com/articles?page=1"
@@ -327,11 +327,60 @@ class LinkBatchRunServiceTest {
         every { linkCrawlFailedJobRepository.findByRunIdAndArticleUrl(any(), any()) } returns null
         every { linkCrawlFailedJobRepository.save(any()) } answers { invocation.args[0] as LinkCrawlFailedJob }
         every { linkRepository.findByUrl("https://example.com/article/metric-review") } returns null
+        every { linkRepository.save(any<Link>()) } answers {
+            (invocation.args[0] as Link).apply { id = UUID.randomUUID() }
+        }
+        every { userLinkRepository.findByUserIdAndLinkId(any(), any()) } returns null
+        every { userLinkRepository.save(any()) } answers { invocation.args[0] as UserLink }
 
         val response = linkBatchRunService.run(batchId)
 
-        assertEquals(0, response.newLinkCount)
-        verify(exactly = 0) { linkRepository.save(any()) }
+        assertEquals(1, response.newLinkCount)
+        assertEquals(2, response.failedJobCount)
+        verify(exactly = 1) { linkRepository.save(any()) }
+    }
+
+    @Test
+    @DisplayName("페이지가 이미 연결된 기존 링크만 포함해도 다음 페이지 수집을 계속한다")
+    fun runContinuesToNextPageWhenPageContainsOnlyAlreadyConnectedExistingLink() {
+        val batchId = UUID.randomUUID()
+        val batch = createBatch(createdAtSelectors = ".created-date").apply { id = batchId }
+        val existingLink =
+            Link(
+                title = "Metric Review, 실행을 이끌다",
+                url = "https://example.com/article/metric-review",
+                summary = "기존 링크입니다.",
+            ).apply { id = UUID.randomUUID() }
+        val firstPageUrl = "https://example.com/articles?page=1"
+        val secondPageUrl = "https://example.com/articles?page=2"
+        linkDocumentFetcher.setHtml(firstPageUrl, crawlableHtml())
+        linkDocumentFetcher.setHtml(
+            secondPageUrl,
+            crawlableHtml(
+                articlePath = "/article/valid",
+                title = "정상 수집 글",
+                summary = "정상적으로 수집되는 글입니다.",
+                createdAtText = "2026년 4월 21일",
+            ),
+        )
+        captureSavedRun()
+        every { linkCrawlBatchRepository.findById(batchId) } returns Optional.of(batch)
+        every { linkRepository.findByUrl("https://example.com/article/metric-review") } returns existingLink
+        every { linkRepository.findByUrl("https://example.com/article/valid") } returns null
+        every { linkRepository.save(any<Link>()) } answers {
+            (invocation.args[0] as Link).apply { id = UUID.randomUUID() }
+        }
+        every { userLinkRepository.findByUserIdAndLinkId(batch.companyUser.id!!, existingLink.id!!) } returns
+            UserLink(batch.companyUser, existingLink)
+        every { userLinkRepository.findByUserIdAndLinkId(batch.companyUser.id!!, match { it != existingLink.id }) } returns null
+        every { userLinkRepository.save(any()) } answers { invocation.args[0] as UserLink }
+
+        val response = linkBatchRunService.run(batchId)
+
+        assertEquals(2, response.collectedCount)
+        assertEquals(1, response.newLinkCount)
+        assertEquals(1, response.existingLinkCount)
+        verify(exactly = 1) { linkRepository.save(any()) }
     }
 
     @Test
@@ -451,14 +500,19 @@ class LinkBatchRunServiceTest {
         )
     }
 
-    private fun crawlableHtml(createdAtText: String = "2026년 4월 20일"): String {
+    private fun crawlableHtml(
+        articlePath: String = "/article/metric-review",
+        title: String = "Metric Review, 실행을 이끌다",
+        summary: String = "지표 리뷰로 실행 리듬을 만든 이야기입니다.",
+        createdAtText: String = "2026년 4월 20일",
+    ): String {
         return """
             <html>
               <body>
                 <div class="article-card">
-                  <a class="article-link" href="/article/metric-review">
-                    <div class="title">Metric Review, 실행을 이끌다</div>
-                    <div class="summary">지표 리뷰로 실행 리듬을 만든 이야기입니다.</div>
+                  <a class="article-link" href="$articlePath">
+                    <div class="title">$title</div>
+                    <div class="summary">$summary</div>
                     <div class="created-date">$createdAtText</div>
                   </a>
                 </div>
