@@ -67,7 +67,6 @@ interface AdminLinkCrawlBatchControllerDocs {
                 LinkStatus::class,
                 [
                     "INVALID_LINK_CRAWL_BATCH_CRON_EXPRESSION",
-                    "INVALID_LINK_CRAWL_BATCH_PAGE_RANGE",
                     "LINK_CRAWL_BATCH_CREATED_AT_REQUIRED",
                     "LINK_CRAWL_BATCH_NOT_CRAWLABLE",
                 ],

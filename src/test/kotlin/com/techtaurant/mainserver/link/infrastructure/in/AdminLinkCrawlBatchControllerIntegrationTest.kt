@@ -331,6 +331,40 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
     }
 
     @Test
+    @DisplayName("마지막 페이지가 시작 페이지보다 작으면 배치 등록 요청 검증이 실패한다")
+    fun createBatchFailsValidationWhenEndPageIsBeforeStartPage() {
+        given()
+            .contentType("application/json")
+            .header("Authorization", "Bearer $adminAccessToken")
+            .body(
+                """
+                {
+                  "name": "페이지 범위 오류 배치",
+                  "baseUrl": "$crawlerBaseUrl",
+                  "pageUriTemplate": "/category/engineering?page={page}",
+                  "itemSelector": ".article-card",
+                  "articleLinkSelector": "a.article-link",
+                  "titleSelector": ".title",
+                  "summarySelector": ".summary",
+                  "createdAtSelectors": [".created-date"],
+                  "tagNames": ["engineering"],
+                  "cronExpression": "0 0 * * * *",
+                  "startPage": 3,
+                  "endPage": 2,
+                  "active": true
+                }
+                """.trimIndent(),
+            ).`when`()
+            .post("/admin/companies/${companyUser.id}/link-crawl-batches")
+            .then()
+            .statusCode(HttpStatus.BAD_REQUEST.value())
+            .body("status", equalTo(400))
+            .body("data.errors.pageRangeValid", equalTo("endPage는 startPage보다 작을 수 없습니다"))
+
+        assertTrue(linkCrawlBatchRepository.findAll().isEmpty())
+    }
+
+    @Test
     @DisplayName("배치 등록 시 생성일을 수집할 수 없으면 등록이 실패한다")
     fun createBatchFailsWhenCreatedAtCannotBeCollected() {
         given()

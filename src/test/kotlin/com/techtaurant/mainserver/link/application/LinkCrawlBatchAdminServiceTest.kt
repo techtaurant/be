@@ -4,6 +4,7 @@ import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.link.dto.CreateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.link.dto.UpdateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
+import com.techtaurant.mainserver.link.enums.LinkCrawlRunTriggerType
 import com.techtaurant.mainserver.link.enums.LinkStatus
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlBatchRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
@@ -74,7 +75,7 @@ class LinkCrawlBatchAdminServiceTest {
         verifyOrder {
             linkBatchRunService.validateCrawlable(any())
             linkCrawlBatchRepository.save(any())
-            linkBatchRunService.run(batchId, any())
+            linkBatchRunService.run(batchId, LinkCrawlRunTriggerType.CREATED)
         }
     }
 
@@ -99,33 +100,22 @@ class LinkCrawlBatchAdminServiceTest {
     }
 
     @Test
-    @DisplayName("마지막 페이지가 시작 페이지보다 작으면 배치 등록이 실패한다")
-    fun createBatchFailsWhenEndPageIsBeforeStartPage() {
-        val companyUser = createCompanyUser()
-        every { userRepository.findById(companyUser.id!!) } returns Optional.of(companyUser)
+    @DisplayName("수정 후 마지막 페이지가 시작 페이지보다 작으면 실패한다")
+    fun updateBatchFailsWhenEndPageIsBeforeStartPage() {
+        val batchId = UUID.randomUUID()
+        val batch = createBatch().apply { id = batchId }
+        every { linkCrawlBatchRepository.findById(batchId) } returns Optional.of(batch)
 
         val exception =
             assertFailsWith<ApiException> {
-                linkCrawlBatchAdminService.createBatch(
-                    companyUserId = companyUser.id!!,
-                    request =
-                        CreateLinkCrawlBatchRequest(
-                            name = "토스 링크 수집",
-                            baseUrl = "https://example.com",
-                            pageUriTemplate = "/articles?page={page}",
-                            itemSelector = ".article-card",
-                            articleLinkSelector = "a.article-link",
-                            titleSelector = ".title",
-                            cronExpression = "0 0 * * * *",
-                            startPage = 3,
-                            endPage = 2,
-                        ),
+                linkCrawlBatchAdminService.updateBatch(
+                    batchId = batchId,
+                    request = UpdateLinkCrawlBatchRequest(startPage = 3, endPage = 2),
                 )
             }
 
         assertEquals(LinkStatus.INVALID_LINK_CRAWL_BATCH_PAGE_RANGE, exception.status)
         verify(exactly = 0) { linkBatchRunService.validateCrawlable(any()) }
-        verify(exactly = 0) { linkCrawlBatchRepository.save(any()) }
     }
 
     private fun createBatch(): LinkCrawlBatch {

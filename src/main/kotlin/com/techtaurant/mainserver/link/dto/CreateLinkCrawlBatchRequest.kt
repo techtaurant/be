@@ -1,8 +1,10 @@
 package com.techtaurant.mainserver.link.dto
 
+import com.fasterxml.jackson.annotation.JsonIgnore
 import com.techtaurant.mainserver.post.entity.TaggedContent
 import io.swagger.v3.oas.annotations.media.ArraySchema
 import io.swagger.v3.oas.annotations.media.Schema
+import jakarta.validation.constraints.AssertTrue
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
@@ -55,4 +57,10 @@ data class CreateLinkCrawlBatchRequest(
     val endPage: Int = startPage,
     @field:Schema(description = "배치 활성화 여부", example = "true")
     val active: Boolean = true,
-)
+) {
+    @get:JsonIgnore
+    @get:AssertTrue(message = "endPage는 startPage보다 작을 수 없습니다")
+    @get:Schema(hidden = true)
+    val isPageRangeValid: Boolean
+        get() = endPage >= startPage
+}

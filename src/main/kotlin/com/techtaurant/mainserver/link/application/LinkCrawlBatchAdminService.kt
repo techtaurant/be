@@ -5,7 +5,6 @@ import com.techtaurant.mainserver.link.dto.CreateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.link.dto.LinkCrawlBatchListItemResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlBatchResponse
 import com.techtaurant.mainserver.link.dto.UpdateLinkCrawlBatchRequest
-import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
 import com.techtaurant.mainserver.link.enums.LinkCrawlRunTriggerType
 import com.techtaurant.mainserver.link.enums.LinkStatus
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlBatchRepository
@@ -31,29 +30,12 @@ class LinkCrawlBatchAdminService(
     ): LinkCrawlBatchResponse {
         val companyUser = getCompanyUser(companyUserId)
         validateCronExpression(request.cronExpression)
-        validatePageRange(request.startPage, request.endPage)
 
-        val batch =
-            LinkCrawlBatch(
-                companyUser = companyUser,
-                name = request.name.trim(),
-                baseUrl = request.baseUrl.trim(),
-                pageUriTemplate = request.pageUriTemplate.trim(),
-                itemSelector = request.itemSelector.trim(),
-                articleLinkSelector = request.articleLinkSelector.trim(),
-                titleSelector = request.titleSelector.trim(),
-                summarySelector = request.summarySelector?.trim()?.takeIf { it.isNotEmpty() },
-                createdAtSelectors = normalizeLines(request.createdAtSelectors),
-                tagNames = normalizeLines(request.tagNames),
-                cronExpression = request.cronExpression.trim(),
-                startPage = request.startPage,
-                endPage = request.endPage,
-                active = request.active,
-            )
+        val batch = LinkCrawlBatchMapper.toEntity(request, companyUser)
         linkBatchRunService.validateCrawlable(batch)
         val savedBatch = linkCrawlBatchRepository.save(batch)
         val savedBatchId = savedBatch.id ?: throw ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_FOUND)
-        linkBatchRunService.run(savedBatchId, LinkCrawlRunTriggerType.MANUAL)
+        linkBatchRunService.run(savedBatchId, LinkCrawlRunTriggerType.CREATED)
 
         return LinkCrawlBatchResponse.from(savedBatch)
     }
@@ -76,23 +58,10 @@ class LinkCrawlBatchAdminService(
                 ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_FOUND)
             }
 
-        request.name?.let { batch.name = it.trim() }
-        request.baseUrl?.let { batch.baseUrl = it.trim() }
-        request.pageUriTemplate?.let { batch.pageUriTemplate = it.trim() }
-        request.itemSelector?.let { batch.itemSelector = it.trim() }
-        request.articleLinkSelector?.let { batch.articleLinkSelector = it.trim() }
-        request.titleSelector?.let { batch.titleSelector = it.trim() }
-        request.summarySelector?.let { batch.summarySelector = it.trim().takeIf(String::isNotEmpty) }
-        request.createdAtSelectors?.let { batch.createdAtSelectors = normalizeLines(it) }
-        request.tagNames?.let { batch.tagNames = normalizeLines(it) }
         request.cronExpression?.let {
             validateCronExpression(it)
-            batch.cronExpression = it.trim()
         }
-
-        request.startPage?.let { batch.startPage = it }
-        request.endPage?.let { batch.endPage = it }
-        request.active?.let { batch.active = it }
+        LinkCrawlBatchMapper.applyToEntity(request, batch)
 
         validatePageRange(batch.startPage, batch.endPage)
         linkBatchRunService.validateCrawlable(batch)
@@ -125,15 +94,5 @@ class LinkCrawlBatchAdminService(
         if (endPage < startPage) {
             throw ApiException(LinkStatus.INVALID_LINK_CRAWL_BATCH_PAGE_RANGE)
         }
-    }
-
-    private fun normalizeLines(values: List<String>): String? {
-        return values.asSequence()
-            .map(String::trim)
-            .filter(String::isNotEmpty)
-            .distinct()
-            .toList()
-            .takeIf(List<String>::isNotEmpty)
-            ?.joinToString("\n")
     }
 }
