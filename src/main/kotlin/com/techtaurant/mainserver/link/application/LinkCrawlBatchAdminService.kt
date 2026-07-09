@@ -6,6 +6,7 @@ import com.techtaurant.mainserver.link.dto.LinkCrawlBatchListItemResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlBatchResponse
 import com.techtaurant.mainserver.link.dto.UpdateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
+import com.techtaurant.mainserver.link.enums.LinkCrawlRunTriggerType
 import com.techtaurant.mainserver.link.enums.LinkStatus
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlBatchRepository
 import com.techtaurant.mainserver.user.entity.User
@@ -30,6 +31,7 @@ class LinkCrawlBatchAdminService(
     ): LinkCrawlBatchResponse {
         val companyUser = getCompanyUser(companyUserId)
         validateCronExpression(request.cronExpression)
+        validatePageRange(request.startPage, request.endPage)
 
         val batch =
             LinkCrawlBatch(
@@ -45,10 +47,13 @@ class LinkCrawlBatchAdminService(
                 tagNames = normalizeLines(request.tagNames),
                 cronExpression = request.cronExpression.trim(),
                 startPage = request.startPage,
+                endPage = request.endPage,
                 active = request.active,
             )
         linkBatchRunService.validateCrawlable(batch)
         val savedBatch = linkCrawlBatchRepository.save(batch)
+        val savedBatchId = savedBatch.id ?: throw ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_FOUND)
+        linkBatchRunService.run(savedBatchId, LinkCrawlRunTriggerType.MANUAL)
 
         return LinkCrawlBatchResponse.from(savedBatch)
     }
@@ -86,8 +91,10 @@ class LinkCrawlBatchAdminService(
         }
 
         request.startPage?.let { batch.startPage = it }
+        request.endPage?.let { batch.endPage = it }
         request.active?.let { batch.active = it }
 
+        validatePageRange(batch.startPage, batch.endPage)
         linkBatchRunService.validateCrawlable(batch)
 
         return LinkCrawlBatchResponse.from(batch)
@@ -109,6 +116,15 @@ class LinkCrawlBatchAdminService(
     private fun validateCronExpression(cronExpression: String) {
         runCatching { CronExpression.parse(cronExpression) }
             .getOrElse { throw ApiException(LinkStatus.INVALID_LINK_CRAWL_BATCH_CRON_EXPRESSION) }
+    }
+
+    private fun validatePageRange(
+        startPage: Int,
+        endPage: Int,
+    ) {
+        if (endPage < startPage) {
+            throw ApiException(LinkStatus.INVALID_LINK_CRAWL_BATCH_PAGE_RANGE)
+        }
     }
 
     private fun normalizeLines(values: List<String>): String? {

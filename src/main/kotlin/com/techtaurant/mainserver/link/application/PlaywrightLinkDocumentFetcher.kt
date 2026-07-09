@@ -49,7 +49,7 @@ class PlaywrightLinkDocumentFetcher : LinkDocumentFetcher {
             }
 
             waitForRenderedContent(page)
-            return Jsoup.parse(page.content(), url)
+            return Jsoup.parse(page.content(), page.url())
         } finally {
             page.close()
         }

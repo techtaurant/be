@@ -13,6 +13,7 @@ import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlRunRepository
 import org.jsoup.nodes.Element
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionOperations
+import java.net.URI
 import java.time.Instant
 import java.util.UUID
 
@@ -58,14 +59,15 @@ class LinkCrawlRunExecutor(
     ): LinkCrawlResult {
         var crawlResponse = emptyCrawlResponse()
         val failedJobs = mutableListOf<LinkFailedJobRecord>()
+        val crawledArticleUrls = mutableSetOf<String>()
         var page = batch.startPage
 
-        while (true) {
-            val pageResult = crawlPage(batch, tagResolver, page) ?: break
+        while (page <= batch.endPage) {
+            val pageResult = crawlPage(batch, tagResolver, page, crawledArticleUrls) ?: break
             crawlResponse = crawlResponse.mergePageResult(pageResult.response)
             failedJobs += pageResult.failedJobs
 
-            if (!pageResult.hasItems) {
+            if (!pageResult.hasNewUrls) {
                 break
             }
             page++
@@ -81,6 +83,7 @@ class LinkCrawlRunExecutor(
         batch: LinkCrawlBatch,
         tagResolver: LinkTagResolver,
         page: Int,
+        crawledArticleUrls: MutableSet<String>,
     ): LinkPageCrawlResult? {
         val pageUrl = crawlDocumentParser.buildPageUrl(batch.baseUrl, batch.pageUriTemplate, page)
         val document =
@@ -90,8 +93,27 @@ class LinkCrawlRunExecutor(
                 } else {
                     return null
                 }
+        if (page > batch.startPage && isRedirectedPage(pageUrl, document.location())) {
+            return null
+        }
+
         val items = document.select(batch.itemSelector)
-        var pageResult = emptyPageCrawlResult(hasItems = items.isNotEmpty())
+        val pageArticleUrls =
+            items.mapNotNull { item -> crawlDocumentParser.extractArticleUrl(item, batch, pageUrl) }
+                .map(::normalizeUrlForComparison)
+                .distinct()
+
+        if (pageArticleUrls.isEmpty()) {
+            return emptyPageCrawlResult(hasNewUrls = false)
+        }
+
+        val hasNewUrlInRun = pageArticleUrls.any { it !in crawledArticleUrls }
+        if (!hasNewUrlInRun) {
+            return null
+        }
+
+        crawledArticleUrls += pageArticleUrls
+        var pageResult = emptyPageCrawlResult(hasNewUrls = false)
 
         items.forEach { item ->
             val collectionResult = collectLinkFromCrawledItem(item, batch, tagResolver, pageUrl)
@@ -109,11 +131,11 @@ class LinkCrawlRunExecutor(
             skippedCount = 0,
         )
 
-    private fun emptyPageCrawlResult(hasItems: Boolean): LinkPageCrawlResult =
+    private fun emptyPageCrawlResult(hasNewUrls: Boolean): LinkPageCrawlResult =
         LinkPageCrawlResult(
             response = emptyCrawlResponse(),
             failedJobs = emptyList(),
-            hasItems = hasItems,
+            hasNewUrls = hasNewUrls,
         )
 
     private fun LinkPageCrawlResult.recordCollectionResult(result: LinkCollectionResult): LinkPageCrawlResult {
@@ -139,6 +161,7 @@ class LinkCrawlRunExecutor(
 
         return copy(
             response = updatedResponse,
+            hasNewUrls = hasNewUrls || result.hasNewUrl(),
             failedJobs =
                 if (result is LinkCollectionResult.Failed) {
                     failedJobs + result.failedJob
@@ -243,6 +266,49 @@ class LinkCrawlRunExecutor(
         linkCrawlFailedJobRepository.save(failedJob)
     }
 
+    private fun isRedirectedPage(
+        pageUrl: String,
+        documentLocation: String,
+    ): Boolean {
+        if (documentLocation.isBlank()) {
+            return false
+        }
+
+        return normalizeUrlForComparison(pageUrl) != normalizeUrlForComparison(documentLocation)
+    }
+
+    private fun normalizeUrlForComparison(url: String): String {
+        val trimmedUrl = url.trim()
+        val uri =
+            runCatching { URI.create(trimmedUrl).normalize() }.getOrNull()
+                ?: return trimmedUrl.trimEnd('/')
+        return runCatching {
+            val normalizedPath = uri.path?.trimEnd('/')?.takeIf(String::isNotBlank)
+            URI(
+                uri.scheme?.lowercase(),
+                uri.userInfo,
+                uri.host?.lowercase(),
+                uri.port,
+                normalizedPath,
+                uri.query,
+                null,
+            ).toString().trimEnd('/')
+        }.getOrElse {
+            trimmedUrl.trimEnd('/')
+        }
+    }
+
+    private fun LinkCollectionResult.hasNewUrl(): Boolean =
+        when (this) {
+            LinkCollectionResult.CreatedNewLink,
+            LinkCollectionResult.ConnectedExistingLink,
+            is LinkCollectionResult.Failed,
+            -> true
+            LinkCollectionResult.UpdatedExistingLink,
+            LinkCollectionResult.Skipped,
+            -> false
+        }
+
     private data class LinkCrawlResult(
         val response: LinkBatchRunResponse,
         val failedJobs: List<LinkFailedJobRecord>,
@@ -251,7 +317,7 @@ class LinkCrawlRunExecutor(
     private data class LinkPageCrawlResult(
         val response: LinkBatchRunResponse,
         val failedJobs: List<LinkFailedJobRecord>,
-        val hasItems: Boolean,
+        val hasNewUrls: Boolean,
     )
 
     private sealed class LinkCollectionResult {

@@ -226,6 +226,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
                       "tagNames": ["engineering", "backend"],
                       "cronExpression": "0 0 * * * *",
                       "startPage": 1,
+                      "endPage": 2,
                       "active": true
                     }
                     """.trimIndent(),
@@ -234,13 +235,14 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
                 .then()
                 .statusCode(HttpStatus.CREATED.value())
                 .body("data.name", equalTo("토스 엔지니어링 링크 수집"))
+                .body("data.endPage", equalTo(2))
                 .body("data", not(hasKey("canCrawl")))
                 .body("data.tagNames", hasSize<Any>(2))
                 .extract()
                 .path<String>("data.id")
-        assertEquals(1, pageRequestCount(1))
-        assertEquals(0, pageRequestCount(2))
-        assertTrue(linkRepository.findAll().isEmpty())
+        assertEquals(2, pageRequestCount(1))
+        assertEquals(1, pageRequestCount(2))
+        assertEquals(3, linkRepository.findAll().size)
 
         given()
             .header("Authorization", "Bearer $adminAccessToken")
@@ -248,9 +250,9 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             .post("/admin/link-crawl-batches/$batchId/runs")
             .then()
             .statusCode(HttpStatus.OK.value())
-            .body("data.collectedCount", equalTo(3))
-            .body("data.newLinkCount", equalTo(3))
-            .body("data.existingLinkCount", equalTo(0))
+            .body("data.collectedCount", equalTo(2))
+            .body("data.newLinkCount", equalTo(0))
+            .body("data.existingLinkCount", equalTo(2))
             .body("data.skippedCount", equalTo(0))
 
         val savedLinks = linkRepository.findAllWithTags()
@@ -275,12 +277,12 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             .post("/admin/link-crawl-batches/$batchId/runs")
             .then()
             .statusCode(HttpStatus.OK.value())
-            .body("data.collectedCount", equalTo(3))
+            .body("data.collectedCount", equalTo(2))
             .body("data.newLinkCount", equalTo(0))
-            .body("data.existingLinkCount", equalTo(3))
+            .body("data.existingLinkCount", equalTo(2))
 
-        assertEquals(3, pageRequestCount(1))
-        assertEquals(2, pageRequestCount(2))
+        assertEquals(4, pageRequestCount(1))
+        assertEquals(1, pageRequestCount(2))
         assertTrue(linkRepository.findAllWithTags().all { link -> link.tags.none { it.name == "new-tag" } })
         assertEquals(null, tagRepository.findByName("new-tag"))
     }
@@ -378,6 +380,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
                     createdAtSelectors = ".missing-date",
                     cronExpression = "0 0 * * * *",
                     startPage = 1,
+                    endPage = 2,
                     active = true,
                     tagNames = "engineering",
                 ),
@@ -492,6 +495,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
                     createdAtSelectors = "div.o6bzluc",
                     cronExpression = "0 0 * * * *",
                     startPage = 1,
+                    endPage = 2,
                     active = true,
                     tagNames = "engineering",
                 ),
@@ -546,6 +550,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             .body("data", hasSize<Any>(1))
             .body("data[0].name", equalTo("초기 배치"))
             .body("data[0].baseUrl", equalTo(crawlerBaseUrl))
+            .body("data[0].endPage", equalTo(1))
             .body("data[0]", not(hasKey("pageUriTemplate")))
             .body("data[0]", not(hasKey("itemSelector")))
             .body("data[0]", not(hasKey("tagNames")))
@@ -558,6 +563,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
                 """
                 {
                   "name": "수정된 배치",
+                  "endPage": 2,
                   "active": false,
                   "tagNames": ["infra"]
                 }
@@ -567,6 +573,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.OK.value())
             .body("data.name", equalTo("수정된 배치"))
+            .body("data.endPage", equalTo(2))
             .body("data.active", equalTo(false))
             .body("data", not(hasKey("canCrawl")))
             .body("data.tagNames", hasSize<Any>(1))

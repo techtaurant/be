@@ -42,6 +42,9 @@ data class UpdateLinkCrawlBatchRequest(
     @field:Min(value = 1, message = "startPage는 1 이상이어야 합니다")
     @field:Schema(description = "시작 페이지", example = "2")
     val startPage: Int? = null,
+    @field:Min(value = 1, message = "endPage는 1 이상이어야 합니다")
+    @field:Schema(description = "탐색할 마지막 페이지", example = "20")
+    val endPage: Int? = null,
     @field:Schema(description = "배치 활성화 여부", example = "true")
     val active: Boolean? = null,
 )

@@ -1,8 +1,10 @@
 package com.techtaurant.mainserver.link.application
 
+import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.link.dto.CreateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.link.dto.UpdateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
+import com.techtaurant.mainserver.link.enums.LinkStatus
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlBatchRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.user.entity.User
@@ -13,11 +15,13 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.runs
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import java.util.Optional
 import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 @DisplayName("LinkCrawlBatchAdminService 테스트")
 class LinkCrawlBatchAdminServiceTest {
@@ -38,6 +42,7 @@ class LinkCrawlBatchAdminServiceTest {
         val batchId = UUID.randomUUID()
         every { userRepository.findById(companyUser.id!!) } returns Optional.of(companyUser)
         every { linkBatchRunService.validateCrawlable(any()) } just runs
+        every { linkBatchRunService.run(batchId, any()) } returns mockk()
         every { linkCrawlBatchRepository.save(any()) } answers {
             firstArg<LinkCrawlBatch>().apply { id = batchId }
         }
@@ -58,13 +63,19 @@ class LinkCrawlBatchAdminServiceTest {
                         tagNames = listOf("engineering"),
                         cronExpression = "0 0 * * * *",
                         startPage = 1,
+                        endPage = 2,
                         active = true,
                     ),
             )
 
         assertEquals(batchId, response.id)
         assertEquals("토스 링크 수집", response.name)
-        verify(exactly = 1) { linkBatchRunService.validateCrawlable(any()) }
+        assertEquals(2, response.endPage)
+        verifyOrder {
+            linkBatchRunService.validateCrawlable(any())
+            linkCrawlBatchRepository.save(any())
+            linkBatchRunService.run(batchId, any())
+        }
     }
 
     @Test
@@ -78,12 +89,43 @@ class LinkCrawlBatchAdminServiceTest {
         val response =
             linkCrawlBatchAdminService.updateBatch(
                 batchId = batchId,
-                request = UpdateLinkCrawlBatchRequest(name = "수정된 배치", active = false),
+                request = UpdateLinkCrawlBatchRequest(name = "수정된 배치", endPage = 3, active = false),
             )
 
         assertEquals("수정된 배치", response.name)
+        assertEquals(3, response.endPage)
         assertEquals(false, response.active)
         verify(exactly = 1) { linkBatchRunService.validateCrawlable(batch) }
+    }
+
+    @Test
+    @DisplayName("마지막 페이지가 시작 페이지보다 작으면 배치 등록이 실패한다")
+    fun createBatchFailsWhenEndPageIsBeforeStartPage() {
+        val companyUser = createCompanyUser()
+        every { userRepository.findById(companyUser.id!!) } returns Optional.of(companyUser)
+
+        val exception =
+            assertFailsWith<ApiException> {
+                linkCrawlBatchAdminService.createBatch(
+                    companyUserId = companyUser.id!!,
+                    request =
+                        CreateLinkCrawlBatchRequest(
+                            name = "토스 링크 수집",
+                            baseUrl = "https://example.com",
+                            pageUriTemplate = "/articles?page={page}",
+                            itemSelector = ".article-card",
+                            articleLinkSelector = "a.article-link",
+                            titleSelector = ".title",
+                            cronExpression = "0 0 * * * *",
+                            startPage = 3,
+                            endPage = 2,
+                        ),
+                )
+            }
+
+        assertEquals(LinkStatus.INVALID_LINK_CRAWL_BATCH_PAGE_RANGE, exception.status)
+        verify(exactly = 0) { linkBatchRunService.validateCrawlable(any()) }
+        verify(exactly = 0) { linkCrawlBatchRepository.save(any()) }
     }
 
     private fun createBatch(): LinkCrawlBatch {
