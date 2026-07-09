@@ -4,7 +4,6 @@ import com.techtaurant.mainserver.attachment.application.AttachmentService
 import com.techtaurant.mainserver.attachment.enums.AttachmentReferenceType
 import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.common.lock.DistributedLock
-import com.techtaurant.mainserver.common.util.HtmlSanitizer
 import com.techtaurant.mainserver.notification.application.NotificationWriteService
 import com.techtaurant.mainserver.post.dto.CreatePostRequest
 import com.techtaurant.mainserver.post.dto.PostResponse
@@ -84,8 +83,8 @@ class PostWriteService(
 
         val post =
             Post(
-                title = HtmlSanitizer.sanitizeTitle(title),
-                content = HtmlSanitizer.sanitizeContent(content),
+                title = title,
+                content = content,
                 author = author,
                 category = category,
                 status = status,
@@ -140,8 +139,8 @@ class PostWriteService(
             throw ApiException(PostStatus.CANNOT_MODIFY_OTHERS_POST)
         }
 
-        request.title?.let { post.title = HtmlSanitizer.sanitizeTitle(it) }
-        request.content?.let { post.content = HtmlSanitizer.sanitizeContent(it) }
+        request.title?.let { post.title = it }
+        request.content?.let { post.content = it }
         request.categoryPath?.let { post.category = resolveCategory(it, post.author) }
         request.tags?.let { post.replaceTags(resolvePostTags(it)) }
 

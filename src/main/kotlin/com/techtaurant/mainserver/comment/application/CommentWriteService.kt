@@ -8,7 +8,6 @@ import com.techtaurant.mainserver.comment.enums.CommentStatus
 import com.techtaurant.mainserver.comment.infrastructure.out.CommentRepository
 import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.common.util.DateUtils
-import com.techtaurant.mainserver.common.util.HtmlSanitizer
 import com.techtaurant.mainserver.notification.application.NotificationWriteService
 import com.techtaurant.mainserver.post.application.PostDailyStatsService
 import com.techtaurant.mainserver.post.entity.Post
@@ -55,7 +54,7 @@ class CommentWriteService(
 
         val comment =
             Comment(
-                content = HtmlSanitizer.sanitizeContent(request.content),
+                content = request.content,
                 post = post,
                 author = author,
                 parent = parent,
@@ -135,7 +134,7 @@ class CommentWriteService(
             throw ApiException(CommentStatus.COMMENT_AUTHOR_MISMATCH)
         }
 
-        comment.content = HtmlSanitizer.sanitizeContent(request.content)
+        comment.content = request.content
         val savedComment = commentRepository.save(comment)
 
         return CommentResponse.from(savedComment)

@@ -1,7 +1,5 @@
 package com.techtaurant.mainserver.notification.application
 
-import com.techtaurant.mainserver.common.util.HtmlSanitizer
-import org.jsoup.nodes.Element
 import org.springframework.context.MessageSource
 import org.springframework.context.i18n.LocaleContextHolder
 import org.springframework.stereotype.Service
@@ -18,16 +16,10 @@ class NotificationPayloadService(
     ): String {
         val messageHtml = buildMessage(messageKey, locale, messageArguments)
 
-        val container = Element("div")
-        container.appendElement("span").append(messageHtml)
-
-        return HtmlSanitizer.sanitizeContent(container.outerHtml()).trim()
+        return "<div><span>$messageHtml</span></div>"
     }
 
-    fun resolveThumbnailUrl(media: NotificationPayloadMedia): String =
-        requireNotNull(sanitizeMediaUrl(media.url)) {
-            "알림 썸네일 URL이 안전한 URL 형식이 아닙니다."
-        }
+    fun resolveThumbnailUrl(media: NotificationPayloadMedia): String = media.url
 
     private fun buildMessage(
         key: String,
@@ -35,24 +27,9 @@ class NotificationPayloadService(
         args: List<String>,
     ): String {
         val resolvedLocale = locale ?: LocaleContextHolder.getLocale()
-        val sanitizedArgs = args.map(HtmlSanitizer::sanitizeTitle).toTypedArray()
-        val localizedMessage = messageSource.getMessage(key, sanitizedArgs, resolvedLocale)
+        val localizedMessage = messageSource.getMessage(key, args.toTypedArray(), resolvedLocale)
 
-        return HtmlSanitizer.sanitizeContent(localizedMessage).trim()
-    }
-
-    private fun sanitizeMediaUrl(url: String?): String? {
-        val candidate = url?.trim().orEmpty()
-        if (candidate.isBlank()) {
-            return null
-        }
-
-        return when {
-            candidate.startsWith("http://") -> candidate
-            candidate.startsWith("https://") -> candidate
-            candidate.startsWith("/") -> candidate
-            else -> null
-        }
+        return localizedMessage.trim()
     }
 
     data class NotificationPayloadMedia(

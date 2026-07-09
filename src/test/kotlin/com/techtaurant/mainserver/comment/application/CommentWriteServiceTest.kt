@@ -2,6 +2,7 @@ package com.techtaurant.mainserver.comment.application
 
 import com.techtaurant.mainserver.base.IntegrationTest
 import com.techtaurant.mainserver.comment.dto.CreateCommentRequest
+import com.techtaurant.mainserver.comment.dto.UpdateCommentRequest
 import com.techtaurant.mainserver.comment.entity.Comment
 import com.techtaurant.mainserver.comment.enums.CommentStatus
 import com.techtaurant.mainserver.comment.infrastructure.out.CommentRepository
@@ -409,16 +410,16 @@ class CommentWriteServiceTest : IntegrationTest() {
     }
 
     @Nested
-    @DisplayName("댓글 생성 시 HTML sanitization")
-    inner class CreateCommentSanitization {
+    @DisplayName("댓글 작성 시 HTML 원문 보존")
+    inner class CreateCommentRawHtmlPreservation {
         @Test
-        @DisplayName("댓글 content에서 script 태그가 제거된다")
-        fun createComment_contentScriptTagRemoved() {
+        @DisplayName("댓글 content의 HTML 문자열을 제거하지 않고 저장한다")
+        fun createComment_preservesRawHtml() {
             // Given
             val request =
                 CreateCommentRequest(
                     postId = testPost.id!!,
-                    content = "<p>좋은 글이네요!</p><script>alert('xss')</script>",
+                    content = """<p>댓글</p><script>alert('xss')</script><div onclick="alert('xss')">내용</div>""",
                     parentId = null,
                 )
 
@@ -427,69 +428,33 @@ class CommentWriteServiceTest : IntegrationTest() {
 
             // Then
             val savedComment = commentRepository.findById(response.id).orElseThrow()
-            assertThat(savedComment.content).contains("좋은 글이네요!")
-            assertThat(savedComment.content).doesNotContain("<script>")
-            assertThat(savedComment.content).doesNotContain("alert")
+            assertThat(savedComment.content).isEqualTo(
+                """<p>댓글</p><script>alert('xss')</script><div onclick="alert('xss')">내용</div>""",
+            )
         }
 
         @Test
-        @DisplayName("댓글 content에서 GitHub 허용 태그는 유지된다")
-        fun createComment_contentAllowedTagsPreserved() {
+        @DisplayName("댓글 수정 시 content의 HTML 문자열을 제거하지 않고 저장한다")
+        fun updateComment_preservesRawHtml() {
             // Given
+            val comment =
+                commentRepository.save(
+                    Comment(
+                        content = "원본 댓글",
+                        post = testPost,
+                        author = testUser,
+                    ),
+                )
             val request =
-                CreateCommentRequest(
-                    postId = testPost.id!!,
-                    content = "<p><strong>강조</strong> 텍스트와 <code>코드</code></p>",
-                    parentId = null,
+                UpdateCommentRequest(
+                    content = """<p>수정 댓글</p><iframe src="https://evil.com"></iframe>""",
                 )
 
             // When
-            val response = commentWriteService.createComment(testUser.id!!, request)
+            val response = commentWriteService.updateComment(comment.id!!, testUser.id!!, request)
 
             // Then
-            val savedComment = commentRepository.findById(response.id).orElseThrow()
-            assertThat(savedComment.content).contains("<strong>강조</strong>")
-            assertThat(savedComment.content).contains("<code>코드</code>")
-        }
-
-        @Test
-        @DisplayName("댓글 content에서 이벤트 핸들러 속성이 제거된다")
-        fun createComment_contentEventHandlersRemoved() {
-            // Given
-            val request =
-                CreateCommentRequest(
-                    postId = testPost.id!!,
-                    content = """<div onclick="alert('xss')">내용</div>""",
-                    parentId = null,
-                )
-
-            // When
-            val response = commentWriteService.createComment(testUser.id!!, request)
-
-            // Then
-            val savedComment = commentRepository.findById(response.id).orElseThrow()
-            assertThat(savedComment.content).doesNotContain("onclick")
-            assertThat(savedComment.content).contains("내용")
-        }
-
-        @Test
-        @DisplayName("댓글 content에서 iframe 태그가 제거된다")
-        fun createComment_contentIframeRemoved() {
-            // Given
-            val request =
-                CreateCommentRequest(
-                    postId = testPost.id!!,
-                    content = """댓글 내용<iframe src="https://evil.com"></iframe>""",
-                    parentId = null,
-                )
-
-            // When
-            val response = commentWriteService.createComment(testUser.id!!, request)
-
-            // Then
-            val savedComment = commentRepository.findById(response.id).orElseThrow()
-            assertThat(savedComment.content).contains("댓글 내용")
-            assertThat(savedComment.content).doesNotContain("<iframe")
+            assertThat(response.content).isEqualTo("""<p>수정 댓글</p><iframe src="https://evil.com"></iframe>""")
         }
     }
 
