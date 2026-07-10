@@ -4,7 +4,6 @@ import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.link.dto.CreateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.link.dto.LinkCrawlBatchListItemResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlBatchResponse
-import com.techtaurant.mainserver.link.dto.UpdateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.link.enums.LinkCrawlRunTriggerType
 import com.techtaurant.mainserver.link.enums.LinkStatus
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlBatchRepository
@@ -45,25 +44,6 @@ class LinkCrawlBatchAdminService(
         return linkCrawlBatchRepository.findAllByCompanyUserId(companyUserId)
             .sortedBy { it.name }
             .map(LinkCrawlBatchListItemResponse::from)
-    }
-
-    @Transactional
-    fun updateBatch(
-        batchId: UUID,
-        request: UpdateLinkCrawlBatchRequest,
-    ): LinkCrawlBatchResponse {
-        val batch =
-            linkCrawlBatchRepository.findById(batchId).orElseThrow {
-                ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_FOUND)
-            }
-
-        request.cronExpression?.let {
-            validateCronExpression(it)
-        }
-        request.applyTo(batch)
-        linkBatchRunService.validateCrawlable(batch)
-
-        return LinkCrawlBatchResponse.from(batch)
     }
 
     private fun getCompanyUser(companyUserId: UUID): User {

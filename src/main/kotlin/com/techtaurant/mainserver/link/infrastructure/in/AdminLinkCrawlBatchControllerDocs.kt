@@ -11,7 +11,6 @@ import com.techtaurant.mainserver.link.dto.LinkCrawlBatchResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobRetryResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlRunResponse
-import com.techtaurant.mainserver.link.dto.UpdateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.link.enums.LinkStatus
 import com.techtaurant.mainserver.security.jwt.JwtStatus
 import com.techtaurant.mainserver.user.enums.UserStatus
@@ -119,28 +118,6 @@ interface AdminLinkCrawlBatchControllerDocs {
     fun getBatches(
         @Parameter(description = "회사 사용자 ID") companyUserId: UUID,
     ): ApiResponse<List<LinkCrawlBatchListItemResponse>>
-
-    @Operation(summary = "링크 수집 배치 수정", description = "관리자가 링크 수집 배치 설정을 부분 수정합니다. 수정된 설정으로 크롤링 가능 여부를 검증합니다")
-    @ApiErrorCodeResponses(
-        [
-            ApiErrorCodeResponse(JwtStatus::class, ["AUTHENTICATION_REQUIRED", "ACCESS_DENIED"]),
-            ApiErrorCodeResponse(
-                LinkStatus::class,
-                [
-                    "LINK_CRAWL_BATCH_NOT_FOUND",
-                    "INVALID_LINK_CRAWL_BATCH_CRON_EXPRESSION",
-                    "INVALID_LINK_CRAWL_BATCH_PAGE_RANGE",
-                    "LINK_CRAWL_BATCH_CREATED_AT_REQUIRED",
-                    "LINK_CRAWL_BATCH_NOT_CRAWLABLE",
-                ],
-            ),
-            ApiErrorCodeResponse(DefaultStatus::class, ["BAD_REQUEST", "UNKNOWN_EXCEPTION"]),
-        ],
-    )
-    fun updateBatch(
-        @Parameter(description = "배치 ID") batchId: UUID,
-        @Valid request: UpdateLinkCrawlBatchRequest,
-    ): ApiResponse<LinkCrawlBatchResponse>
 
     @Operation(
         summary = "링크 수집 배치 수동 실행",

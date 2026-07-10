@@ -11,12 +11,10 @@ import com.techtaurant.mainserver.link.dto.LinkCrawlBatchResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobRetryResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlRunResponse
-import com.techtaurant.mainserver.link.dto.UpdateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.security.SecurityConstants
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -45,15 +43,6 @@ class AdminLinkCrawlBatchController(
         @PathVariable companyUserId: UUID,
     ): ApiResponse<List<LinkCrawlBatchListItemResponse>> {
         return ApiResponse.ok(linkCrawlBatchAdminService.getBatches(companyUserId))
-    }
-
-    @ApiErrorResponses(includeAuthenticationErrors = true, includeValidationError = true)
-    @PatchMapping("${SecurityConstants.ADMIN_API_PREFIX}/link-crawl-batches/{batchId}")
-    override fun updateBatch(
-        @PathVariable batchId: UUID,
-        @Valid @RequestBody request: UpdateLinkCrawlBatchRequest,
-    ): ApiResponse<LinkCrawlBatchResponse> {
-        return ApiResponse.ok(linkCrawlBatchAdminService.updateBatch(batchId, request))
     }
 
     @ApiErrorResponses(includeAuthenticationErrors = true)
