@@ -1,6 +1,9 @@
 package com.techtaurant.mainserver.link.dto
 
 import com.fasterxml.jackson.annotation.JsonIgnore
+import com.techtaurant.mainserver.common.exception.ApiException
+import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
+import com.techtaurant.mainserver.link.enums.LinkStatus
 import com.techtaurant.mainserver.post.entity.TaggedContent
 import io.swagger.v3.oas.annotations.media.ArraySchema
 import io.swagger.v3.oas.annotations.media.Schema
@@ -50,9 +53,41 @@ data class UpdateLinkCrawlBatchRequest(
     @field:Schema(description = "배치 활성화 여부", example = "true")
     val active: Boolean? = null,
 ) {
+    fun applyTo(batch: LinkCrawlBatch) {
+        val updatedStartPage = startPage ?: batch.startPage
+        val updatedEndPage = endPage ?: batch.endPage
+        if (updatedEndPage < updatedStartPage) {
+            throw ApiException(LinkStatus.INVALID_LINK_CRAWL_BATCH_PAGE_RANGE)
+        }
+
+        name?.let { batch.name = it.trim() }
+        baseUrl?.let { batch.baseUrl = it.trim() }
+        pageUriTemplate?.let { batch.pageUriTemplate = it.trim() }
+        itemSelector?.let { batch.itemSelector = it.trim() }
+        articleLinkSelector?.let { batch.articleLinkSelector = it.trim() }
+        titleSelector?.let { batch.titleSelector = it.trim() }
+        summarySelector?.let { batch.summarySelector = it.trim().takeIf(String::isNotEmpty) }
+        createdAtSelectors?.let { batch.createdAtSelectors = normalizeLines(it) }
+        tagNames?.let { batch.tagNames = normalizeLines(it) }
+        cronExpression?.let { batch.cronExpression = it.trim() }
+        startPage?.let { batch.startPage = it }
+        endPage?.let { batch.endPage = it }
+        active?.let { batch.active = it }
+    }
+
     @get:JsonIgnore
     @get:AssertTrue(message = "endPage는 startPage보다 작을 수 없습니다")
     @get:Schema(hidden = true)
     val isPageRangeValid: Boolean
         get() = startPage == null || endPage == null || endPage >= startPage
+
+    private fun normalizeLines(values: List<String>): String? {
+        return values.asSequence()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .distinct()
+            .toList()
+            .takeIf(List<String>::isNotEmpty)
+            ?.joinToString("\n")
+    }
 }

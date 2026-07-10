@@ -34,8 +34,7 @@ class LinkCrawlBatchAdminService(
         val batch = LinkCrawlBatchMapper.toEntity(request, companyUser)
         linkBatchRunService.validateCrawlable(batch)
         val savedBatch = linkCrawlBatchRepository.save(batch)
-        val savedBatchId = savedBatch.id ?: throw ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_FOUND)
-        linkBatchRunService.run(savedBatchId, LinkCrawlRunTriggerType.CREATED)
+        linkBatchRunService.run(savedBatch.id!!, LinkCrawlRunTriggerType.CREATED)
 
         return LinkCrawlBatchResponse.from(savedBatch)
     }
@@ -61,9 +60,7 @@ class LinkCrawlBatchAdminService(
         request.cronExpression?.let {
             validateCronExpression(it)
         }
-        LinkCrawlBatchMapper.applyToEntity(request, batch)
-
-        validatePageRange(batch.startPage, batch.endPage)
+        request.applyTo(batch)
         linkBatchRunService.validateCrawlable(batch)
 
         return LinkCrawlBatchResponse.from(batch)
@@ -85,14 +82,5 @@ class LinkCrawlBatchAdminService(
     private fun validateCronExpression(cronExpression: String) {
         runCatching { CronExpression.parse(cronExpression) }
             .getOrElse { throw ApiException(LinkStatus.INVALID_LINK_CRAWL_BATCH_CRON_EXPRESSION) }
-    }
-
-    private fun validatePageRange(
-        startPage: Int,
-        endPage: Int,
-    ) {
-        if (endPage < startPage) {
-            throw ApiException(LinkStatus.INVALID_LINK_CRAWL_BATCH_PAGE_RANGE)
-        }
     }
 }

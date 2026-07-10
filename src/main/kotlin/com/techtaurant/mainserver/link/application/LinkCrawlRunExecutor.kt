@@ -63,11 +63,15 @@ class LinkCrawlRunExecutor(
         var page = batch.startPage
 
         while (page <= batch.endPage) {
-            val pageResult = crawlPage(batch, tagResolver, page, crawledArticleUrls) ?: break
+            val pageResult = crawlPage(batch, tagResolver, page, crawledArticleUrls)
+            val stopCondition = stopConditionFor(batch, page, pageResult)
+            if (stopCondition == CrawlStopCondition.BEFORE_MERGE) {
+                break
+            }
+
             crawlResponse = crawlResponse.mergePageResult(pageResult.response)
             failedJobs += pageResult.failedJobs
-
-            if (!pageResult.hasNewUrls) {
+            if (stopCondition == CrawlStopCondition.AFTER_MERGE) {
                 break
             }
             page++
@@ -84,19 +88,15 @@ class LinkCrawlRunExecutor(
         tagResolver: LinkTagResolver,
         page: Int,
         crawledArticleUrls: MutableSet<String>,
-    ): LinkPageCrawlResult? {
+    ): LinkPageCrawlResult {
         val pageUrl = crawlDocumentParser.buildPageUrl(batch.baseUrl, batch.pageUriTemplate, page)
         val document =
             crawlDocumentParser.fetchPageOrNull(pageUrl)
                 ?: if (page == batch.startPage) {
                     throw ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_CRAWLABLE)
                 } else {
-                    return null
+                    return emptyPageCrawlResult(hasNewUrls = false, isFetchFailed = true)
                 }
-        if (page > batch.startPage && isRedirectedPage(pageUrl, document.location())) {
-            return null
-        }
-
         val items = document.select(batch.itemSelector)
         val pageArticleUrls =
             items.mapNotNull { item -> crawlDocumentParser.extractArticleUrl(item, batch, pageUrl) }
@@ -109,7 +109,7 @@ class LinkCrawlRunExecutor(
 
         val hasNewUrlInRun = pageArticleUrls.any { it !in crawledArticleUrls }
         if (!hasNewUrlInRun) {
-            return null
+            return emptyPageCrawlResult(hasNewUrls = false)
         }
 
         crawledArticleUrls += pageArticleUrls
@@ -120,8 +120,23 @@ class LinkCrawlRunExecutor(
             pageResult = pageResult.recordCollectionResult(collectionResult)
         }
 
-        return pageResult
+        return pageResult.copy(
+            pageUrl = pageUrl,
+            documentLocation = document.location(),
+        )
     }
+
+    private fun stopConditionFor(
+        batch: LinkCrawlBatch,
+        page: Int,
+        pageResult: LinkPageCrawlResult,
+    ): CrawlStopCondition? =
+        when {
+            pageResult.isFetchFailed -> CrawlStopCondition.BEFORE_MERGE
+            page > batch.startPage && isRedirectedPage(pageResult.pageUrl, pageResult.documentLocation) -> CrawlStopCondition.BEFORE_MERGE
+            !pageResult.hasNewUrls -> CrawlStopCondition.AFTER_MERGE
+            else -> null
+        }
 
     private fun emptyCrawlResponse(): LinkBatchRunResponse =
         LinkBatchRunResponse(
@@ -131,11 +146,17 @@ class LinkCrawlRunExecutor(
             skippedCount = 0,
         )
 
-    private fun emptyPageCrawlResult(hasNewUrls: Boolean): LinkPageCrawlResult =
+    private fun emptyPageCrawlResult(
+        hasNewUrls: Boolean,
+        isFetchFailed: Boolean = false,
+    ): LinkPageCrawlResult =
         LinkPageCrawlResult(
             response = emptyCrawlResponse(),
             failedJobs = emptyList(),
             hasNewUrls = hasNewUrls,
+            pageUrl = "",
+            documentLocation = "",
+            isFetchFailed = isFetchFailed,
         )
 
     private fun LinkPageCrawlResult.recordCollectionResult(result: LinkCollectionResult): LinkPageCrawlResult {
@@ -318,7 +339,15 @@ class LinkCrawlRunExecutor(
         val response: LinkBatchRunResponse,
         val failedJobs: List<LinkFailedJobRecord>,
         val hasNewUrls: Boolean,
+        val pageUrl: String,
+        val documentLocation: String,
+        val isFetchFailed: Boolean,
     )
+
+    private enum class CrawlStopCondition {
+        BEFORE_MERGE,
+        AFTER_MERGE,
+    }
 
     private sealed class LinkCollectionResult {
         data object CreatedNewLink : LinkCollectionResult()
