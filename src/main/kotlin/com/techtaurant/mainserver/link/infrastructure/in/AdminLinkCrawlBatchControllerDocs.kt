@@ -11,7 +11,6 @@ import com.techtaurant.mainserver.link.dto.LinkCrawlBatchResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobRetryResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlRunResponse
-import com.techtaurant.mainserver.link.dto.UpdateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.link.enums.LinkStatus
 import com.techtaurant.mainserver.security.jwt.JwtStatus
 import com.techtaurant.mainserver.user.enums.UserStatus
@@ -31,7 +30,7 @@ interface AdminLinkCrawlBatchControllerDocs {
     @Operation(
         summary = "회사 링크 수집 배치 등록",
         description = """
-        관리자가 회사별 SSR 링크 수집 배치를 등록합니다. 등록 전 설정된 시작 페이지를 1회 요청해 크롤링 가능 여부를 검증합니다.
+        관리자가 회사별 SSR 링크 수집 배치를 등록합니다. 등록 전 설정된 시작 페이지를 1회 요청해 크롤링 가능 여부를 검증하고, 등록 직후 시작 페이지부터 마지막 페이지까지 최초 수집을 실행합니다.
 
         selector를 찾는 방법:
         1. 먼저 브라우저의 검사(Inspect)로 보이는 DOM이 아니라, View Page Source 또는 curl로 받은 원본 HTML에 요소가 실제로 있는지 확인합니다.
@@ -65,7 +64,11 @@ interface AdminLinkCrawlBatchControllerDocs {
             ApiErrorCodeResponse(UserStatus::class, ["COMPANY_NOT_FOUND"]),
             ApiErrorCodeResponse(
                 LinkStatus::class,
-                ["INVALID_LINK_CRAWL_BATCH_CRON_EXPRESSION", "LINK_CRAWL_BATCH_CREATED_AT_REQUIRED", "LINK_CRAWL_BATCH_NOT_CRAWLABLE"],
+                [
+                    "INVALID_LINK_CRAWL_BATCH_CRON_EXPRESSION",
+                    "LINK_CRAWL_BATCH_CREATED_AT_REQUIRED",
+                    "LINK_CRAWL_BATCH_NOT_CRAWLABLE",
+                ],
             ),
             ApiErrorCodeResponse(DefaultStatus::class, ["BAD_REQUEST", "UNKNOWN_EXCEPTION"]),
         ],
@@ -99,6 +102,7 @@ interface AdminLinkCrawlBatchControllerDocs {
                               ],
                               "cronExpression": "0 0 * * * *",
                               "startPage": 2,
+                              "endPage": 20,
                               "active": true
                             }
                             """,
@@ -115,30 +119,13 @@ interface AdminLinkCrawlBatchControllerDocs {
         @Parameter(description = "회사 사용자 ID") companyUserId: UUID,
     ): ApiResponse<List<LinkCrawlBatchListItemResponse>>
 
-    @Operation(summary = "링크 수집 배치 수정", description = "관리자가 링크 수집 배치 설정을 부분 수정합니다. 수정된 설정으로 크롤링 가능 여부를 검증합니다")
-    @ApiErrorCodeResponses(
-        [
-            ApiErrorCodeResponse(JwtStatus::class, ["AUTHENTICATION_REQUIRED", "ACCESS_DENIED"]),
-            ApiErrorCodeResponse(
-                LinkStatus::class,
-                [
-                    "LINK_CRAWL_BATCH_NOT_FOUND",
-                    "INVALID_LINK_CRAWL_BATCH_CRON_EXPRESSION",
-                    "LINK_CRAWL_BATCH_CREATED_AT_REQUIRED",
-                    "LINK_CRAWL_BATCH_NOT_CRAWLABLE",
-                ],
-            ),
-            ApiErrorCodeResponse(DefaultStatus::class, ["BAD_REQUEST", "UNKNOWN_EXCEPTION"]),
-        ],
-    )
-    fun updateBatch(
-        @Parameter(description = "배치 ID") batchId: UUID,
-        @Valid request: UpdateLinkCrawlBatchRequest,
-    ): ApiResponse<LinkCrawlBatchResponse>
-
     @Operation(
         summary = "링크 수집 배치 수동 실행",
-        description = "관리자가 해당 배치를 즉시 실행하여 SSR 목록 페이지에서 링크를 수집합니다. 개별 링크 처리 실패는 실패 잡으로 기록하고 나머지 링크 수집은 계속합니다.",
+        description = """
+        관리자가 탐색할 시작 페이지와 마지막 페이지를 직접 설정한 뒤, 해당 배치를 즉시 실행하여 SSR 목록 페이지 링크를 수집합니다.
+        마지막 페이지 이후에 새 페이지가 존재하더라도 자동으로 탐색하지 않으므로, 탐색 범위를 관리자가 직접 조정해야 합니다.
+        개별 링크 처리 실패는 실패 잡으로 기록하고, HTTP 실패·redirect·신규 URL이 없는 페이지를 만나면 이후 페이지 탐색을 중단합니다.
+        """,
     )
     @ApiErrorCodeResponses(
         [

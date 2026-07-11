@@ -199,6 +199,144 @@ class LinkBatchRunServiceTest {
     }
 
     @Test
+    @DisplayName("배치 생성 직후에는 마지막 페이지까지만 링크를 수집한다")
+    fun createdRunStopsAtEndPage() {
+        val batchId = UUID.randomUUID()
+        val batch = createBatch(createdAtSelectors = ".created-date", endPage = 2).apply { id = batchId }
+        val firstPageUrl = "https://example.com/articles?page=1"
+        val secondPageUrl = "https://example.com/articles?page=2"
+        val thirdPageUrl = "https://example.com/articles?page=3"
+        linkDocumentFetcher.setHtml(firstPageUrl, crawlableHtml())
+        linkDocumentFetcher.setHtml(
+            secondPageUrl,
+            crawlableHtml(
+                articlePath = "/article/valid",
+                title = "정상 수집 글",
+                summary = "정상적으로 수집되는 글입니다.",
+                createdAtText = "2026년 4월 21일",
+            ),
+        )
+        linkDocumentFetcher.setHtml(
+            thirdPageUrl,
+            crawlableHtml(
+                articlePath = "/article/ignored",
+                title = "수집하지 않을 글",
+                summary = "endPage 밖의 글입니다.",
+                createdAtText = "2026년 4월 22일",
+            ),
+        )
+        captureSavedRun()
+        every { linkCrawlBatchRepository.findById(batchId) } returns Optional.of(batch)
+        every { linkRepository.findByUrl("https://example.com/article/metric-review") } returns null
+        every { linkRepository.findByUrl("https://example.com/article/valid") } returns null
+        every { linkRepository.save(any<Link>()) } answers {
+            (invocation.args[0] as Link).apply { id = UUID.randomUUID() }
+        }
+        every { userLinkRepository.findByUserIdAndLinkId(any(), any()) } returns null
+        every { userLinkRepository.save(any()) } answers { invocation.args[0] as UserLink }
+
+        val response = linkBatchRunService.run(batchId, LinkCrawlRunTriggerType.CREATED)
+
+        assertEquals(2, response.newLinkCount)
+        assertEquals(1, linkDocumentFetcher.fetchCount(firstPageUrl))
+        assertEquals(1, linkDocumentFetcher.fetchCount(secondPageUrl))
+        assertEquals(0, linkDocumentFetcher.fetchCount(thirdPageUrl))
+    }
+
+    @Test
+    @DisplayName("후속 수집은 마지막 페이지를 넘어 중복 링크 페이지에서 중단한다")
+    fun manualRunStopsAtDuplicatePageAfterEndPage() {
+        val batchId = UUID.randomUUID()
+        val batch = createBatch(createdAtSelectors = ".created-date", endPage = 2).apply { id = batchId }
+        val firstPageUrl = "https://example.com/articles?page=1"
+        val secondPageUrl = "https://example.com/articles?page=2"
+        val thirdPageUrl = "https://example.com/articles?page=3"
+        linkDocumentFetcher.setHtml(firstPageUrl, crawlableHtml())
+        linkDocumentFetcher.setHtml(
+            secondPageUrl,
+            crawlableHtml(
+                articlePath = "/article/valid",
+                title = "정상 수집 글",
+                summary = "정상적으로 수집되는 글입니다.",
+                createdAtText = "2026년 4월 21일",
+            ),
+        )
+        linkDocumentFetcher.setHtml(thirdPageUrl, crawlableHtml())
+        captureSavedRun()
+        every { linkCrawlBatchRepository.findById(batchId) } returns Optional.of(batch)
+        every { linkRepository.findByUrl("https://example.com/article/metric-review") } returns null
+        every { linkRepository.findByUrl("https://example.com/article/valid") } returns null
+        every { linkRepository.save(any<Link>()) } answers {
+            (invocation.args[0] as Link).apply { id = UUID.randomUUID() }
+        }
+        every { userLinkRepository.findByUserIdAndLinkId(any(), any()) } returns null
+        every { userLinkRepository.save(any()) } answers { invocation.args[0] as UserLink }
+
+        val response = linkBatchRunService.run(batchId)
+
+        assertEquals(2, response.newLinkCount)
+        assertEquals(1, linkDocumentFetcher.fetchCount(firstPageUrl))
+        assertEquals(1, linkDocumentFetcher.fetchCount(secondPageUrl))
+        assertEquals(1, linkDocumentFetcher.fetchCount(thirdPageUrl))
+    }
+
+    @Test
+    @DisplayName("시작 페이지 이후 페이지가 다른 URL로 redirect되면 탐색을 중단한다")
+    fun runStopsWhenNextPageRedirects() {
+        val batchId = UUID.randomUUID()
+        val batch = createBatch(createdAtSelectors = ".created-date", endPage = 3).apply { id = batchId }
+        val firstPageUrl = "https://example.com/articles?page=1"
+        val secondPageUrl = "https://example.com/articles?page=2"
+        val thirdPageUrl = "https://example.com/articles?page=3"
+        linkDocumentFetcher.setHtml(firstPageUrl, crawlableHtml())
+        linkDocumentFetcher.setHtml(secondPageUrl, crawlableHtml(articlePath = "/article/redirected"), "https://example.com/articles")
+        linkDocumentFetcher.setHtml(thirdPageUrl, crawlableHtml(articlePath = "/article/ignored"))
+        captureSavedRun()
+        every { linkCrawlBatchRepository.findById(batchId) } returns Optional.of(batch)
+        every { linkRepository.findByUrl("https://example.com/article/metric-review") } returns null
+        every { linkRepository.save(any<Link>()) } answers {
+            (invocation.args[0] as Link).apply { id = UUID.randomUUID() }
+        }
+        every { userLinkRepository.findByUserIdAndLinkId(any(), any()) } returns null
+        every { userLinkRepository.save(any()) } answers { invocation.args[0] as UserLink }
+
+        val response = linkBatchRunService.run(batchId)
+
+        assertEquals(1, response.newLinkCount)
+        assertEquals(1, linkDocumentFetcher.fetchCount(firstPageUrl))
+        assertEquals(1, linkDocumentFetcher.fetchCount(secondPageUrl))
+        assertEquals(0, linkDocumentFetcher.fetchCount(thirdPageUrl))
+    }
+
+    @Test
+    @DisplayName("시작 페이지 이후 페이지가 404이면 탐색을 중단한다")
+    fun runStopsWhenNextPageReturnsNotFound() {
+        val batchId = UUID.randomUUID()
+        val batch = createBatch(createdAtSelectors = ".created-date", endPage = 3).apply { id = batchId }
+        val firstPageUrl = "https://example.com/articles?page=1"
+        val secondPageUrl = "https://example.com/articles?page=2"
+        val thirdPageUrl = "https://example.com/articles?page=3"
+        linkDocumentFetcher.setHtml(firstPageUrl, crawlableHtml())
+        linkDocumentFetcher.setFailure(secondPageUrl, HttpStatusException("not found", 404, secondPageUrl))
+        linkDocumentFetcher.setHtml(thirdPageUrl, crawlableHtml(articlePath = "/article/ignored"))
+        captureSavedRun()
+        every { linkCrawlBatchRepository.findById(batchId) } returns Optional.of(batch)
+        every { linkRepository.findByUrl("https://example.com/article/metric-review") } returns null
+        every { linkRepository.save(any<Link>()) } answers {
+            (invocation.args[0] as Link).apply { id = UUID.randomUUID() }
+        }
+        every { userLinkRepository.findByUserIdAndLinkId(any(), any()) } returns null
+        every { userLinkRepository.save(any()) } answers { invocation.args[0] as UserLink }
+
+        val response = linkBatchRunService.run(batchId)
+
+        assertEquals(1, response.newLinkCount)
+        assertEquals(1, linkDocumentFetcher.fetchCount(firstPageUrl))
+        assertEquals(1, linkDocumentFetcher.fetchCount(secondPageUrl))
+        assertEquals(0, linkDocumentFetcher.fetchCount(thirdPageUrl))
+    }
+
+    @Test
     @DisplayName("시작 페이지를 가져오지 못하면 실행 이력을 FAILED 상태로 기록하고 예외를 전파한다")
     fun runRecordsFailedRunAndRethrowsWhenStartPageCannotBeFetched() {
         val batchId = UUID.randomUUID()
@@ -288,7 +426,7 @@ class LinkBatchRunServiceTest {
     @DisplayName("한 페이지의 모든 링크가 실패해도 다음 페이지 수집을 계속한다")
     fun runContinuesToNextPageWhenEveryLinkOnPageIsRecordedAsFailed() {
         val batchId = UUID.randomUUID()
-        val batch = createBatch(createdAtSelectors = ".created-date").apply { id = batchId }
+        val batch = createBatch(createdAtSelectors = ".created-date", endPage = 2).apply { id = batchId }
         val firstPageUrl = "https://example.com/articles?page=1"
         val secondPageUrl = "https://example.com/articles?page=2"
         linkDocumentFetcher.setHtml(firstPageUrl, failingOnlyHtml())
@@ -311,10 +449,10 @@ class LinkBatchRunServiceTest {
     }
 
     @Test
-    @DisplayName("반복 페이지가 이미 실패로 관측한 링크만 포함하면 다음 페이지를 조회하지 않는다")
+    @DisplayName("반복 페이지가 이미 관측한 실패 링크만 포함하면 다음 페이지를 수집하지 않는다")
     fun runStopsWhenRepeatedPageContainsOnlyAlreadyFailedLink() {
         val batchId = UUID.randomUUID()
-        val batch = createBatch(createdAtSelectors = ".created-date").apply { id = batchId }
+        val batch = createBatch(createdAtSelectors = ".created-date", endPage = 3).apply { id = batchId }
         val firstPageUrl = "https://example.com/articles?page=1"
         val secondPageUrl = "https://example.com/articles?page=2"
         val thirdPageUrl = "https://example.com/articles?page=3"
@@ -327,10 +465,64 @@ class LinkBatchRunServiceTest {
         every { linkCrawlFailedJobRepository.findByRunIdAndArticleUrl(any(), any()) } returns null
         every { linkCrawlFailedJobRepository.save(any()) } answers { invocation.args[0] as LinkCrawlFailedJob }
         every { linkRepository.findByUrl("https://example.com/article/metric-review") } returns null
+        every { linkRepository.save(any<Link>()) } answers {
+            (invocation.args[0] as Link).apply { id = UUID.randomUUID() }
+        }
+        every { userLinkRepository.findByUserIdAndLinkId(any(), any()) } returns null
+        every { userLinkRepository.save(any()) } answers { invocation.args[0] as UserLink }
 
         val response = linkBatchRunService.run(batchId)
 
         assertEquals(0, response.newLinkCount)
+        assertEquals(1, response.failedJobCount)
+        assertEquals(1, linkDocumentFetcher.fetchCount(firstPageUrl))
+        assertEquals(1, linkDocumentFetcher.fetchCount(secondPageUrl))
+        assertEquals(0, linkDocumentFetcher.fetchCount(thirdPageUrl))
+        verify(exactly = 0) { linkRepository.save(any()) }
+    }
+
+    @Test
+    @DisplayName("페이지가 이미 연결된 기존 링크만 포함하면 다음 페이지를 수집하지 않는다")
+    fun runStopsWhenPageContainsOnlyAlreadyConnectedExistingLink() {
+        val batchId = UUID.randomUUID()
+        val batch = createBatch(createdAtSelectors = ".created-date", endPage = 2).apply { id = batchId }
+        val existingLink =
+            Link(
+                title = "Metric Review, 실행을 이끌다",
+                url = "https://example.com/article/metric-review",
+                summary = "기존 링크입니다.",
+            ).apply { id = UUID.randomUUID() }
+        val firstPageUrl = "https://example.com/articles?page=1"
+        val secondPageUrl = "https://example.com/articles?page=2"
+        linkDocumentFetcher.setHtml(firstPageUrl, crawlableHtml())
+        linkDocumentFetcher.setHtml(
+            secondPageUrl,
+            crawlableHtml(
+                articlePath = "/article/valid",
+                title = "정상 수집 글",
+                summary = "정상적으로 수집되는 글입니다.",
+                createdAtText = "2026년 4월 21일",
+            ),
+        )
+        captureSavedRun()
+        every { linkCrawlBatchRepository.findById(batchId) } returns Optional.of(batch)
+        every { linkRepository.findByUrl("https://example.com/article/metric-review") } returns existingLink
+        every { linkRepository.findByUrl("https://example.com/article/valid") } returns null
+        every { linkRepository.save(any<Link>()) } answers {
+            (invocation.args[0] as Link).apply { id = UUID.randomUUID() }
+        }
+        every { userLinkRepository.findByUserIdAndLinkId(batch.companyUser.id!!, existingLink.id!!) } returns
+            UserLink(batch.companyUser, existingLink)
+        every { userLinkRepository.findByUserIdAndLinkId(batch.companyUser.id!!, match { it != existingLink.id }) } returns null
+        every { userLinkRepository.save(any()) } answers { invocation.args[0] as UserLink }
+
+        val response = linkBatchRunService.run(batchId)
+
+        assertEquals(1, response.collectedCount)
+        assertEquals(0, response.newLinkCount)
+        assertEquals(1, response.existingLinkCount)
+        assertEquals(1, linkDocumentFetcher.fetchCount(firstPageUrl))
+        assertEquals(0, linkDocumentFetcher.fetchCount(secondPageUrl))
         verify(exactly = 0) { linkRepository.save(any()) }
     }
 
@@ -425,7 +617,10 @@ class LinkBatchRunServiceTest {
         verify(exactly = 0) { linkCrawlFailedJobRepository.save(any()) }
     }
 
-    private fun createBatch(createdAtSelectors: String): LinkCrawlBatch {
+    private fun createBatch(
+        createdAtSelectors: String,
+        endPage: Int = 1,
+    ): LinkCrawlBatch {
         return LinkCrawlBatch(
             companyUser =
                 User(
@@ -446,19 +641,25 @@ class LinkBatchRunServiceTest {
             createdAtSelectors = createdAtSelectors,
             cronExpression = "0 0 * * * *",
             startPage = 1,
+            endPage = endPage,
             active = true,
             tagNames = "engineering",
         )
     }
 
-    private fun crawlableHtml(createdAtText: String = "2026년 4월 20일"): String {
+    private fun crawlableHtml(
+        articlePath: String = "/article/metric-review",
+        title: String = "Metric Review, 실행을 이끌다",
+        summary: String = "지표 리뷰로 실행 리듬을 만든 이야기입니다.",
+        createdAtText: String = "2026년 4월 20일",
+    ): String {
         return """
             <html>
               <body>
                 <div class="article-card">
-                  <a class="article-link" href="/article/metric-review">
-                    <div class="title">Metric Review, 실행을 이끌다</div>
-                    <div class="summary">지표 리뷰로 실행 리듬을 만든 이야기입니다.</div>
+                  <a class="article-link" href="$articlePath">
+                    <div class="title">$title</div>
+                    <div class="summary">$summary</div>
                     <div class="created-date">$createdAtText</div>
                   </a>
                 </div>
@@ -542,14 +743,16 @@ class LinkBatchRunServiceTest {
 
     private class StubLinkDocumentFetcher : LinkDocumentFetcher {
         var html: String = ""
-        private val htmlByUrl = mutableMapOf<String, String>()
+        private val htmlByUrl = mutableMapOf<String, StubPage>()
         private val failureByUrl = mutableMapOf<String, Throwable>()
+        private val fetchCounts = mutableMapOf<String, Int>()
 
         fun setHtml(
             url: String,
             value: String,
+            location: String = url,
         ) {
-            htmlByUrl[url] = value
+            htmlByUrl[url] = StubPage(value, location)
         }
 
         fun setFailure(
@@ -559,10 +762,21 @@ class LinkBatchRunServiceTest {
             failureByUrl[url] = throwable
         }
 
-        override fun fetch(url: String): Document {
-            failureByUrl[url]?.let { throw it }
-            return Jsoup.parse(htmlByUrl[url] ?: html, url)
+        fun fetchCount(url: String): Int {
+            return fetchCounts[url] ?: 0
         }
+
+        override fun fetch(url: String): Document {
+            fetchCounts[url] = fetchCount(url) + 1
+            failureByUrl[url]?.let { throw it }
+            val stubPage = htmlByUrl[url] ?: StubPage(html, url)
+            return Jsoup.parse(stubPage.html, stubPage.location)
+        }
+
+        private data class StubPage(
+            val html: String,
+            val location: String,
+        )
     }
 
     private class ImmediateTransactionOperations : TransactionOperations {

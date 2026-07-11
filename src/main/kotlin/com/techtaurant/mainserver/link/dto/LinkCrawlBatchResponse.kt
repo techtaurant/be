@@ -29,6 +29,7 @@ data class LinkCrawlBatchResponse(
     val tagNames: List<String>,
     val cronExpression: String,
     val startPage: Int,
+    val endPage: Int,
     val active: Boolean,
     val lastTriggeredAt: Instant?,
 ) {
@@ -48,6 +49,7 @@ data class LinkCrawlBatchResponse(
                 tagNames = batch.tagNames.toLineList(),
                 cronExpression = batch.cronExpression,
                 startPage = batch.startPage,
+                endPage = batch.endPage,
                 active = batch.active,
                 lastTriggeredAt = batch.lastTriggeredAt,
             )

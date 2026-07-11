@@ -7,12 +7,14 @@ import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
 import com.techtaurant.mainserver.link.entity.LinkCrawlFailedJob
 import com.techtaurant.mainserver.link.entity.LinkCrawlRun
 import com.techtaurant.mainserver.link.enums.LinkCrawlRunStatus
+import com.techtaurant.mainserver.link.enums.LinkCrawlRunTriggerType
 import com.techtaurant.mainserver.link.enums.LinkStatus
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlFailedJobRepository
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlRunRepository
 import org.jsoup.nodes.Element
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionOperations
+import java.net.URI
 import java.time.Instant
 import java.util.UUID
 
@@ -31,7 +33,7 @@ class LinkCrawlRunExecutor(
             val run = findRunOrThrow(runId)
             val batch = run.batch
             val tagResolver = linkCrawlLinkCollector.tagResolverFor(batch)
-            val crawlResult = crawl(batch, tagResolver)
+            val crawlResult = crawl(run, tagResolver)
             crawlResult.failedJobs.forEach { failedJob -> recordFailedJob(run, failedJob) }
             val result = crawlResult.response
 
@@ -53,20 +55,25 @@ class LinkCrawlRunExecutor(
     }
 
     private fun crawl(
-        batch: LinkCrawlBatch,
+        run: LinkCrawlRun,
         tagResolver: LinkTagResolver,
     ): LinkCrawlResult {
+        val batch = run.batch
         var crawlResponse = emptyCrawlResponse()
         val failedJobs = mutableListOf<LinkFailedJobRecord>()
-        val seenFailedArticleUrls = mutableSetOf<String>()
+        val crawledArticleUrls = mutableSetOf<String>()
         var page = batch.startPage
 
-        while (true) {
-            val pageResult = crawlPage(batch, tagResolver, page, seenFailedArticleUrls) ?: break
+        while (run.triggerType != LinkCrawlRunTriggerType.CREATED || page <= batch.endPage) {
+            val pageResult = crawlPage(batch, tagResolver, page, crawledArticleUrls)
+            val stopCondition = stopConditionFor(batch, page, pageResult)
+            if (stopCondition == CrawlStopCondition.BEFORE_MERGE) {
+                break
+            }
+
             crawlResponse = crawlResponse.mergePageResult(pageResult.response)
             failedJobs += pageResult.failedJobs
-
-            if (!pageResult.hasProgress) {
+            if (stopCondition == CrawlStopCondition.AFTER_MERGE) {
                 break
             }
             page++
@@ -82,25 +89,56 @@ class LinkCrawlRunExecutor(
         batch: LinkCrawlBatch,
         tagResolver: LinkTagResolver,
         page: Int,
-        seenFailedArticleUrls: MutableSet<String>,
-    ): LinkPageCrawlResult? {
+        crawledArticleUrls: MutableSet<String>,
+    ): LinkPageCrawlResult {
         val pageUrl = crawlDocumentParser.buildPageUrl(batch.baseUrl, batch.pageUriTemplate, page)
         val document =
             crawlDocumentParser.fetchPageOrNull(pageUrl)
                 ?: if (page == batch.startPage) {
                     throw ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_CRAWLABLE)
                 } else {
-                    return null
+                    return emptyPageCrawlResult(hasNewUrls = false, isFetchFailed = true)
                 }
-        var pageResult = emptyPageCrawlResult()
+        val items = document.select(batch.itemSelector)
+        val pageArticleUrls =
+            items.mapNotNull { item -> crawlDocumentParser.extractArticleUrl(item, batch, pageUrl) }
+                .map(::normalizeUrlForComparison)
+                .distinct()
 
-        document.select(batch.itemSelector).forEach { item ->
-            val collectionResult = collectLinkFromCrawledItem(item, batch, tagResolver, pageUrl)
-            pageResult = pageResult.recordCollectionResult(collectionResult, seenFailedArticleUrls)
+        if (pageArticleUrls.isEmpty()) {
+            return emptyPageCrawlResult(hasNewUrls = false)
         }
 
-        return pageResult
+        val hasNewUrlInRun = pageArticleUrls.any { it !in crawledArticleUrls }
+        if (!hasNewUrlInRun) {
+            return emptyPageCrawlResult(hasNewUrls = false)
+        }
+
+        crawledArticleUrls += pageArticleUrls
+        var pageResult = emptyPageCrawlResult(hasNewUrls = false)
+
+        items.forEach { item ->
+            val collectionResult = collectLinkFromCrawledItem(item, batch, tagResolver, pageUrl)
+            pageResult = pageResult.recordCollectionResult(collectionResult)
+        }
+
+        return pageResult.copy(
+            pageUrl = pageUrl,
+            documentLocation = document.location(),
+        )
     }
+
+    private fun stopConditionFor(
+        batch: LinkCrawlBatch,
+        page: Int,
+        pageResult: LinkPageCrawlResult,
+    ): CrawlStopCondition? =
+        when {
+            pageResult.isFetchFailed -> CrawlStopCondition.BEFORE_MERGE
+            page > batch.startPage && isRedirectedPage(pageResult.pageUrl, pageResult.documentLocation) -> CrawlStopCondition.BEFORE_MERGE
+            !pageResult.hasNewUrls -> CrawlStopCondition.AFTER_MERGE
+            else -> null
+        }
 
     private fun emptyCrawlResponse(): LinkBatchRunResponse =
         LinkBatchRunResponse(
@@ -110,20 +148,20 @@ class LinkCrawlRunExecutor(
             skippedCount = 0,
         )
 
-    private fun emptyPageCrawlResult(): LinkPageCrawlResult =
+    private fun emptyPageCrawlResult(
+        hasNewUrls: Boolean,
+        isFetchFailed: Boolean = false,
+    ): LinkPageCrawlResult =
         LinkPageCrawlResult(
             response = emptyCrawlResponse(),
             failedJobs = emptyList(),
-            hasProgress = false,
+            hasNewUrls = hasNewUrls,
+            pageUrl = "",
+            documentLocation = "",
+            isFetchFailed = isFetchFailed,
         )
 
-    private fun LinkPageCrawlResult.recordCollectionResult(
-        result: LinkCollectionResult,
-        seenFailedArticleUrls: MutableSet<String>,
-    ): LinkPageCrawlResult {
-        val hasNewFailedArticleUrl =
-            result is LinkCollectionResult.Failed &&
-                seenFailedArticleUrls.add(result.failedJob.draft.articleUrl)
+    private fun LinkPageCrawlResult.recordCollectionResult(result: LinkCollectionResult): LinkPageCrawlResult {
         val updatedResponse =
             when (result) {
                 LinkCollectionResult.CreatedNewLink ->
@@ -146,13 +184,13 @@ class LinkCrawlRunExecutor(
 
         return copy(
             response = updatedResponse,
+            hasNewUrls = hasNewUrls || result.hasNewUrl(),
             failedJobs =
                 if (result is LinkCollectionResult.Failed) {
                     failedJobs + result.failedJob
                 } else {
                     failedJobs
                 },
-            hasProgress = hasProgress || result.hasProgress || hasNewFailedArticleUrl,
         )
     }
 
@@ -251,6 +289,49 @@ class LinkCrawlRunExecutor(
         linkCrawlFailedJobRepository.save(failedJob)
     }
 
+    private fun isRedirectedPage(
+        pageUrl: String,
+        documentLocation: String,
+    ): Boolean {
+        if (documentLocation.isBlank()) {
+            return false
+        }
+
+        return normalizeUrlForComparison(pageUrl) != normalizeUrlForComparison(documentLocation)
+    }
+
+    private fun normalizeUrlForComparison(url: String): String {
+        val trimmedUrl = url.trim()
+        val uri =
+            runCatching { URI.create(trimmedUrl).normalize() }.getOrNull()
+                ?: return trimmedUrl.trimEnd('/')
+        return runCatching {
+            val normalizedPath = uri.path?.trimEnd('/')?.takeIf(String::isNotBlank)
+            URI(
+                uri.scheme?.lowercase(),
+                uri.userInfo,
+                uri.host?.lowercase(),
+                uri.port,
+                normalizedPath,
+                uri.query,
+                null,
+            ).toString().trimEnd('/')
+        }.getOrElse {
+            trimmedUrl.trimEnd('/')
+        }
+    }
+
+    private fun LinkCollectionResult.hasNewUrl(): Boolean =
+        when (this) {
+            LinkCollectionResult.CreatedNewLink,
+            LinkCollectionResult.ConnectedExistingLink,
+            is LinkCollectionResult.Failed,
+            -> true
+            LinkCollectionResult.UpdatedExistingLink,
+            LinkCollectionResult.Skipped,
+            -> false
+        }
+
     private data class LinkCrawlResult(
         val response: LinkBatchRunResponse,
         val failedJobs: List<LinkFailedJobRecord>,
@@ -259,22 +340,28 @@ class LinkCrawlRunExecutor(
     private data class LinkPageCrawlResult(
         val response: LinkBatchRunResponse,
         val failedJobs: List<LinkFailedJobRecord>,
-        val hasProgress: Boolean,
+        val hasNewUrls: Boolean,
+        val pageUrl: String,
+        val documentLocation: String,
+        val isFetchFailed: Boolean,
     )
 
-    private sealed class LinkCollectionResult(
-        val hasProgress: Boolean,
-    ) {
-        data object CreatedNewLink : LinkCollectionResult(true)
+    private enum class CrawlStopCondition {
+        BEFORE_MERGE,
+        AFTER_MERGE,
+    }
 
-        data object ConnectedExistingLink : LinkCollectionResult(true)
+    private sealed class LinkCollectionResult {
+        data object CreatedNewLink : LinkCollectionResult()
 
-        data object UpdatedExistingLink : LinkCollectionResult(false)
+        data object ConnectedExistingLink : LinkCollectionResult()
 
-        data object Skipped : LinkCollectionResult(false)
+        data object UpdatedExistingLink : LinkCollectionResult()
+
+        data object Skipped : LinkCollectionResult()
 
         data class Failed(
             val failedJob: LinkFailedJobRecord,
-        ) : LinkCollectionResult(false)
+        ) : LinkCollectionResult()
     }
 }
