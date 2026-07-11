@@ -1,7 +1,9 @@
 package com.techtaurant.mainserver.link.dto
 
 import com.fasterxml.jackson.annotation.JsonIgnore
+import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
 import com.techtaurant.mainserver.post.entity.TaggedContent
+import com.techtaurant.mainserver.user.entity.User
 import io.swagger.v3.oas.annotations.media.ArraySchema
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.AssertTrue
@@ -63,4 +65,38 @@ data class CreateLinkCrawlBatchRequest(
     @get:Schema(hidden = true)
     val isPageRangeValid: Boolean
         get() = endPage >= startPage
+
+    companion object {
+        fun toEntity(
+            request: CreateLinkCrawlBatchRequest,
+            companyUser: User,
+        ): LinkCrawlBatch {
+            return LinkCrawlBatch(
+                companyUser = companyUser,
+                name = request.name.trim(),
+                baseUrl = request.baseUrl.trim(),
+                pageUriTemplate = request.pageUriTemplate.trim(),
+                itemSelector = request.itemSelector.trim(),
+                articleLinkSelector = request.articleLinkSelector.trim(),
+                titleSelector = request.titleSelector.trim(),
+                summarySelector = request.summarySelector?.trim()?.takeIf { it.isNotEmpty() },
+                createdAtSelectors = normalizeLines(request.createdAtSelectors),
+                tagNames = normalizeLines(request.tagNames),
+                cronExpression = request.cronExpression.trim(),
+                startPage = request.startPage,
+                endPage = request.endPage,
+                active = request.active,
+            )
+        }
+
+        private fun normalizeLines(values: List<String>): String? {
+            return values.asSequence()
+                .map(String::trim)
+                .filter(String::isNotEmpty)
+                .distinct()
+                .toList()
+                .takeIf(List<String>::isNotEmpty)
+                ?.joinToString("\n")
+        }
+    }
 }

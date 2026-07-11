@@ -365,6 +365,40 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
     }
 
     @Test
+    @DisplayName("첫 페이지에서 링크를 하나도 수집할 수 없으면 배치 등록이 실패한다")
+    fun createBatchFailsWhenFirstPageHasNoCrawlableLink() {
+        given()
+            .contentType("application/json")
+            .header("Authorization", "Bearer $adminAccessToken")
+            .body(
+                """
+                {
+                  "name": "수집 불가 배치",
+                  "baseUrl": "$crawlerBaseUrl",
+                  "pageUriTemplate": "/category/engineering?page={page}",
+                  "itemSelector": ".missing-article-card",
+                  "articleLinkSelector": "a.article-link",
+                  "titleSelector": ".title",
+                  "summarySelector": ".summary",
+                  "createdAtSelectors": ["div.o6bzluc"],
+                  "tagNames": ["engineering"],
+                  "cronExpression": "0 0 * * * *",
+                  "startPage": 1,
+                  "endPage": 2,
+                  "active": true
+                }
+                """.trimIndent(),
+            ).`when`()
+            .post("/admin/companies/${companyUser.id}/link-crawl-batches")
+            .then()
+            .statusCode(HttpStatus.BAD_REQUEST.value())
+            .body("status", equalTo(6007))
+
+        assertEquals(1, pageRequestCount(1))
+        assertTrue(linkCrawlBatchRepository.findAll().isEmpty())
+    }
+
+    @Test
     @DisplayName("배치 등록 시 생성일을 수집할 수 없으면 등록이 실패한다")
     fun createBatchFailsWhenCreatedAtCannotBeCollected() {
         given()

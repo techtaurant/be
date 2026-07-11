@@ -7,6 +7,7 @@ import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
 import com.techtaurant.mainserver.link.entity.LinkCrawlFailedJob
 import com.techtaurant.mainserver.link.entity.LinkCrawlRun
 import com.techtaurant.mainserver.link.enums.LinkCrawlRunStatus
+import com.techtaurant.mainserver.link.enums.LinkCrawlRunTriggerType
 import com.techtaurant.mainserver.link.enums.LinkStatus
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlFailedJobRepository
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlRunRepository
@@ -32,7 +33,7 @@ class LinkCrawlRunExecutor(
             val run = findRunOrThrow(runId)
             val batch = run.batch
             val tagResolver = linkCrawlLinkCollector.tagResolverFor(batch)
-            val crawlResult = crawl(batch, tagResolver)
+            val crawlResult = crawl(run, tagResolver)
             crawlResult.failedJobs.forEach { failedJob -> recordFailedJob(run, failedJob) }
             val result = crawlResult.response
 
@@ -54,15 +55,16 @@ class LinkCrawlRunExecutor(
     }
 
     private fun crawl(
-        batch: LinkCrawlBatch,
+        run: LinkCrawlRun,
         tagResolver: LinkTagResolver,
     ): LinkCrawlResult {
+        val batch = run.batch
         var crawlResponse = emptyCrawlResponse()
         val failedJobs = mutableListOf<LinkFailedJobRecord>()
         val crawledArticleUrls = mutableSetOf<String>()
         var page = batch.startPage
 
-        while (page <= batch.endPage) {
+        while (run.triggerType != LinkCrawlRunTriggerType.CREATED || page <= batch.endPage) {
             val pageResult = crawlPage(batch, tagResolver, page, crawledArticleUrls)
             val stopCondition = stopConditionFor(batch, page, pageResult)
             if (stopCondition == CrawlStopCondition.BEFORE_MERGE) {

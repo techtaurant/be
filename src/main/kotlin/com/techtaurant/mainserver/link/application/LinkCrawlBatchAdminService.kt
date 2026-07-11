@@ -30,7 +30,7 @@ class LinkCrawlBatchAdminService(
         val companyUser = getCompanyUser(companyUserId)
         validateCronExpression(request.cronExpression)
 
-        val batch = LinkCrawlBatchMapper.toEntity(request, companyUser)
+        val batch = CreateLinkCrawlBatchRequest.toEntity(request, companyUser)
         linkBatchRunService.validateCrawlable(batch)
         val savedBatch = linkCrawlBatchRepository.save(batch)
         linkBatchRunService.run(savedBatch.id!!, LinkCrawlRunTriggerType.CREATED)
