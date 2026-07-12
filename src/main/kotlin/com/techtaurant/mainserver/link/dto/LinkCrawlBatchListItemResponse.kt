@@ -17,6 +17,7 @@ data class LinkCrawlBatchListItemResponse(
     val baseUrl: String,
     val cronExpression: String,
     val startPage: Int,
+    val endPage: Int,
     val active: Boolean,
     val lastTriggeredAt: Instant?,
 ) {
@@ -29,6 +30,7 @@ data class LinkCrawlBatchListItemResponse(
                 baseUrl = batch.baseUrl,
                 cronExpression = batch.cronExpression,
                 startPage = batch.startPage,
+                endPage = batch.endPage,
                 active = batch.active,
                 lastTriggeredAt = batch.lastTriggeredAt,
             )

@@ -2,7 +2,6 @@ package com.techtaurant.mainserver.notification.application
 
 import com.techtaurant.mainserver.config.MessageSourceConfig
 import org.assertj.core.api.Assertions.assertThat
-import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -49,18 +48,19 @@ class NotificationPayloadServiceTest {
     }
 
     @Test
-    @DisplayName("payload 생성 시 위험한 동적 값은 제거된다")
-    fun buildPayload_sanitizesArguments() {
+    @DisplayName("payload 생성 시 동적 값을 제거하지 않고 포함한다")
+    fun buildPayload_preservesArguments() {
         val payload =
             notificationPayloadService.buildPayload(
                 messageKey = "notification.payload.follow",
-                messageArguments = listOf("<script>alert('xss')</script><b>민수</b>"),
+                messageArguments = listOf("<script>alert('xss')</script><b>민수 & 2 < 3 > 1</b>"),
                 locale = Locale.KOREAN,
             )
 
+        assertThat(payload).contains("<script>alert('xss')</script><b>민수 & 2 < 3 > 1</b>")
+        assertThat(payload).doesNotContain("&amp;", "&lt;", "&gt;")
         assertThat(payload).contains("민수")
         assertThat(payload).contains("팔로우했습니다")
-        assertThat(payload).doesNotContain("<script>", "<img src=\"javascript:", "onerror", "alert")
     }
 
     @Test
@@ -75,13 +75,13 @@ class NotificationPayloadServiceTest {
     }
 
     @Test
-    @DisplayName("안전하지 않은 media URL은 알림 썸네일 URL 계약 위반으로 처리한다")
-    fun resolveThumbnailUrl_withUnsafeMediaUrl_throwsException() {
-        assertThatThrownBy {
+    @DisplayName("media URL은 백엔드에서 차단하지 않고 그대로 반환한다")
+    fun resolveThumbnailUrl_returnsMediaUrlAsIs() {
+        val thumbnailUrl =
             notificationPayloadService.resolveThumbnailUrl(
                 NotificationPayloadService.NotificationPayloadMedia(url = "javascript:alert('xss')"),
             )
-        }.isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessage("알림 썸네일 URL이 안전한 URL 형식이 아닙니다.")
+
+        assertThat(thumbnailUrl).isEqualTo("javascript:alert('xss')")
     }
 }
