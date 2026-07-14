@@ -1,9 +1,12 @@
+import org.jooq.meta.jaxb.ForcedType
+
 plugins {
     kotlin("jvm") version "1.9.25"
     kotlin("plugin.spring") version "1.9.25"
     kotlin("kapt") version "1.9.25"
     id("org.springframework.boot") version "3.5.7"
     id("io.spring.dependency-management") version "1.1.7"
+    id("org.jooq.jooq-codegen-gradle") version "3.19.27"
     kotlin("plugin.jpa") version "1.9.25"
     id("com.diffplug.spotless") version "6.25.0"
     jacoco
@@ -28,6 +31,8 @@ repositories {
 dependencies {
     implementation(enforcedPlatform("io.opentelemetry.instrumentation:opentelemetry-instrumentation-bom:2.26.1"))
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.springframework.boot:spring-boot-starter-jooq")
+    implementation("org.jooq:jooq-kotlin")
     implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
@@ -37,6 +42,7 @@ dependencies {
 
     // Database
     runtimeOnly("org.postgresql:postgresql")
+    jooqCodegen("org.postgresql:postgresql")
     implementation("com.github.gavlyukovskiy:p6spy-spring-boot-starter:1.9.0")
 
     // Environment Variables
@@ -103,6 +109,57 @@ kotlin {
     compilerOptions {
         freeCompilerArgs.addAll("-Xjsr305=strict")
     }
+}
+
+val jooqCodegenUrl = providers.gradleProperty("jooqCodegenUrl").orElse("jdbc:postgresql://localhost:5432/techtaurant")
+val jooqCodegenUser = providers.gradleProperty("jooqCodegenUser").orElse("root")
+val jooqCodegenPassword = providers.gradleProperty("jooqCodegenPassword").orElse("1234")
+
+jooq {
+    configuration {
+        jdbc {
+            driver = "org.postgresql.Driver"
+            url = jooqCodegenUrl.get()
+            user = jooqCodegenUser.get()
+            password = jooqCodegenPassword.get()
+        }
+        generator {
+            name = "org.jooq.codegen.KotlinGenerator"
+            database {
+                name = "org.jooq.meta.postgres.PostgresDatabase"
+                inputSchema = "public"
+                includes =
+                    "attachments|categories|comment_like_log|comments|link_crawl_batches|link_crawl_failed_jobs|" +
+                    "link_crawl_runs|link_daily_stats|link_like_log|link_read_log|link_tags|link_view_log|links|" +
+                    "notification_arguments|notification_recipients|notifications|post_daily_stats|post_like_log|" +
+                    "post_read_log|post_tags|post_view_log|posts|tags|user_bans|user_follows|user_links|user_tokens|users"
+                forcedTypes =
+                    listOf(
+                        ForcedType()
+                            .withName("VARCHAR")
+                            .withIncludeTypes(
+                                "attachment_reference_type|attachment_status|notification_target_type|notification_type|tsvector",
+                            ),
+                    )
+            }
+            generate {
+                isImplicitJoinPathsToOne = false
+                isImplicitJoinPathsToMany = false
+            }
+            target {
+                packageName = "com.techtaurant.mainserver.jooq"
+                directory = "build/generated-src/jooq/main"
+            }
+        }
+    }
+}
+
+tasks.named("compileKotlin") {
+    dependsOn(tasks.named("jooqCodegen"))
+}
+
+tasks.matching { it.name.startsWith("kapt") }.configureEach {
+    dependsOn(tasks.named("jooqCodegen"))
 }
 
 allOpen {

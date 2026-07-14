@@ -5,9 +5,14 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
+import java.util.Optional
 import java.util.UUID
 
-interface CommentRepository : JpaRepository<Comment, UUID> {
+interface CommentRepository : JpaRepository<Comment, UUID>, CommentRepositoryCustom {
+    override fun findById(id: UUID): Optional<Comment>
+
+    override fun existsById(id: UUID): Boolean
+
     /**
      * 게시물의 삭제되지 않은 댓글을 생성 시간 오름차순으로 조회합니다.
      * 대댓글은 부모 댓글 다음에 오도록 정렬됩니다.
@@ -15,7 +20,7 @@ interface CommentRepository : JpaRepository<Comment, UUID> {
      * @param postId 게시물 ID
      * @return 댓글 목록 (생성 시간 오름차순)
      */
-    fun findByPostIdAndDeletedAtIsNullOrderByCreatedAtAsc(postId: UUID): List<Comment>
+    override fun findByPostIdAndDeletedAtIsNullOrderByCreatedAtAsc(postId: UUID): List<Comment>
 
     /**
      * 댓글의 좋아요수를 원자적으로 1 증가시킵니다.

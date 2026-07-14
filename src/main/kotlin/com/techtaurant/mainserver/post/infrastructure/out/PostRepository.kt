@@ -6,10 +6,17 @@ import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.time.Instant
+import java.util.Optional
 import java.util.UUID
 
 interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
-    fun findAllByAuthorId(authorId: UUID): List<Post>
+    override fun findById(id: UUID): Optional<Post>
+
+    override fun findAllById(ids: Iterable<UUID>): List<Post>
+
+    override fun existsById(id: UUID): Boolean
+
+    override fun findAllByAuthorId(authorId: UUID): List<Post>
 
     /**
      * 게시물 상세 조회
@@ -19,16 +26,7 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      * @param postId 게시물 ID
      * @return 게시물 엔티티 (없으면 null)
      */
-    @Query(
-        """
-        SELECT p FROM Post p
-        JOIN FETCH p.author
-        LEFT JOIN FETCH p.tags
-        LEFT JOIN FETCH p.category
-        WHERE p.id = :postId
-    """,
-    )
-    fun findPostDetailById(postId: UUID): Post?
+    override fun findPostDetailById(postId: UUID): Post?
 
     /**
      * 커서 기반 DRAFT 게시물 목록 조회
@@ -41,23 +39,11 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      * @param limit 조회 개수
      * @return DRAFT 게시물 리스트
      */
-    @Query(
-        """
-        SELECT p FROM Post p
-        WHERE p.author.id = :authorId
-        AND p.status = 'DRAFT'
-        AND (
-            p.updatedAt < :cursorUpdatedAt
-            OR (p.updatedAt = :cursorUpdatedAt AND p.id < :cursorId)
-        )
-        ORDER BY p.updatedAt DESC, p.id DESC
-    """,
-    )
-    fun findDraftsByAuthorWithCursor(
-        @Param("authorId") authorId: UUID,
-        @Param("cursorUpdatedAt") cursorUpdatedAt: Instant,
-        @Param("cursorId") cursorId: UUID,
-        @Param("limit") limit: Int,
+    override fun findDraftsByAuthorWithCursor(
+        authorId: UUID,
+        cursorUpdatedAt: Instant,
+        cursorId: UUID,
+        limit: Int,
     ): List<Post>
 
     /**
@@ -67,17 +53,9 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      * @param limit 조회 개수
      * @return DRAFT 게시물 리스트
      */
-    @Query(
-        """
-        SELECT p FROM Post p
-        WHERE p.author.id = :authorId
-        AND p.status = 'DRAFT'
-        ORDER BY p.updatedAt DESC, p.id DESC
-    """,
-    )
-    fun findDraftsByAuthorFirstPage(
-        @Param("authorId") authorId: UUID,
-        @Param("limit") limit: Int,
+    override fun findDraftsByAuthorFirstPage(
+        authorId: UUID,
+        limit: Int,
     ): List<Post>
 
     /**
@@ -87,17 +65,7 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      * @param postId 게시물 ID
      * @return 게시물 엔티티 (없으면 null)
      */
-    @Query(
-        """
-        SELECT p FROM Post p
-        LEFT JOIN FETCH p.author
-        LEFT JOIN FETCH p.category
-        WHERE p.id = :postId
-    """,
-    )
-    fun findPostByIdWithAuthor(
-        @Param("postId") postId: UUID,
-    ): Post?
+    override fun findPostByIdWithAuthor(postId: UUID): Post?
 
     /**
      * 공개 가능한 게시물 목록을 ID 목록으로 조회합니다.
@@ -105,19 +73,7 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      * @param postIds 게시물 ID 목록
      * @return PUBLISHED 상태의 게시물 목록
      */
-    @Query(
-        """
-        SELECT DISTINCT p FROM Post p
-        JOIN FETCH p.author
-        LEFT JOIN FETCH p.tags
-        LEFT JOIN FETCH p.category
-        WHERE p.id IN :postIds
-        AND p.status = 'PUBLISHED'
-    """,
-    )
-    fun findPublishedPostsByIdIn(
-        @Param("postIds") postIds: List<UUID>,
-    ): List<Post>
+    override fun findPublishedPostsByIdIn(postIds: List<UUID>): List<Post>
 
     /**
      * 게시물의 조회수를 원자적으로 1 증가시킵니다.
@@ -210,17 +166,8 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      * @param before 기준 날짜 (이 날짜 이전에 수정된 DRAFT 반환)
      * @return 만료된 DRAFT 게시물 리스트
      */
-    @Query(
-        """
-        SELECT p FROM Post p
-        JOIN FETCH p.author
-        WHERE p.author.id = :authorId
-        AND p.status = 'DRAFT'
-        AND p.updatedAt < :before
-    """,
-    )
-    fun findStaleDraftsByAuthor(
-        @Param("authorId") authorId: UUID,
-        @Param("before") before: Instant,
+    override fun findStaleDraftsByAuthor(
+        authorId: UUID,
+        before: Instant,
     ): List<Post>
 }

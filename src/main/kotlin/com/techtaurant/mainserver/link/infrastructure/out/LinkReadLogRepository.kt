@@ -4,18 +4,18 @@ import com.techtaurant.mainserver.link.entity.LinkReadLog
 import org.springframework.data.jpa.repository.JpaRepository
 import java.util.UUID
 
-interface LinkReadLogRepository : JpaRepository<LinkReadLog, UUID> {
-    fun findByUserIdAndLinkId(
+interface LinkReadLogRepository : JpaRepository<LinkReadLog, UUID>, LinkReadLogRepositoryCustom {
+    override fun findByUserIdAndLinkId(
         userId: UUID,
         linkId: UUID,
     ): LinkReadLog?
 
-    fun existsByUserIdAndLinkId(
+    override fun existsByUserIdAndLinkId(
         userId: UUID,
         linkId: UUID,
     ): Boolean
 
-    fun findByUserIdAndLinkIdIn(
+    override fun findByUserIdAndLinkIdIn(
         userId: UUID,
         linkIds: List<UUID>,
     ): List<LinkReadLog>

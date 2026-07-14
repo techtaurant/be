@@ -6,12 +6,20 @@ import com.techtaurant.mainserver.post.entity.Post
 import com.techtaurant.mainserver.post.entity.PostPeriod
 import com.techtaurant.mainserver.post.entity.PostSortType
 import com.techtaurant.mainserver.post.enums.PostStatusEnum
+import java.time.Instant
+import java.util.Optional
 import java.util.UUID
 
 /**
  * 게시물 동적 쿼리를 위한 커스텀 Repository
  */
 interface PostRepositoryCustom {
+    fun findById(id: UUID): Optional<Post>
+
+    fun findAllById(ids: Iterable<UUID>): List<Post>
+
+    fun existsById(id: UUID): Boolean
+
     /**
      * 동적 조건으로 게시물 목록 조회
      *
@@ -43,4 +51,29 @@ interface PostRepositoryCustom {
         postId: UUID,
         viewerId: UUID?,
     ): Post?
+
+    fun findAllByAuthorId(authorId: UUID): List<Post>
+
+    fun findPostDetailById(postId: UUID): Post?
+
+    fun findDraftsByAuthorWithCursor(
+        authorId: UUID,
+        cursorUpdatedAt: Instant,
+        cursorId: UUID,
+        limit: Int,
+    ): List<Post>
+
+    fun findDraftsByAuthorFirstPage(
+        authorId: UUID,
+        limit: Int,
+    ): List<Post>
+
+    fun findPostByIdWithAuthor(postId: UUID): Post?
+
+    fun findPublishedPostsByIdIn(postIds: List<UUID>): List<Post>
+
+    fun findStaleDraftsByAuthor(
+        authorId: UUID,
+        before: Instant,
+    ): List<Post>
 }

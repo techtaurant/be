@@ -5,8 +5,8 @@ import com.techtaurant.mainserver.user.enums.UserRole
 import org.springframework.data.jpa.repository.JpaRepository
 import java.util.UUID
 
-interface UserTokenRepository : JpaRepository<UserToken, UUID> {
-    fun existsByUserIdAndTokenHashAndUserRole(
+interface UserTokenRepository : JpaRepository<UserToken, UUID>, UserTokenRepositoryCustom {
+    override fun existsByUserIdAndTokenHashAndUserRole(
         userId: UUID,
         tokenHash: String,
         role: UserRole,

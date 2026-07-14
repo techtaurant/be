@@ -8,23 +8,7 @@ import org.springframework.data.repository.query.Param
 import java.time.LocalDate
 import java.util.UUID
 
-interface LinkDailyStatsRepository : JpaRepository<LinkDailyStats, UUID> {
-    @Query(
-        """
-        SELECT link_id AS linkId,
-               CAST(COALESCE(SUM(view_count), 0) AS BIGINT) AS viewCount,
-               CAST(COALESCE(SUM(like_count), 0) AS BIGINT) AS likeCount,
-               CAST(COALESCE(SUM(save_count), 0) AS BIGINT) AS saveCount
-        FROM link_daily_stats
-        WHERE link_id IN (:linkIds)
-        GROUP BY link_id
-        """,
-        nativeQuery = true,
-    )
-    fun aggregateStatsByLinkIds(
-        @Param("linkIds") linkIds: List<UUID>,
-    ): List<LinkStatsAggregateProjection>
-
+interface LinkDailyStatsRepository : JpaRepository<LinkDailyStats, UUID>, LinkDailyStatsRepositoryCustom {
     @Modifying(clearAutomatically = false, flushAutomatically = true)
     @Query(
         """

@@ -4,7 +4,7 @@ import com.techtaurant.mainserver.post.entity.PostReadLog
 import org.springframework.data.jpa.repository.JpaRepository
 import java.util.*
 
-interface PostReadLogRepository : JpaRepository<PostReadLog, UUID> {
+interface PostReadLogRepository : JpaRepository<PostReadLog, UUID>, PostReadLogRepositoryCustom {
     /**
      * 특정 게시물에 대한 특정 사용자의 읽음 기록을 조회합니다.
      *
@@ -12,7 +12,7 @@ interface PostReadLogRepository : JpaRepository<PostReadLog, UUID> {
      * @param userId 사용자 ID
      * @return 읽음 기록 (없으면 null)
      */
-    fun findByPostIdAndUserId(
+    override fun findByPostIdAndUserId(
         postId: UUID,
         userId: UUID,
     ): PostReadLog?
@@ -24,7 +24,7 @@ interface PostReadLogRepository : JpaRepository<PostReadLog, UUID> {
      * @param userId 사용자 ID
      * @return 읽음 기록 존재 여부
      */
-    fun existsByPostIdAndUserId(
+    override fun existsByPostIdAndUserId(
         postId: UUID,
         userId: UUID,
     ): Boolean
@@ -37,7 +37,7 @@ interface PostReadLogRepository : JpaRepository<PostReadLog, UUID> {
      * @param postIds 게시물 ID 목록
      * @return 읽음 기록 목록
      */
-    fun findByUserIdAndPostIdIn(
+    override fun findByUserIdAndPostIdIn(
         userId: UUID,
         postIds: List<UUID>,
     ): List<PostReadLog>

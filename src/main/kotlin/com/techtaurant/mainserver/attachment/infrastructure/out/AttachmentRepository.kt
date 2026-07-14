@@ -6,24 +6,26 @@ import com.techtaurant.mainserver.attachment.enums.AttachmentStatus
 import org.springframework.data.jpa.repository.JpaRepository
 import java.util.UUID
 
-interface AttachmentRepository : JpaRepository<Attachment, UUID> {
-    fun findAllByObjectKeyInAndStatus(
+interface AttachmentRepository : JpaRepository<Attachment, UUID>, AttachmentRepositoryCustom {
+    override fun findAllById(ids: Iterable<UUID>): List<Attachment>
+
+    override fun findAllByObjectKeyInAndStatus(
         objectKeys: List<String>,
         status: AttachmentStatus,
     ): List<Attachment>
 
-    fun findAllByReferenceIdAndReferenceType(
+    override fun findAllByReferenceIdAndReferenceType(
         referenceId: UUID,
         referenceType: AttachmentReferenceType,
     ): List<Attachment>
 
-    fun findAllByReferenceIdAndReferenceTypeAndIdNotIn(
+    override fun findAllByReferenceIdAndReferenceTypeAndIdNotIn(
         referenceId: UUID,
         referenceType: AttachmentReferenceType,
         attachmentIds: List<UUID>,
     ): List<Attachment>
 
-    fun findAllByReferenceIdInAndReferenceType(
+    override fun findAllByReferenceIdInAndReferenceType(
         referenceIds: List<UUID>,
         referenceType: AttachmentReferenceType,
     ): List<Attachment>

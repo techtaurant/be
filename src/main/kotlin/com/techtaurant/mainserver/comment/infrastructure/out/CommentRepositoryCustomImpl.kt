@@ -2,223 +2,204 @@ package com.techtaurant.mainserver.comment.infrastructure.out
 
 import com.techtaurant.mainserver.comment.dto.CommentCursor
 import com.techtaurant.mainserver.comment.entity.Comment
-import com.techtaurant.mainserver.comment.entity.Comment_
 import com.techtaurant.mainserver.comment.enums.CommentSortType
-import com.techtaurant.mainserver.common.base.EntityBase_
+import com.techtaurant.mainserver.jooq.tables.Comments.Companion.COMMENTS
+import com.techtaurant.mainserver.jooq.tables.Posts.Companion.POSTS
+import com.techtaurant.mainserver.jooq.tables.Users.Companion.USERS
+import com.techtaurant.mainserver.jooq.tables.records.PostsRecord
+import com.techtaurant.mainserver.jooq.tables.records.UsersRecord
 import com.techtaurant.mainserver.post.entity.Post
+import com.techtaurant.mainserver.post.enums.PostStatusEnum
+import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.user.entity.User
+import com.techtaurant.mainserver.user.enums.UserRole
 import jakarta.persistence.EntityManager
-import jakarta.persistence.PersistenceContext
-import jakarta.persistence.criteria.CriteriaBuilder
-import jakarta.persistence.criteria.CriteriaQuery
-import jakarta.persistence.criteria.JoinType
-import jakarta.persistence.criteria.Predicate
-import jakarta.persistence.criteria.Root
+import org.jooq.Condition
+import org.jooq.DSLContext
+import org.jooq.Record
 import org.springframework.stereotype.Repository
+import java.util.Optional
 import java.util.UUID
 
 /**
- * 댓글 동적 쿼리 구현체
+ * 댓글 read model을 jOOQ로 조회한다.
  *
- * JPA Criteria API와 Metamodel을 사용하여 정렬, 커서 기반 페이지네이션을 지원
+ * 반환 타입은 기존 서비스 계약을 유지하기 위해 엔티티를 사용하지만, 조회와 연관 데이터 조립은
+ * 모두 하나의 jOOQ query 결과에서 수행한다.
  */
 @Repository
-class CommentRepositoryCustomImpl : CommentRepositoryCustom {
-    @PersistenceContext
-    private lateinit var entityManager: EntityManager
+class CommentRepositoryCustomImpl(
+    private val dsl: DSLContext,
+    private val entityManager: EntityManager,
+) : CommentRepositoryCustom {
+    override fun findByPostIdAndDeletedAtIsNullOrderByCreatedAtAsc(postId: UUID): List<Comment> =
+        flushThen { fetchComments(COMMENTS.POST_ID.eq(postId).and(COMMENTS.DELETED_AT_UTC.isNull)) }
+            .sortedBy { it.createdAt }
+
+    override fun findById(id: UUID): Optional<Comment> = flushThen { Optional.ofNullable(fetchComments(COMMENTS.ID.eq(id)).firstOrNull()) }
+
+    override fun existsById(id: UUID): Boolean = flushThen { dsl.fetchExists(COMMENTS, COMMENTS.ID.eq(id)) }
 
     override fun findCommentsByIdsIncludingDeleted(commentIds: List<UUID>): List<Comment> {
         if (commentIds.isEmpty()) {
             return emptyList()
         }
 
-        return entityManager.createQuery(
-            """
-            SELECT c
-            FROM Comment c
-            JOIN FETCH c.author
-            JOIN FETCH c.post
-            WHERE c.id IN :commentIds
-            """.trimIndent(),
-            Comment::class.java,
-        )
-            .setParameter("commentIds", commentIds)
-            .resultList
+        return fetchComments(COMMENTS.ID.`in`(commentIds))
     }
 
-    /**
-     * 삭제된 댓글을 포함해 부모 댓글 목록을 조회합니다. (depth=0)
-     *
-     * N+1 방지를 위해 author, post를 fetch join하며 커서 기반 페이지네이션으로 조회
-     */
     override fun findParentCommentsIncludingDeletedWithConditions(
         postId: UUID,
         cursor: CommentCursor?,
         size: Int,
         sortType: CommentSortType,
-    ): List<Comment> {
-        val cb = entityManager.criteriaBuilder
-        val cq = cb.createQuery(Comment::class.java)
-        val root = cq.from(Comment::class.java)
+    ): List<Comment> =
+        fetchComments(
+            baseCondition = COMMENTS.POST_ID.eq(postId).and(COMMENTS.DEPTH.eq(0)),
+            cursor = cursor,
+            size = size,
+            sortType = sortType,
+        )
 
-        root.fetch<Comment, User>(Comment_.AUTHOR)
-        root.fetch<Comment, Post>(Comment_.POST, JoinType.LEFT)
-
-        val predicates = mutableListOf<Predicate>()
-
-        predicates.add(cb.equal(root.get(Comment_.post).get(EntityBase_.id), postId))
-        predicates.add(cb.equal(root.get(Comment_.depth), 0))
-
-        addCursorCondition(cb, root, cursor, sortType, predicates)
-
-        cq.where(*predicates.toTypedArray())
-        applyOrdering(cb, cq, root, sortType)
-
-        return entityManager.createQuery(cq)
-            .setMaxResults(size)
-            .resultList
-    }
-
-    /**
-     * 삭제된 댓글을 포함해 대댓글 목록을 조회합니다. (depth=1)
-     *
-     * N+1 방지를 위해 author, post를 fetch join하며 커서 기반 페이지네이션으로 조회
-     */
     override fun findRepliesIncludingDeletedWithConditions(
         parentId: UUID,
         cursor: CommentCursor?,
         size: Int,
         sortType: CommentSortType,
-    ): List<Comment> {
-        val cb = entityManager.criteriaBuilder
-        val cq = cb.createQuery(Comment::class.java)
-        val root = cq.from(Comment::class.java)
+    ): List<Comment> =
+        fetchComments(
+            baseCondition = COMMENTS.PARENT_ID.eq(parentId).and(COMMENTS.DEPTH.eq(1)),
+            cursor = cursor,
+            size = size,
+            sortType = sortType,
+        )
 
-        root.fetch<Comment, User>(Comment_.AUTHOR)
-        root.fetch<Comment, Post>(Comment_.POST, JoinType.LEFT)
+    private fun fetchComments(baseCondition: Condition): List<Comment> = fetchCommentRows(baseCondition).map(::toComment)
 
-        val predicates = mutableListOf<Predicate>()
-
-        predicates.add(cb.equal(root.get(Comment_.parent).get(EntityBase_.id), parentId))
-        predicates.add(cb.equal(root.get(Comment_.depth), 1))
-
-        addCursorCondition(cb, root, cursor, sortType, predicates)
-
-        cq.where(*predicates.toTypedArray())
-        applyOrdering(cb, cq, root, sortType)
-
-        return entityManager.createQuery(cq)
-            .setMaxResults(size)
-            .resultList
-    }
-
-    /**
-     * 정렬 타입에 따른 커서 조건 추가
-     *
-     * 최신순은 createdAt + id 기준, 그 외(추천/답글순)는 해당 count + createdAt + id 기준
-     */
-    private fun addCursorCondition(
-        cb: CriteriaBuilder,
-        root: Root<Comment>,
+    private fun fetchComments(
+        baseCondition: Condition,
         cursor: CommentCursor?,
+        size: Int,
         sortType: CommentSortType,
-        predicates: MutableList<Predicate>,
-    ) {
-        cursor ?: return
+    ): List<Comment> {
+        val cursorCondition = cursor?.let { buildCursorCondition(it, sortType) }
+        val whereCondition = listOfNotNull(baseCondition, cursorCondition).reduce(Condition::and)
 
-        val cursorPredicate =
-            when (sortType) {
-                CommentSortType.LATEST -> buildLatestCursorCondition(cb, root, cursor)
-                else -> buildCountCursorCondition(cb, root, cursor, sortType)
-            }
-        predicates.add(cursorPredicate)
+        return fetchCommentRows(whereCondition, size, sortType).map(::toComment)
     }
 
-    /**
-     * 최신순 커서 조건 생성
-     *
-     * 동일 시간대 댓글 구분을 위해 id를 보조 키로 사용
-     * 조건: (createdAt < cursor) OR (createdAt = cursor AND id < cursorId)
-     */
-    private fun buildLatestCursorCondition(
-        cb: CriteriaBuilder,
-        root: Root<Comment>,
-        cursor: CommentCursor,
-    ): Predicate {
-        val createdAtLess = cb.lessThan(root.get(EntityBase_.createdAt), cursor.createdAt)
-        val createdAtEqualAndIdLess =
-            cb.and(
-                cb.equal(root.get(EntityBase_.createdAt), cursor.createdAt),
-                cb.lessThan(root.get(EntityBase_.id), cursor.id),
-            )
-        return cb.or(createdAtLess, createdAtEqualAndIdLess)
+    private fun fetchCommentRows(baseCondition: Condition): List<Record> =
+        dsl.select(COMMENTS.asterisk(), POSTS.asterisk(), USERS.asterisk())
+            .from(COMMENTS)
+            .join(POSTS).on(COMMENTS.POST_ID.eq(POSTS.ID))
+            .join(USERS).on(COMMENTS.AUTHOR_ID.eq(USERS.ID))
+            .where(baseCondition)
+            .fetch()
+
+    private fun fetchCommentRows(
+        whereCondition: Condition,
+        size: Int,
+        sortType: CommentSortType,
+    ): List<Record> {
+        val query =
+            dsl.select(COMMENTS.asterisk(), POSTS.asterisk(), USERS.asterisk())
+                .from(COMMENTS)
+                .join(POSTS).on(COMMENTS.POST_ID.eq(POSTS.ID))
+                .join(USERS).on(COMMENTS.AUTHOR_ID.eq(USERS.ID))
+                .where(whereCondition)
+
+        return when (sortType) {
+            CommentSortType.LATEST -> query.orderBy(COMMENTS.CREATED_AT_UTC.desc(), COMMENTS.ID.desc())
+            CommentSortType.LIKE -> query.orderBy(COMMENTS.LIKE_COUNT.desc(), COMMENTS.CREATED_AT_UTC.desc(), COMMENTS.ID.desc())
+            CommentSortType.REPLY -> query.orderBy(COMMENTS.REPLY_COUNT.desc(), COMMENTS.CREATED_AT_UTC.desc(), COMMENTS.ID.desc())
+        }
+            .limit(size)
+            .fetch()
     }
 
-    /**
-     * count 기반 정렬의 커서 조건 생성 (추천수, 답글수)
-     *
-     * count가 동일한 댓글 구분을 위해 createdAt, id를 보조 키로 사용
-     * 조건: (count < cursor) OR (count = cursor AND createdAt < cursor) OR (count = cursor AND createdAt = cursor AND id < cursorId)
-     */
-    private fun buildCountCursorCondition(
-        cb: CriteriaBuilder,
-        root: Root<Comment>,
+    private fun buildCursorCondition(
         cursor: CommentCursor,
         sortType: CommentSortType,
-    ): Predicate {
-        val sortAttribute =
-            when (sortType) {
-                CommentSortType.LIKE -> Comment_.likeCount
-                CommentSortType.REPLY -> Comment_.replyCount
-                else -> Comment_.likeCount
-            }
+    ): Condition {
+        val cursorInstant = cursor.createdAt.atOffset(java.time.ZoneOffset.UTC)
+        val timestampTieBreak = COMMENTS.CREATED_AT_UTC.eq(cursorInstant).and(COMMENTS.ID.lt(cursor.id))
 
-        val countLess = cb.lessThan(root.get(sortAttribute), cursor.sortValue)
-        val countEqualCreatedAtLess =
-            cb.and(
-                cb.equal(root.get(sortAttribute), cursor.sortValue),
-                cb.lessThan(root.get(EntityBase_.createdAt), cursor.createdAt),
-            )
-        val countEqualCreatedAtEqualIdLess =
-            cb.and(
-                cb.equal(root.get(sortAttribute), cursor.sortValue),
-                cb.equal(root.get(EntityBase_.createdAt), cursor.createdAt),
-                cb.lessThan(root.get(EntityBase_.id), cursor.id),
-            )
-        return cb.or(countLess, countEqualCreatedAtLess, countEqualCreatedAtEqualIdLess)
+        return when (sortType) {
+            CommentSortType.LATEST -> COMMENTS.CREATED_AT_UTC.lt(cursorInstant).or(timestampTieBreak)
+            CommentSortType.LIKE ->
+                COMMENTS.LIKE_COUNT.lt(cursor.sortValue)
+                    .or(COMMENTS.LIKE_COUNT.eq(cursor.sortValue).and(COMMENTS.CREATED_AT_UTC.lt(cursorInstant)))
+                    .or(COMMENTS.LIKE_COUNT.eq(cursor.sortValue).and(timestampTieBreak))
+            CommentSortType.REPLY ->
+                COMMENTS.REPLY_COUNT.lt(cursor.sortValue)
+                    .or(COMMENTS.REPLY_COUNT.eq(cursor.sortValue).and(COMMENTS.CREATED_AT_UTC.lt(cursorInstant)))
+                    .or(COMMENTS.REPLY_COUNT.eq(cursor.sortValue).and(timestampTieBreak))
+        }
     }
 
-    /**
-     * 정렬 타입에 따른 ORDER BY 절 적용
-     *
-     * 모든 정렬은 DESC이며 동점자 처리를 위해 createdAt, id를 보조 정렬 키로 추가
-     */
-    private fun applyOrdering(
-        cb: CriteriaBuilder,
-        cq: CriteriaQuery<Comment>,
-        root: Root<Comment>,
-        sortType: CommentSortType,
-    ) {
-        val orders =
-            when (sortType) {
-                CommentSortType.LATEST ->
-                    listOf(
-                        cb.desc(root.get(EntityBase_.createdAt)),
-                        cb.desc(root.get(EntityBase_.id)),
-                    )
-                CommentSortType.LIKE ->
-                    listOf(
-                        cb.desc(root.get(Comment_.likeCount)),
-                        cb.desc(root.get(EntityBase_.createdAt)),
-                        cb.desc(root.get(EntityBase_.id)),
-                    )
-                CommentSortType.REPLY ->
-                    listOf(
-                        cb.desc(root.get(Comment_.replyCount)),
-                        cb.desc(root.get(EntityBase_.createdAt)),
-                        cb.desc(root.get(EntityBase_.id)),
-                    )
-            }
-        cq.orderBy(orders)
+    private fun toComment(record: Record): Comment {
+        val commentRecord = record.into(COMMENTS)
+        val postRecord = record.into(POSTS)
+        val author = record.into(USERS).toUser()
+        val post = postRecord.toPost(author)
+
+        return Comment(
+            content = requireNotNull(commentRecord.content),
+            post = post,
+            author = author,
+            parent = commentRecord.parentId?.let { parentId -> commentReference(parentId, post, author) },
+            depth = requireNotNull(commentRecord.depth),
+            likeCount = requireNotNull(commentRecord.likeCount),
+            replyCount = requireNotNull(commentRecord.replyCount),
+            deletedAt = commentRecord.deletedAtUtc?.toInstant(),
+        ).apply {
+            id = requireNotNull(commentRecord.id)
+            createdAt = requireNotNull(commentRecord.createdAtUtc).toInstant()
+            updatedAt = requireNotNull(commentRecord.updatedAtUtc).toInstant()
+        }
     }
+
+    private fun <T> flushThen(query: () -> T): T {
+        if (entityManager.isJoinedToTransaction) {
+            entityManager.flush()
+        }
+        return query()
+    }
+
+    private fun commentReference(
+        parentId: UUID,
+        post: Post,
+        author: User,
+    ): Comment = Comment(content = "", post = post, author = author).apply { id = parentId }
+
+    private fun UsersRecord.toUser(): User =
+        User(
+            name = requireNotNull(name),
+            email = requireNotNull(email),
+            provider = OAuthProvider.valueOf(requireNotNull(provider)),
+            identifier = requireNotNull(identifier),
+            role = UserRole.valueOf(requireNotNull(role)),
+            profileImageUrl = profileImageUrl.orEmpty(),
+            serviceProfileImageAttachmentId = serviceProfileImageAttachmentId,
+        ).apply {
+            id = requireNotNull(this@toUser.id)
+            createdAt = requireNotNull(createdAtUtc).toInstant()
+            updatedAt = requireNotNull(updatedAtUtc).toInstant()
+        }
+
+    private fun PostsRecord.toPost(author: User): Post =
+        Post(
+            title = requireNotNull(title),
+            content = requireNotNull(content),
+            author = author,
+            viewCount = requireNotNull(viewCount),
+            likeCount = requireNotNull(likeCount),
+            commentCount = requireNotNull(commentCount),
+            thumbnailImage = thumbnailImage,
+            status = PostStatusEnum.valueOf(requireNotNull(status)),
+        ).apply {
+            id = requireNotNull(this@toPost.id)
+            createdAt = requireNotNull(createdAtUtc).toInstant()
+            updatedAt = requireNotNull(updatedAtUtc).toInstant()
+        }
 }

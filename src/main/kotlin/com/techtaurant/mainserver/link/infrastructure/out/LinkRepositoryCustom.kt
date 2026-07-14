@@ -1,14 +1,22 @@
 package com.techtaurant.mainserver.link.infrastructure.out
 
 import com.techtaurant.mainserver.link.dto.LinkCursorV1
+import com.techtaurant.mainserver.link.entity.Link
 import com.techtaurant.mainserver.link.enums.LinkPeriod
 import com.techtaurant.mainserver.link.enums.LinkSortType
+import org.springframework.data.domain.Pageable
+import java.time.Instant
+import java.util.Optional
 import java.util.UUID
 
 /**
  * 공개 링크 동적 정렬/페이지네이션을 위한 커스텀 Repository
  */
 interface LinkRepositoryCustom {
+    fun findById(id: UUID): Optional<Link>
+
+    fun existsById(id: UUID): Boolean
+
     /**
      * 정렬 타입과 기간 필터를 적용해 공개 링크 ID를 정렬 순서대로 조회합니다.
      *
@@ -31,6 +39,30 @@ interface LinkRepositoryCustom {
         sourceCompanyUserId: UUID?,
         tag: String?,
     ): List<RankedLinkId>
+
+    fun findByUrl(url: String): Link?
+
+    fun findByIdWithTags(linkId: UUID): Link?
+
+    fun findAllWithTags(): List<Link>
+
+    fun findAllByConnectedUserIdWithTags(companyUserId: UUID): List<Link>
+
+    fun findFirstPageIds(
+        sourceCompanyUserId: UUID?,
+        tag: String?,
+        pageable: Pageable,
+    ): List<UUID>
+
+    fun findNextPageIds(
+        sourceCompanyUserId: UUID?,
+        tag: String?,
+        cursorCreatedAt: Instant,
+        cursorId: UUID,
+        pageable: Pageable,
+    ): List<UUID>
+
+    fun findAllByIdInWithTags(linkIds: List<UUID>): List<Link>
 }
 
 /**

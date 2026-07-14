@@ -2,10 +2,11 @@ package com.techtaurant.mainserver.link.infrastructure.out
 
 import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
 import org.springframework.data.jpa.repository.JpaRepository
+import java.util.Optional
 import java.util.UUID
 
-interface LinkCrawlBatchRepository : JpaRepository<LinkCrawlBatch, UUID> {
-    fun findAllByCompanyUserId(companyUserId: UUID): List<LinkCrawlBatch>
+interface LinkCrawlBatchRepository : JpaRepository<LinkCrawlBatch, UUID>, LinkCrawlBatchRepositoryCustom {
+    override fun findById(id: UUID): Optional<LinkCrawlBatch>
 
-    fun findAllByActiveTrue(): List<LinkCrawlBatch>
+    override fun existsById(id: UUID): Boolean
 }

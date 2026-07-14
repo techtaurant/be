@@ -2,16 +2,13 @@ package com.techtaurant.mainserver.link.infrastructure.out
 
 import com.techtaurant.mainserver.link.entity.Link
 import com.techtaurant.mainserver.link.entity.UserLink
-import jakarta.persistence.LockModeType
-import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
-import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.util.UUID
 
-interface UserLinkRepository : JpaRepository<UserLink, UUID> {
+interface UserLinkRepository : JpaRepository<UserLink, UUID>, UserLinkRepositoryCustom {
     @Modifying(clearAutomatically = false, flushAutomatically = true)
     @Query(
         """
@@ -27,37 +24,5 @@ interface UserLinkRepository : JpaRepository<UserLink, UUID> {
         @Param("linkId") linkId: UUID,
     ): Int
 
-    fun findByUserIdAndLinkId(
-        userId: UUID,
-        linkId: UUID,
-    ): UserLink?
-
-    fun findAllByUserId(userId: UUID): List<UserLink>
-
     fun deleteAllByLink(link: Link): Long
-
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT ul FROM UserLink ul WHERE ul.user.id = :userId AND ul.link.id = :linkId")
-    fun findByUserIdAndLinkIdForUpdate(
-        @Param("userId") userId: UUID,
-        @Param("linkId") linkId: UUID,
-    ): UserLink?
-
-    fun findByUserIdAndLinkIdIn(
-        userId: UUID,
-        linkIds: List<UUID>,
-    ): List<UserLink>
-
-    @Query(
-        """
-        SELECT userLink
-        FROM UserLink userLink
-        WHERE userLink.link.id = :linkId
-        ORDER BY userLink.createdAt ASC, userLink.id ASC
-        """,
-    )
-    fun findFirstSourceByLinkId(
-        @Param("linkId") linkId: UUID,
-        pageable: Pageable,
-    ): List<UserLink>
 }
