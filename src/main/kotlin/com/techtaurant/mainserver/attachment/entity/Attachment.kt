@@ -3,14 +3,6 @@ package com.techtaurant.mainserver.attachment.entity
 import com.techtaurant.mainserver.attachment.enums.AttachmentReferenceType
 import com.techtaurant.mainserver.attachment.enums.AttachmentStatus
 import com.techtaurant.mainserver.common.base.EntityBase
-import jakarta.persistence.Column
-import jakarta.persistence.Entity
-import jakarta.persistence.EnumType
-import jakarta.persistence.Enumerated
-import jakarta.persistence.Index
-import jakarta.persistence.Table
-import org.hibernate.annotations.JdbcTypeCode
-import org.hibernate.type.SqlTypes
 import java.util.UUID
 
 /**
@@ -28,31 +20,12 @@ import java.util.UUID
  * @property contentType MIME 타입 (예: image/jpeg)
  * @property fileSize 파일 크기 (bytes)
  */
-@Entity
-@Table(
-    name = "attachments",
-    indexes = [
-        Index(name = "idx_attachments_reference", columnList = "reference_id, reference_type"),
-        Index(name = "idx_attachments_status", columnList = "status"),
-    ],
-)
 class Attachment(
-    @Column(name = "reference_id")
     var referenceId: UUID? = null,
-    @Enumerated(EnumType.STRING)
-    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
-    @Column(name = "reference_type", nullable = false, columnDefinition = "attachment_reference_type")
     var referenceType: AttachmentReferenceType,
-    @Column(name = "object_key", nullable = false, length = 500)
     var objectKey: String,
-    @Enumerated(EnumType.STRING)
-    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
-    @Column(nullable = false, columnDefinition = "attachment_status")
     var status: AttachmentStatus,
-    @Column(name = "original_file_name", nullable = false, length = 255)
     var originalFileName: String,
-    @Column(name = "content_type", nullable = false, length = 100)
     var contentType: String,
-    @Column(name = "file_size", nullable = false)
     var fileSize: Long,
 ) : EntityBase()

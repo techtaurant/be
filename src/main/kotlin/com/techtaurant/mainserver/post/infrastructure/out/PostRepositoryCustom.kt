@@ -6,12 +6,50 @@ import com.techtaurant.mainserver.post.entity.Post
 import com.techtaurant.mainserver.post.entity.PostPeriod
 import com.techtaurant.mainserver.post.entity.PostSortType
 import com.techtaurant.mainserver.post.enums.PostStatusEnum
+import java.time.Instant
+import java.util.Optional
 import java.util.UUID
 
 /**
  * 게시물 동적 쿼리를 위한 커스텀 Repository
  */
 interface PostRepositoryCustom {
+    fun save(post: Post): Post
+
+    fun saveAndFlush(post: Post): Post
+
+    fun saveAll(posts: Iterable<Post>): List<Post>
+
+    fun saveAllAndFlush(posts: Iterable<Post>): List<Post>
+
+    fun delete(post: Post)
+
+    fun deleteAll(posts: Iterable<Post>)
+
+    fun deleteAll()
+
+    fun deleteAllInBatch()
+
+    fun findAll(): List<Post>
+
+    fun getReferenceById(id: UUID): Post
+
+    fun incrementViewCount(postId: UUID)
+
+    fun incrementLikeCount(postId: UUID)
+
+    fun decrementLikeCount(postId: UUID)
+
+    fun incrementCommentCount(postId: UUID)
+
+    fun decrementCommentCount(postId: UUID)
+
+    fun findById(id: UUID): Optional<Post>
+
+    fun findAllById(ids: Iterable<UUID>): List<Post>
+
+    fun existsById(id: UUID): Boolean
+
     /**
      * 동적 조건으로 게시물 목록 조회
      *
@@ -43,4 +81,29 @@ interface PostRepositoryCustom {
         postId: UUID,
         viewerId: UUID?,
     ): Post?
+
+    fun findAllByAuthorId(authorId: UUID): List<Post>
+
+    fun findPostDetailById(postId: UUID): Post?
+
+    fun findDraftsByAuthorWithCursor(
+        authorId: UUID,
+        cursorUpdatedAt: Instant,
+        cursorId: UUID,
+        limit: Int,
+    ): List<Post>
+
+    fun findDraftsByAuthorFirstPage(
+        authorId: UUID,
+        limit: Int,
+    ): List<Post>
+
+    fun findPostByIdWithAuthor(postId: UUID): Post?
+
+    fun findPublishedPostsByIdIn(postIds: List<UUID>): List<Post>
+
+    fun findStaleDraftsByAuthor(
+        authorId: UUID,
+        before: Instant,
+    ): List<Post>
 }

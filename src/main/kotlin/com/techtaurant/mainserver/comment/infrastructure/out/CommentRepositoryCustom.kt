@@ -3,12 +3,33 @@ package com.techtaurant.mainserver.comment.infrastructure.out
 import com.techtaurant.mainserver.comment.dto.CommentCursor
 import com.techtaurant.mainserver.comment.entity.Comment
 import com.techtaurant.mainserver.comment.enums.CommentSortType
+import java.util.Optional
 import java.util.UUID
 
 /**
  * 댓글 동적 쿼리를 위한 커스텀 Repository
  */
 interface CommentRepositoryCustom {
+    fun save(comment: Comment): Comment
+
+    fun saveAll(comments: Iterable<Comment>): List<Comment>
+
+    fun deleteAllInBatch()
+
+    fun incrementLikeCount(commentId: UUID)
+
+    fun decrementLikeCount(commentId: UUID)
+
+    fun incrementReplyCount(commentId: UUID)
+
+    fun decrementReplyCount(commentId: UUID)
+
+    fun findByPostIdAndDeletedAtIsNullOrderByCreatedAtAsc(postId: UUID): List<Comment>
+
+    fun findById(id: UUID): Optional<Comment>
+
+    fun existsById(id: UUID): Boolean
+
     /**
      * 삭제된 댓글을 포함해 댓글 ID 목록에 해당하는 댓글을 조회합니다.
      *
