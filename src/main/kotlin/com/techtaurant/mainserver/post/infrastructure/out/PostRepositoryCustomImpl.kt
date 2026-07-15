@@ -24,8 +24,6 @@ import com.techtaurant.mainserver.post.enums.PostStatusEnum
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
-import jakarta.persistence.EntityManager
-import org.hibernate.Hibernate
 import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.Field
@@ -43,12 +41,8 @@ import java.util.UUID
 @Repository
 class PostRepositoryCustomImpl(
     private val dsl: DSLContext,
-    private val entityManager: EntityManager,
-) : PostRepositoryCustom {
+) : PostRepository {
     override fun save(post: Post): Post {
-        if (entityManager.isJoinedToTransaction) {
-            entityManager.flush()
-        }
         val now = Instant.now()
         val postId = post.id ?: UuidCreator.getTimeOrderedEpoch().also { post.id = it }
         if (dsl.fetchExists(POSTS, POSTS.ID.eq(postId))) {
@@ -62,6 +56,7 @@ class PostRepositoryCustomImpl(
                 .set(POSTS.COMMENT_COUNT, post.commentCount)
                 .set(POSTS.THUMBNAIL_IMAGE, post.thumbnailImage)
                 .set(POSTS.STATUS, post.status.name)
+                .set(POSTS.CREATED_AT_UTC, post.createdAt.atOffset(ZoneOffset.UTC))
                 .set(POSTS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
                 .where(POSTS.ID.eq(postId))
                 .execute()
@@ -90,10 +85,7 @@ class PostRepositoryCustomImpl(
                 .execute()
         }
         post.updatedAt = now
-        return entityManager.find(Post::class.java, postId)?.also {
-            entityManager.refresh(it)
-            Hibernate.initialize(it.tags)
-        } ?: post
+        return post
     }
 
     override fun saveAndFlush(post: Post): Post = save(post)
@@ -119,8 +111,6 @@ class PostRepositoryCustomImpl(
     }
 
     override fun findAll(): List<Post> = fetchPosts(dsl.select(POSTS.ID).from(POSTS).fetch(POSTS.ID).filterNotNull())
-
-    override fun flush() = Unit
 
     override fun getReferenceById(id: UUID): Post = findById(id).orElseThrow()
 
@@ -173,8 +163,6 @@ class PostRepositoryCustomImpl(
         tagIds: List<UUID>?,
         viewerId: UUID?,
     ): List<PostWithSortValue> {
-        entityManager.flush()
-
         val rankedPostIds =
             when (sortType) {
                 PostSortType.LATEST ->
@@ -214,7 +202,6 @@ class PostRepositoryCustomImpl(
         postId: UUID,
         viewerId: UUID?,
     ): Post? {
-        entityManager.flush()
         return fetchPosts(listOf(postId), viewerId).firstOrNull()
     }
 
@@ -424,12 +411,7 @@ class PostRepositoryCustomImpl(
         return rows.groupBy { requireNotNull(it[POSTS.ID]) }.map { (_, postRows) -> toPost(postRows) }
     }
 
-    private fun <T> flushThen(query: () -> T): T {
-        if (entityManager.isJoinedToTransaction) {
-            entityManager.flush()
-        }
-        return query()
-    }
+    private fun <T> flushThen(query: () -> T): T = query()
 
     private fun fetchPostIds(condition: Condition): List<UUID> =
         dsl.select(POSTS.ID).from(POSTS).where(condition).fetch(POSTS.ID).filterNotNull()

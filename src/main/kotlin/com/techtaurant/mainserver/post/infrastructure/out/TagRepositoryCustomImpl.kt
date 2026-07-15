@@ -18,7 +18,7 @@ import java.util.UUID
 @Repository
 class TagRepositoryCustomImpl(
     private val dsl: DSLContext,
-) : TagRepositoryCustom {
+) : TagRepository {
     override fun save(tag: Tag): Tag {
         val id = tag.id ?: UuidCreator.getTimeOrderedEpoch().also { tag.id = it }
         val now = Instant.now()

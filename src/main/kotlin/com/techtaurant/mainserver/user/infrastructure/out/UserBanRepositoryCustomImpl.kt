@@ -19,7 +19,7 @@ import java.util.UUID
 @Repository
 class UserBanRepositoryCustomImpl(
     private val dsl: DSLContext,
-) : UserBanRepositoryCustom {
+) : UserBanRepository {
     private val bannedUser = USERS.`as`("banned_user")
 
     override fun save(userBan: UserBan): UserBan {

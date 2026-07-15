@@ -16,7 +16,7 @@ import java.util.UUID
 @Repository
 class LinkLikeLogRepositoryCustomImpl(
     private val dsl: DSLContext,
-) : LinkLikeLogRepositoryCustom {
+) : LinkLikeLogRepository {
     override fun save(log: LinkLikeLog): LinkLikeLog {
         val id = log.id ?: com.github.f4b6a3.uuid.UuidCreator.getTimeOrderedEpoch().also { log.id = it }
         val now = Instant.now().atOffset(ZoneOffset.UTC)

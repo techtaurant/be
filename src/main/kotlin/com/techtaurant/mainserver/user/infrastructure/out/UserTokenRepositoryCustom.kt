@@ -15,8 +15,6 @@ interface UserTokenRepositoryCustom {
 
     fun count(): Long
 
-    fun flush()
-
     fun existsByUserIdAndTokenHashAndUserRole(
         userId: UUID,
         tokenHash: String,

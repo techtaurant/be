@@ -22,7 +22,7 @@ import java.util.UUID
 @Repository
 class NotificationRecipientRepositoryCustomImpl(
     private val dsl: DSLContext,
-) : NotificationRecipientRepositoryCustom {
+) : NotificationRecipientRepository {
     override fun save(recipient: NotificationRecipient): NotificationRecipient {
         val id = requireNotNull(recipient.id)
         dsl.update(NOTIFICATION_RECIPIENTS)

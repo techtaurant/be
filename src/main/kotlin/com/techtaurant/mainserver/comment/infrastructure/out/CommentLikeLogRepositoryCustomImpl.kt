@@ -5,8 +5,10 @@ import com.techtaurant.mainserver.comment.entity.Comment
 import com.techtaurant.mainserver.comment.entity.CommentLikeLog
 import com.techtaurant.mainserver.jooq.tables.CommentLikeLog.Companion.COMMENT_LIKE_LOG
 import com.techtaurant.mainserver.jooq.tables.records.CommentLikeLogRecord
+import com.techtaurant.mainserver.post.entity.Post
+import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.user.entity.User
-import jakarta.persistence.EntityManager
+import com.techtaurant.mainserver.user.enums.UserRole
 import org.jooq.DSLContext
 import org.springframework.stereotype.Repository
 import java.time.Instant
@@ -16,8 +18,7 @@ import java.util.UUID
 @Repository
 class CommentLikeLogRepositoryCustomImpl(
     private val dsl: DSLContext,
-    private val entityManager: EntityManager,
-) : CommentLikeLogRepositoryCustom {
+) : CommentLikeLogRepository {
     override fun save(log: CommentLikeLog): CommentLikeLog {
         val id = log.id ?: UuidCreator.getTimeOrderedEpoch().also { log.id = it }
         val now = Instant.now().atOffset(ZoneOffset.UTC)
@@ -72,12 +73,17 @@ class CommentLikeLogRepositoryCustomImpl(
 
     private fun CommentLikeLogRecord.toCommentLikeLog(): CommentLikeLog =
         CommentLikeLog(
-            entityManager.getReference(Comment::class.java, requireNotNull(commentId)),
-            entityManager.getReference(User::class.java, requireNotNull(userId)),
+            commentReference(requireNotNull(commentId)),
+            userReference(requireNotNull(userId)),
             requireNotNull(isLiked),
         ).apply {
             id = requireNotNull(this@toCommentLikeLog.id)
             createdAt = requireNotNull(createdAtUtc).toInstant()
             updatedAt = requireNotNull(updatedAtUtc).toInstant()
         }
+
+    private fun commentReference(commentId: UUID): Comment =
+        Comment("", Post("", "", userReference(commentId)), userReference(commentId)).apply { id = commentId }
+
+    private fun userReference(userId: UUID): User = User("", "", OAuthProvider.GOOGLE, "", UserRole.USER, "").apply { id = userId }
 }

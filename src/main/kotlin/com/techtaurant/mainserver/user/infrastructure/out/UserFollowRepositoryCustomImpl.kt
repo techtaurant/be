@@ -19,7 +19,7 @@ import java.util.UUID
 @Repository
 class UserFollowRepositoryCustomImpl(
     private val dsl: DSLContext,
-) : UserFollowRepositoryCustom {
+) : UserFollowRepository {
     private val follower = USERS.`as`("follower")
     private val following = USERS.`as`("following")
 

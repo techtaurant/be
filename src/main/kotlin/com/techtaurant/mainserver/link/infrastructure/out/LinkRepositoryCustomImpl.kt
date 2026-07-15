@@ -13,7 +13,6 @@ import com.techtaurant.mainserver.link.entity.Link
 import com.techtaurant.mainserver.link.enums.LinkPeriod
 import com.techtaurant.mainserver.link.enums.LinkSortType
 import com.techtaurant.mainserver.post.entity.Tag
-import jakarta.persistence.EntityManager
 import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.Field
@@ -31,8 +30,7 @@ import java.util.UUID
 @Repository
 class LinkRepositoryCustomImpl(
     private val dsl: DSLContext,
-    private val entityManager: EntityManager,
-) : LinkRepositoryCustom {
+) : LinkRepository {
     override fun save(link: Link): Link {
         val id = link.id ?: UuidCreator.getTimeOrderedEpoch().also { link.id = it }
         val now = Instant.now()
@@ -144,9 +142,6 @@ class LinkRepositoryCustomImpl(
         tag: String?,
     ): List<RankedLinkId> =
         run {
-            // jOOQ는 Hibernate의 AUTO flush를 유발하지 않으므로 같은 트랜잭션의 쓰기를 먼저 반영한다.
-            entityManager.flush()
-
             when (sortType) {
                 LinkSortType.PUBLISHED -> findPublishedLinks(cursor, limit, period, sourceCompanyUserId, tag)
                 LinkSortType.LIKE, LinkSortType.SAVE -> findStatRankedLinks(cursor, limit, sortType, period, sourceCompanyUserId, tag)
@@ -274,9 +269,6 @@ class LinkRepositoryCustomImpl(
             .filterNotNull()
 
     private fun fetchLinks(condition: Condition): List<Link> {
-        if (entityManager.isJoinedToTransaction) {
-            entityManager.flush()
-        }
         val rows =
             dsl.select(LINKS.asterisk(), TAGS.asterisk())
                 .from(LINKS)

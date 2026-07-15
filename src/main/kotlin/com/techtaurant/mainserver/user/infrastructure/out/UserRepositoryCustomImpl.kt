@@ -6,7 +6,6 @@ import com.techtaurant.mainserver.jooq.tables.records.UsersRecord
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
-import jakarta.persistence.EntityManager
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 import org.springframework.stereotype.Repository
@@ -19,10 +18,7 @@ import java.util.UUID
 @Repository
 class UserRepositoryCustomImpl(
     private val dsl: DSLContext,
-    private val entityManager: EntityManager,
-) : UserRepositoryCustom {
-    private val trackedUsers = ThreadLocal.withInitial { linkedMapOf<UUID, User>() }
-
+) : UserRepository {
     override fun findById(id: UUID): Optional<User> = Optional.ofNullable(dsl.selectFrom(USERS).where(USERS.ID.eq(id)).fetchOne()?.toUser())
 
     override fun findAllById(ids: Iterable<UUID>): List<User> {
@@ -62,28 +58,17 @@ class UserRepositoryCustomImpl(
                 .set(USERS.UPDATED_AT_UTC, now.toUtcOffsetDateTime())
                 .execute()
         }
-        track(user)
         return user
     }
 
     override fun saveAndFlush(user: User): User = save(user)
 
     override fun delete(user: User) {
-        if (entityManager.isJoinedToTransaction) {
-            entityManager.flush()
-        }
         user.id?.let { dsl.deleteFrom(USERS).where(USERS.ID.eq(it)).execute() }
-        trackedUsers.get().remove(user.id)
     }
 
     override fun deleteAllInBatch() {
         dsl.deleteFrom(USERS).execute()
-        trackedUsers.remove()
-    }
-
-    override fun flush() {
-        trackedUsers.get().values.forEach { update(it, Instant.now()) }
-        trackedUsers.remove()
     }
 
     override fun findByIdentifierAndProvider(
@@ -126,7 +111,7 @@ class UserRepositoryCustomImpl(
             id = requireNotNull(this@toUser.id)
             createdAt = requireNotNull(createdAtUtc).toInstant()
             updatedAt = requireNotNull(updatedAtUtc).toInstant()
-        }.also(::track)
+        }
 
     private fun update(
         user: User,
@@ -145,10 +130,6 @@ class UserRepositoryCustomImpl(
             .where(USERS.ID.eq(userId))
             .execute()
         user.updatedAt = now
-    }
-
-    private fun track(user: User) {
-        user.id?.let { trackedUsers.get()[it] = user }
     }
 
     private fun Instant.toUtcOffsetDateTime(): OffsetDateTime = atOffset(ZoneOffset.UTC)

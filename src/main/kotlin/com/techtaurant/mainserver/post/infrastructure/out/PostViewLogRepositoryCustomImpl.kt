@@ -12,7 +12,7 @@ import java.util.UUID
 @Repository
 class PostViewLogRepositoryCustomImpl(
     private val dsl: DSLContext,
-) : PostViewLogRepositoryCustom {
+) : PostViewLogRepository {
     override fun save(log: PostViewLog): PostViewLog {
         val id = log.id ?: UuidCreator.getTimeOrderedEpoch().also { log.id = it }
         val now = Instant.now().atOffset(ZoneOffset.UTC)

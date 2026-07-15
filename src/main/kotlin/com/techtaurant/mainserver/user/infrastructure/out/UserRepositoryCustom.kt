@@ -25,8 +25,6 @@ interface UserRepositoryCustom {
 
     fun deleteAllInBatch()
 
-    fun flush()
-
     fun findByIdentifierAndProvider(
         identifier: String,
         provider: OAuthProvider,

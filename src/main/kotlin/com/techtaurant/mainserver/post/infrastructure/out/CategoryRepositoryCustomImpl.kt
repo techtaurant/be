@@ -19,7 +19,7 @@ import java.util.UUID
 @Repository
 class CategoryRepositoryCustomImpl(
     private val dsl: DSLContext,
-) : CategoryRepositoryCustom {
+) : CategoryRepository {
     private val descendant = CATEGORIES.`as`("descendant")
 
     override fun save(category: Category): Category {

@@ -6,7 +6,6 @@ plugins {
     id("org.springframework.boot") version "3.5.7"
     id("io.spring.dependency-management") version "1.1.7"
     id("org.jooq.jooq-codegen-gradle") version "3.19.27"
-    kotlin("plugin.jpa") version "1.9.25"
     id("com.diffplug.spotless") version "6.25.0"
     jacoco
 }
@@ -29,7 +28,7 @@ repositories {
 
 dependencies {
     implementation(enforcedPlatform("io.opentelemetry.instrumentation:opentelemetry-instrumentation-bom:2.26.1"))
-    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.springframework.data:spring-data-commons")
     implementation("org.springframework.boot:spring-boot-starter-jooq")
     implementation("org.jooq:jooq-kotlin")
     implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
@@ -152,12 +151,6 @@ jooq {
             }
         }
     }
-}
-
-allOpen {
-    annotation("jakarta.persistence.Entity")
-    annotation("jakarta.persistence.MappedSuperclass")
-    annotation("jakarta.persistence.Embeddable")
 }
 
 // JaCoCo Configuration

@@ -16,8 +16,6 @@ interface CommentRepositoryCustom {
 
     fun deleteAllInBatch()
 
-    fun flush()
-
     fun incrementLikeCount(commentId: UUID)
 
     fun decrementLikeCount(commentId: UUID)

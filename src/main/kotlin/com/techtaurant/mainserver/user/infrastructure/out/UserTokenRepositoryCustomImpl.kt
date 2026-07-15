@@ -15,7 +15,7 @@ import java.util.UUID
 @Repository
 class UserTokenRepositoryCustomImpl(
     private val dsl: DSLContext,
-) : UserTokenRepositoryCustom {
+) : UserTokenRepository {
     override fun saveAndFlush(userToken: UserToken): UserToken {
         val now = Instant.now()
         val id = userToken.id ?: UuidCreator.getTimeOrderedEpoch().also { userToken.id = it }
@@ -56,8 +56,6 @@ class UserTokenRepositoryCustomImpl(
         }
 
     override fun count(): Long = dsl.fetchCount(USER_TOKENS).toLong()
-
-    override fun flush() = Unit
 
     override fun existsByUserIdAndTokenHashAndUserRole(
         userId: UUID,

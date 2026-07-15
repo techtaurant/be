@@ -17,7 +17,7 @@ import java.util.UUID
 @Repository
 class LinkCrawlBatchRepositoryCustomImpl(
     private val dsl: DSLContext,
-) : LinkCrawlBatchRepositoryCustom {
+) : LinkCrawlBatchRepository {
     override fun save(batch: LinkCrawlBatch): LinkCrawlBatch {
         val id = batch.id ?: UuidCreator.getTimeOrderedEpoch().also { batch.id = it }
         val now = Instant.now().atOffset(ZoneOffset.UTC)

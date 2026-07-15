@@ -17,7 +17,7 @@ import java.util.UUID
 @Repository
 class AttachmentRepositoryCustomImpl(
     private val dsl: DSLContext,
-) : AttachmentRepositoryCustom {
+) : AttachmentRepository {
     override fun save(attachment: Attachment): Attachment {
         val id = attachment.id ?: UuidCreator.getTimeOrderedEpoch().also { attachment.id = it }
         val now = Instant.now().atOffset(ZoneOffset.UTC)

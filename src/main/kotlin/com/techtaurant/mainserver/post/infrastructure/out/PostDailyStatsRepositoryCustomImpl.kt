@@ -19,7 +19,7 @@ import java.util.UUID
 @Repository
 class PostDailyStatsRepositoryCustomImpl(
     private val dsl: DSLContext,
-) : PostDailyStatsRepositoryCustom {
+) : PostDailyStatsRepository {
     override fun save(stats: PostDailyStats): PostDailyStats {
         val id = stats.id ?: UuidCreator.getTimeOrderedEpoch().also { stats.id = it }
         val now = Instant.now().atOffset(ZoneOffset.UTC)

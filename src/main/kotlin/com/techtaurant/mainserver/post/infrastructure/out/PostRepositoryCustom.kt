@@ -32,8 +32,6 @@ interface PostRepositoryCustom {
 
     fun findAll(): List<Post>
 
-    fun flush()
-
     fun getReferenceById(id: UUID): Post
 
     fun incrementViewCount(postId: UUID)

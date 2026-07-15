@@ -14,7 +14,6 @@ import com.techtaurant.mainserver.post.enums.PostStatusEnum
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
-import jakarta.persistence.EntityManager
 import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.Record
@@ -33,10 +32,8 @@ import java.util.UUID
 @Repository
 class CommentRepositoryCustomImpl(
     private val dsl: DSLContext,
-    private val entityManager: EntityManager,
-) : CommentRepositoryCustom {
+) : CommentRepository {
     override fun save(comment: Comment): Comment {
-        if (entityManager.isJoinedToTransaction) entityManager.flush()
         val now = Instant.now()
         val id = comment.id ?: UuidCreator.getTimeOrderedEpoch().also { comment.id = it }
         if (dsl.fetchExists(COMMENTS, COMMENTS.ID.eq(id))) {
@@ -68,7 +65,7 @@ class CommentRepositoryCustomImpl(
             comment.createdAt = now
         }
         comment.updatedAt = now
-        return entityManager.find(Comment::class.java, id)?.also(entityManager::refresh) ?: comment
+        return comment
     }
 
     override fun saveAll(comments: Iterable<Comment>): List<Comment> = comments.map(::save)
@@ -76,8 +73,6 @@ class CommentRepositoryCustomImpl(
     override fun deleteAllInBatch() {
         dsl.deleteFrom(COMMENTS).execute()
     }
-
-    override fun flush() = Unit
 
     override fun incrementLikeCount(commentId: UUID) {
         dsl.update(COMMENTS).set(COMMENTS.LIKE_COUNT, COMMENTS.LIKE_COUNT.plus(1L)).where(COMMENTS.ID.eq(commentId)).execute()
@@ -227,12 +222,7 @@ class CommentRepositoryCustomImpl(
         }
     }
 
-    private fun <T> flushThen(query: () -> T): T {
-        if (entityManager.isJoinedToTransaction) {
-            entityManager.flush()
-        }
-        return query()
-    }
+    private fun <T> flushThen(query: () -> T): T = query()
 
     private fun commentReference(
         parentId: UUID,

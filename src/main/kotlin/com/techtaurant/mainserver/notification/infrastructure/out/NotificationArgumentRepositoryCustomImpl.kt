@@ -16,7 +16,7 @@ import java.util.UUID
 @Repository
 class NotificationArgumentRepositoryCustomImpl(
     private val dsl: DSLContext,
-) : NotificationArgumentRepositoryCustom {
+) : NotificationArgumentRepository {
     override fun findAllByNotificationIdOrderByCreatedAtAsc(notificationId: UUID): List<NotificationArgument> =
         fetchArguments(NOTIFICATION_ARGUMENTS.NOTIFICATION_ID.eq(notificationId))
 

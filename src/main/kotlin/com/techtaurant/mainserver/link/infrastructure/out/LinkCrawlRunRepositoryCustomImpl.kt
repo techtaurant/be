@@ -21,7 +21,7 @@ import java.util.UUID
 class LinkCrawlRunRepositoryCustomImpl(
     private val dsl: DSLContext,
     private val linkCrawlBatchRepository: LinkCrawlBatchRepository,
-) : LinkCrawlRunRepositoryCustom {
+) : LinkCrawlRunRepository {
     override fun save(run: LinkCrawlRun): LinkCrawlRun {
         val id = run.id ?: UuidCreator.getTimeOrderedEpoch().also { run.id = it }
         val now = Instant.now().atOffset(ZoneOffset.UTC)

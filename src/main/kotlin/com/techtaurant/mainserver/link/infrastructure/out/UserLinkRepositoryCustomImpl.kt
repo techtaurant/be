@@ -16,7 +16,7 @@ import java.util.UUID
 @Repository
 class UserLinkRepositoryCustomImpl(
     private val dsl: DSLContext,
-) : UserLinkRepositoryCustom {
+) : UserLinkRepository {
     override fun save(userLink: UserLink): UserLink {
         val id = userLink.id ?: UuidCreator.getTimeOrderedEpoch().also { userLink.id = it }
         val now = Instant.now()

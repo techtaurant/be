@@ -20,7 +20,7 @@ import java.util.UUID
 class LinkCrawlFailedJobRepositoryCustomImpl(
     private val dsl: DSLContext,
     private val linkCrawlRunRepository: LinkCrawlRunRepository,
-) : LinkCrawlFailedJobRepositoryCustom {
+) : LinkCrawlFailedJobRepository {
     override fun save(job: LinkCrawlFailedJob): LinkCrawlFailedJob {
         val id = job.id ?: UuidCreator.getTimeOrderedEpoch().also { job.id = it }
         val now = Instant.now().atOffset(ZoneOffset.UTC)

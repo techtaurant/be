@@ -6,7 +6,6 @@ import com.techtaurant.mainserver.post.entity.PostReadLog
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
-import jakarta.persistence.EntityManager
 import org.jooq.DSLContext
 import org.springframework.stereotype.Repository
 import java.time.Instant
@@ -17,8 +16,7 @@ import java.util.UUID
 @Repository
 class PostReadLogRepositoryCustomImpl(
     private val dsl: DSLContext,
-    private val entityManager: EntityManager,
-) : PostReadLogRepositoryCustom {
+) : PostReadLogRepository {
     override fun save(log: PostReadLog): PostReadLog {
         val id = log.id ?: com.github.f4b6a3.uuid.UuidCreator.getTimeOrderedEpoch().also { log.id = it }
         val now = Instant.now().atOffset(ZoneOffset.UTC)
@@ -76,12 +74,7 @@ class PostReadLogRepositoryCustomImpl(
             }
         }
 
-    private fun <T> flushThen(query: () -> T): T {
-        if (entityManager.isJoinedToTransaction) {
-            entityManager.flush()
-        }
-        return query()
-    }
+    private fun <T> flushThen(query: () -> T): T = query()
 
     private fun PostReadLogRecord.toPostReadLog(): PostReadLog =
         PostReadLog(requireNotNull(postId), userReference(requireNotNull(userId))).apply {

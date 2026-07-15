@@ -19,7 +19,7 @@ import java.util.UUID
 @Repository
 class NotificationRepositoryCustomImpl(
     private val dsl: DSLContext,
-) : NotificationRepositoryCustom {
+) : NotificationRepository {
     override fun save(notification: Notification): Notification {
         val id = notification.id ?: UuidCreator.getTimeOrderedEpoch().also { notification.id = it }
         val now = Instant.now().atOffset(ZoneOffset.UTC)
