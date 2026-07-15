@@ -61,7 +61,7 @@ class UserWriteServiceTest {
             val targetUser = firstArg<User>()
             UserResponse.from(targetUser, targetUser.profileImageUrl)
         }
-        every { userRepository.flush() } just runs
+        every { userRepository.save(any()) } answers { firstArg() }
         every { userTokenRepository.deleteAllByUserId(any()) } returns 0
         every { attachmentService.confirmAttachmentsByIds(any(), any(), any()) } just runs
         every { attachmentService.deleteOrphanedAttachmentsByIds(any(), any(), any()) } just runs
@@ -148,7 +148,7 @@ class UserWriteServiceTest {
     fun updateMe_duplicateName_throwsConflictApiException() {
         // given
         every {
-            userRepository.flush()
+            userRepository.save(any())
         } throws DataIntegrityViolationException("duplicate key value violates unique constraint \"uk_users_name\"")
 
         // when & then

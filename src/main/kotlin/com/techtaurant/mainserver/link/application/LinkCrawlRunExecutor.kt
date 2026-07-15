@@ -52,6 +52,7 @@ class LinkCrawlRunExecutor(
         run.errorMessage = exception.toLinkCrawlErrorMessage()
         run.finishedAt = Instant.now()
         run.batch.lastTriggeredAt = Instant.now()
+        linkCrawlRunRepository.save(run)
     }
 
     private fun crawl(
@@ -253,6 +254,7 @@ class LinkCrawlRunExecutor(
         run.status =
             if (result.failedJobCount == 0) LinkCrawlRunStatus.COMPLETED else LinkCrawlRunStatus.UNRESOLVED
         run.batch.lastTriggeredAt = Instant.now()
+        linkCrawlRunRepository.save(run)
     }
 
     private fun findRunOrThrow(runId: UUID): LinkCrawlRun {

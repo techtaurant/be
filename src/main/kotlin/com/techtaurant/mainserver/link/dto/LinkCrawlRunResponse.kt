@@ -49,7 +49,7 @@ data class LinkCrawlRunResponse(
                 id = run.id!!,
                 batchId = run.batch.id!!,
                 triggerType = run.triggerType,
-                status = run.status,
+                status = if (hasUnresolvedFailedJobs) LinkCrawlRunStatus.UNRESOLVED else run.status,
                 collectedCount = run.collectedCount,
                 newLinkCount = run.newLinkCount,
                 existingLinkCount = run.existingLinkCount,

@@ -1,32 +1,17 @@
 package com.techtaurant.mainserver.post.infrastructure.out
 
 import com.techtaurant.mainserver.post.entity.Tag
-import org.springframework.data.jpa.repository.JpaRepository
-import org.springframework.data.jpa.repository.Query
-import org.springframework.data.repository.query.Param
+import org.springframework.data.repository.Repository
 import java.util.UUID
 
-interface TagRepository : JpaRepository<Tag, UUID> {
-    fun findByName(name: String): Tag?
+interface TagRepository : Repository<Tag, UUID>, TagRepositoryCustom {
+    override fun findByName(name: String): Tag?
 
-    fun findByNameIn(names: Collection<String>): List<Tag>
+    override fun findByNameIn(names: Collection<String>): List<Tag>
 
-    @Query(
-        value = """
-            SELECT t.id, t.name, t.created_at_utc as createdAt, t.updated_at_utc as updatedAt,
-                   COALESCE(COUNT(pt.post_id), 0) as postCount
-            FROM tags t
-            JOIN post_tags pt ON t.id = pt.tag_id
-            WHERE (:name IS NULL OR t.name ILIKE '%' || :name || '%')
-            GROUP BY t.id, t.name, t.created_at_utc, t.updated_at_utc
-            ORDER BY postCount DESC, t.id ASC
-            LIMIT :limit
-        """,
-        nativeQuery = true,
-    )
-    fun findAllWithPostCount(
-        @Param("name") name: String?,
-        @Param("limit") limit: Int,
+    override fun findAllWithPostCount(
+        name: String?,
+        limit: Int,
     ): List<TagWithPostCountProjection>
 
     /**
@@ -39,25 +24,10 @@ interface TagRepository : JpaRepository<Tag, UUID> {
      * - postCount가 커서보다 작거나
      * - postCount가 같으면 id가 커서보다 큰 항목
      */
-    @Query(
-        value = """
-            SELECT t.id, t.name, t.created_at_utc as createdAt, t.updated_at_utc as updatedAt,
-                   COALESCE(COUNT(pt.post_id), 0) as postCount
-            FROM tags t
-            JOIN post_tags pt ON t.id = pt.tag_id
-            WHERE (:name IS NULL OR t.name ILIKE '%' || :name || '%')
-            GROUP BY t.id, t.name, t.created_at_utc, t.updated_at_utc
-            HAVING COALESCE(COUNT(pt.post_id), 0) < :lastPostCount
-                OR (COALESCE(COUNT(pt.post_id), 0) = :lastPostCount AND t.id > :lastTagId)
-            ORDER BY postCount DESC, t.id ASC
-            LIMIT :limit
-        """,
-        nativeQuery = true,
-    )
-    fun findAllWithPostCountAfterCursor(
-        @Param("name") name: String?,
-        @Param("lastPostCount") lastPostCount: Long,
-        @Param("lastTagId") lastTagId: UUID,
-        @Param("limit") limit: Int,
+    override fun findAllWithPostCountAfterCursor(
+        name: String?,
+        lastPostCount: Long,
+        lastTagId: UUID,
+        limit: Int,
     ): List<TagWithPostCountProjection>
 }

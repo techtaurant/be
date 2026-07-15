@@ -3,7 +3,6 @@ package com.techtaurant.mainserver.comment.entity
 import com.techtaurant.mainserver.common.base.EntityBase
 import com.techtaurant.mainserver.post.entity.Post
 import com.techtaurant.mainserver.user.entity.User
-import jakarta.persistence.*
 import java.time.Instant
 
 /**
@@ -21,28 +20,14 @@ import java.time.Instant
  * @property children 자식 댓글 (대댓글들)
  * @property deletedAt 삭제 시각
  */
-@Entity
-@Table(name = "comments")
 class Comment(
-    @Column(nullable = false, columnDefinition = "TEXT")
     var content: String,
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "post_id", nullable = false)
     var post: Post,
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "author_id", nullable = false)
     var author: User,
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "parent_id")
     var parent: Comment? = null,
-    @Column(nullable = false)
     var depth: Int = 0,
-    @Column(nullable = false)
     var likeCount: Long = 0,
-    @Column(nullable = false)
     var replyCount: Long = 0,
-    @OneToMany(mappedBy = "parent", cascade = [CascadeType.ALL], orphanRemoval = true)
     var children: MutableList<Comment> = mutableListOf(),
-    @Column(name = "deleted_at_utc")
     var deletedAt: Instant? = null,
 ) : EntityBase()

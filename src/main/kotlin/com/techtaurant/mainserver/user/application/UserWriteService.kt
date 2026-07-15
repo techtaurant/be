@@ -43,15 +43,6 @@ class UserWriteService(
                 throw ApiException(DefaultStatus.BAD_REQUEST, "이름은 공백일 수 없습니다")
             }
             user.name = normalizedName
-
-            try {
-                userRepository.flush()
-            } catch (exception: DataIntegrityViolationException) {
-                if (isUserNameUniqueConstraintViolation(exception)) {
-                    throw ApiException(UserStatus.USER_NAME_ALREADY_EXISTS)
-                }
-                throw exception
-            }
         }
 
         if (request.hasServiceProfileImageAttachmentId()) {
@@ -73,6 +64,17 @@ class UserWriteService(
             )
         }
 
+        if (request.name != null || request.hasServiceProfileImageAttachmentId()) {
+            try {
+                userRepository.save(user)
+            } catch (exception: DataIntegrityViolationException) {
+                if (request.name != null && isUserNameUniqueConstraintViolation(exception)) {
+                    throw ApiException(UserStatus.USER_NAME_ALREADY_EXISTS)
+                }
+                throw exception
+            }
+        }
+
         return userResponseAssembler.assemble(user)
     }
 
@@ -88,6 +90,7 @@ class UserWriteService(
 
         revokePermanentTokensOnRoleChange(targetUserId, user.role, role)
         user.role = role
+        userRepository.save(user)
 
         return UpdateUserRoleResponse.from(user)
     }

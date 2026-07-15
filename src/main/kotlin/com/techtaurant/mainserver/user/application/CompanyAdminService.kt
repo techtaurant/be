@@ -109,7 +109,6 @@ class CompanyAdminService(
         val token = jwtTokenProvider.createPermanentAccessToken(companyUserIdValue, companyUser.role)
 
         userTokenRepository.deleteAllByUserId(companyUserIdValue)
-        userTokenRepository.flush()
 
         val userToken =
             userTokenRepository.saveAndFlush(
