@@ -1,14 +1,11 @@
 package com.techtaurant.mainserver.comment.infrastructure.out
 
 import com.techtaurant.mainserver.comment.entity.Comment
-import org.springframework.data.jpa.repository.JpaRepository
-import org.springframework.data.jpa.repository.Modifying
-import org.springframework.data.jpa.repository.Query
-import org.springframework.data.repository.query.Param
+import org.springframework.data.repository.Repository
 import java.util.Optional
 import java.util.UUID
 
-interface CommentRepository : JpaRepository<Comment, UUID>, CommentRepositoryCustom {
+interface CommentRepository : Repository<Comment, UUID>, CommentRepositoryCustom {
     override fun findById(id: UUID): Optional<Comment>
 
     override fun existsById(id: UUID): Boolean
@@ -34,11 +31,7 @@ interface CommentRepository : JpaRepository<Comment, UUID>, CommentRepositoryCus
      *
      * @param commentId 좋아요수를 증가시킬 댓글 ID
      */
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Query("UPDATE Comment c SET c.likeCount = c.likeCount + 1 WHERE c.id = :commentId")
-    fun incrementLikeCount(
-        @Param("commentId") commentId: UUID,
-    )
+    override fun incrementLikeCount(commentId: UUID)
 
     /**
      * 댓글의 좋아요수를 원자적으로 1 감소시킵니다.
@@ -52,31 +45,19 @@ interface CommentRepository : JpaRepository<Comment, UUID>, CommentRepositoryCus
      *
      * @param commentId 좋아요수를 감소시킬 댓글 ID
      */
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Query("UPDATE Comment c SET c.likeCount = c.likeCount - 1 WHERE c.id = :commentId")
-    fun decrementLikeCount(
-        @Param("commentId") commentId: UUID,
-    )
+    override fun decrementLikeCount(commentId: UUID)
 
     /**
      * 부모 댓글의 대댓글 수를 원자적으로 1 증가시킵니다.
      *
      * @param commentId 부모 댓글 ID
      */
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Query("UPDATE Comment c SET c.replyCount = c.replyCount + 1 WHERE c.id = :commentId")
-    fun incrementReplyCount(
-        @Param("commentId") commentId: UUID,
-    )
+    override fun incrementReplyCount(commentId: UUID)
 
     /**
      * 부모 댓글의 대댓글 수를 원자적으로 1 감소시킵니다.
      *
      * @param commentId 부모 댓글 ID
      */
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Query("UPDATE Comment c SET c.replyCount = CASE WHEN c.replyCount > 0 THEN c.replyCount - 1 ELSE 0 END WHERE c.id = :commentId")
-    fun decrementReplyCount(
-        @Param("commentId") commentId: UUID,
-    )
+    override fun decrementReplyCount(commentId: UUID)
 }

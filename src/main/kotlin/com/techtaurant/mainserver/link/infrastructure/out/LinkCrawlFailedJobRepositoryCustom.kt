@@ -3,10 +3,13 @@ package com.techtaurant.mainserver.link.infrastructure.out
 import com.techtaurant.mainserver.link.entity.LinkCrawlFailedJob
 import org.springframework.data.domain.Pageable
 import java.time.Instant
-import java.util.Optional
 import java.util.UUID
 
 interface LinkCrawlFailedJobRepositoryCustom {
+    fun save(job: LinkCrawlFailedJob): LinkCrawlFailedJob
+
+    fun findById(id: UUID): java.util.Optional<LinkCrawlFailedJob>
+
     fun findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId: UUID): List<LinkCrawlFailedJob>
 
     fun findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(
@@ -15,8 +18,6 @@ interface LinkCrawlFailedJobRepositoryCustom {
     ): List<LinkCrawlFailedJob>
 
     fun countByRunIdAndResolvedAtIsNull(runId: UUID): Long
-
-    fun findById(id: UUID): Optional<LinkCrawlFailedJob>
 
     fun findRetryableAutomaticJobs(
         maxFailureCount: Int,

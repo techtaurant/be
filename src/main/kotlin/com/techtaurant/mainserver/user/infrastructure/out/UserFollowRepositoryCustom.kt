@@ -4,6 +4,17 @@ import com.techtaurant.mainserver.user.entity.UserFollow
 import java.util.UUID
 
 interface UserFollowRepositoryCustom {
+    fun save(userFollow: UserFollow): UserFollow
+
+    fun delete(userFollow: UserFollow)
+
+    fun deleteAllInBatch()
+
+    fun deleteMutualFollows(
+        firstUserId: UUID,
+        secondUserId: UUID,
+    ): Int
+
     fun findByFollowerIdAndFollowingId(
         followerId: UUID,
         followingId: UUID,

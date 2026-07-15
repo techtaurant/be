@@ -10,6 +10,22 @@ import java.util.UUID
  * 댓글 동적 쿼리를 위한 커스텀 Repository
  */
 interface CommentRepositoryCustom {
+    fun save(comment: Comment): Comment
+
+    fun saveAll(comments: Iterable<Comment>): List<Comment>
+
+    fun deleteAllInBatch()
+
+    fun flush()
+
+    fun incrementLikeCount(commentId: UUID)
+
+    fun decrementLikeCount(commentId: UUID)
+
+    fun incrementReplyCount(commentId: UUID)
+
+    fun decrementReplyCount(commentId: UUID)
+
     fun findByPostIdAndDeletedAtIsNullOrderByCreatedAtAsc(postId: UUID): List<Comment>
 
     fun findById(id: UUID): Optional<Comment>

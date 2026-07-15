@@ -1,17 +1,12 @@
 package com.techtaurant.mainserver.link.infrastructure.out
 
+import com.github.f4b6a3.uuid.UuidCreator
 import com.techtaurant.mainserver.jooq.tables.LinkCrawlBatches.Companion.LINK_CRAWL_BATCHES
 import com.techtaurant.mainserver.jooq.tables.LinkCrawlFailedJobs.Companion.LINK_CRAWL_FAILED_JOBS
 import com.techtaurant.mainserver.jooq.tables.LinkCrawlRuns.Companion.LINK_CRAWL_RUNS
 import com.techtaurant.mainserver.jooq.tables.records.LinkCrawlFailedJobsRecord
-import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
 import com.techtaurant.mainserver.link.entity.LinkCrawlFailedJob
 import com.techtaurant.mainserver.link.entity.LinkCrawlRun
-import com.techtaurant.mainserver.link.enums.LinkCrawlRunStatus
-import com.techtaurant.mainserver.link.enums.LinkCrawlRunTriggerType
-import com.techtaurant.mainserver.security.enums.OAuthProvider
-import com.techtaurant.mainserver.user.entity.User
-import com.techtaurant.mainserver.user.enums.UserRole
 import org.jooq.DSLContext
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Repository
@@ -26,28 +21,50 @@ class LinkCrawlFailedJobRepositoryCustomImpl(
     private val dsl: DSLContext,
     private val linkCrawlRunRepository: LinkCrawlRunRepository,
 ) : LinkCrawlFailedJobRepositoryCustom {
-    override fun findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId: UUID): List<LinkCrawlFailedJob> =
-        unresolvedJobs(runId).fetch().map { it.toLinkCrawlFailedJob() }
+    override fun save(job: LinkCrawlFailedJob): LinkCrawlFailedJob {
+        val id = job.id ?: UuidCreator.getTimeOrderedEpoch().also { job.id = it }
+        val now = Instant.now().atOffset(ZoneOffset.UTC)
+        dsl.insertInto(LINK_CRAWL_FAILED_JOBS)
+            .set(LINK_CRAWL_FAILED_JOBS.ID, id).set(LINK_CRAWL_FAILED_JOBS.RUN_ID, requireNotNull(job.run.id))
+            .set(LINK_CRAWL_FAILED_JOBS.ARTICLE_URL, job.articleUrl).set(LINK_CRAWL_FAILED_JOBS.ERROR_STATUS_CODE, job.errorStatusCode)
+            .set(LINK_CRAWL_FAILED_JOBS.ERROR_MESSAGE, job.errorMessage).set(LINK_CRAWL_FAILED_JOBS.FAILURE_COUNT, job.failureCount)
+            .set(LINK_CRAWL_FAILED_JOBS.RESOLVED_AT_UTC, job.resolvedAt?.atOffset(ZoneOffset.UTC))
+            .set(LINK_CRAWL_FAILED_JOBS.LAST_FAILED_AT_UTC, job.lastFailedAt.atOffset(ZoneOffset.UTC))
+            .set(
+                LINK_CRAWL_FAILED_JOBS.CREATED_AT_UTC,
+                job.createdAt.atOffset(ZoneOffset.UTC),
+            ).set(LINK_CRAWL_FAILED_JOBS.UPDATED_AT_UTC, now)
+            .onConflict(LINK_CRAWL_FAILED_JOBS.ID).doUpdate()
+            .set(LINK_CRAWL_FAILED_JOBS.ERROR_STATUS_CODE, job.errorStatusCode).set(LINK_CRAWL_FAILED_JOBS.ERROR_MESSAGE, job.errorMessage)
+            .set(
+                LINK_CRAWL_FAILED_JOBS.FAILURE_COUNT,
+                job.failureCount,
+            ).set(LINK_CRAWL_FAILED_JOBS.RESOLVED_AT_UTC, job.resolvedAt?.atOffset(ZoneOffset.UTC))
+            .set(
+                LINK_CRAWL_FAILED_JOBS.LAST_FAILED_AT_UTC,
+                job.lastFailedAt.atOffset(ZoneOffset.UTC),
+            ).set(LINK_CRAWL_FAILED_JOBS.UPDATED_AT_UTC, now).execute()
+        job.updatedAt = now.toInstant()
+        return job
+    }
+
+    override fun findById(id: UUID): Optional<LinkCrawlFailedJob> =
+        Optional.ofNullable(
+            dsl.selectFrom(LINK_CRAWL_FAILED_JOBS).where(LINK_CRAWL_FAILED_JOBS.ID.eq(id)).fetchOne()?.toLinkCrawlFailedJob(),
+        )
+
+    override fun findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId: UUID): List<LinkCrawlFailedJob> = unresolvedJobs(runId)
 
     override fun findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(
         runId: UUID,
         pageable: Pageable,
-    ): List<LinkCrawlFailedJob> =
-        unresolvedJobs(runId).limit(pageable.pageSize).offset(pageable.offset).fetch().map { it.toLinkCrawlFailedJob() }
+    ): List<LinkCrawlFailedJob> = unresolvedJobs(runId, pageable)
 
     override fun countByRunIdAndResolvedAtIsNull(runId: UUID): Long =
         dsl.fetchCount(
             LINK_CRAWL_FAILED_JOBS,
             LINK_CRAWL_FAILED_JOBS.RUN_ID.eq(runId).and(LINK_CRAWL_FAILED_JOBS.RESOLVED_AT_UTC.isNull),
         ).toLong()
-
-    override fun findById(id: UUID): Optional<LinkCrawlFailedJob> =
-        Optional.ofNullable(dsl.selectFrom(LINK_CRAWL_FAILED_JOBS).where(LINK_CRAWL_FAILED_JOBS.ID.eq(id)).fetchOne())
-            .map { record ->
-                record.toLinkCrawlFailedJob(
-                    linkCrawlRunRepository.findById(requireNotNull(record.runId)).orElseThrow(),
-                )
-            }
 
     override fun findRetryableAutomaticJobs(
         maxFailureCount: Int,
@@ -96,13 +113,24 @@ class LinkCrawlFailedJobRepositoryCustomImpl(
                 .toSet()
         }
 
-    private fun unresolvedJobs(runId: UUID) =
-        dsl.selectFrom(LINK_CRAWL_FAILED_JOBS)
-            .where(LINK_CRAWL_FAILED_JOBS.RUN_ID.eq(runId).and(LINK_CRAWL_FAILED_JOBS.RESOLVED_AT_UTC.isNull))
-            .orderBy(LINK_CRAWL_FAILED_JOBS.CREATED_AT_UTC.asc())
+    private fun unresolvedJobs(
+        runId: UUID,
+        pageable: Pageable? = null,
+    ): List<LinkCrawlFailedJob> {
+        val run = linkCrawlRunRepository.findById(runId).orElseThrow()
+        val query =
+            dsl.selectFrom(LINK_CRAWL_FAILED_JOBS)
+                .where(LINK_CRAWL_FAILED_JOBS.RUN_ID.eq(runId).and(LINK_CRAWL_FAILED_JOBS.RESOLVED_AT_UTC.isNull))
+                .orderBy(LINK_CRAWL_FAILED_JOBS.CREATED_AT_UTC.asc())
+
+        val records =
+            pageable?.let { query.limit(it.pageSize).offset(it.offset).fetch() }
+                ?: query.fetch()
+        return records.map { it.toLinkCrawlFailedJob(run) }
+    }
 
     private fun LinkCrawlFailedJobsRecord.toLinkCrawlFailedJob(
-        run: LinkCrawlRun = runReference(requireNotNull(runId)),
+        run: LinkCrawlRun = linkCrawlRunRepository.findById(requireNotNull(runId)).orElseThrow(),
     ): LinkCrawlFailedJob =
         LinkCrawlFailedJob(
             run = run,
@@ -117,13 +145,4 @@ class LinkCrawlFailedJobRepositoryCustomImpl(
             createdAt = requireNotNull(createdAtUtc).toInstant()
             updatedAt = requireNotNull(updatedAtUtc).toInstant()
         }
-
-    private fun runReference(runId: UUID): LinkCrawlRun =
-        LinkCrawlRun(
-            batch = LinkCrawlBatch(User("", "", OAuthProvider.GOOGLE, "", UserRole.USER, ""), "", "", "", "", "", "", cronExpression = ""),
-            triggerType = LinkCrawlRunTriggerType.MANUAL,
-            status = LinkCrawlRunStatus.COMPLETED,
-            startedAt = Instant.EPOCH,
-            finishedAt = Instant.EPOCH,
-        ).apply { id = runId }
 }

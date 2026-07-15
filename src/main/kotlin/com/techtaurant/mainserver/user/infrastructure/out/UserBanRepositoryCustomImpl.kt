@@ -1,5 +1,6 @@
 package com.techtaurant.mainserver.user.infrastructure.out
 
+import com.github.f4b6a3.uuid.UuidCreator
 import com.techtaurant.mainserver.jooq.tables.UserBans.Companion.USER_BANS
 import com.techtaurant.mainserver.jooq.tables.Users.Companion.USERS
 import com.techtaurant.mainserver.jooq.tables.records.UsersRecord
@@ -11,6 +12,8 @@ import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.Record
 import org.springframework.stereotype.Repository
+import java.time.Instant
+import java.time.ZoneOffset
 import java.util.UUID
 
 @Repository
@@ -18,6 +21,29 @@ class UserBanRepositoryCustomImpl(
     private val dsl: DSLContext,
 ) : UserBanRepositoryCustom {
     private val bannedUser = USERS.`as`("banned_user")
+
+    override fun save(userBan: UserBan): UserBan {
+        val now = Instant.now()
+        val id = userBan.id ?: UuidCreator.getTimeOrderedEpoch().also { userBan.id = it }
+        dsl.insertInto(USER_BANS)
+            .set(USER_BANS.ID, id)
+            .set(USER_BANS.USER_ID, requireNotNull(userBan.user.id))
+            .set(USER_BANS.BANNED_USER_ID, requireNotNull(userBan.bannedUser.id))
+            .set(USER_BANS.CREATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
+            .set(USER_BANS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
+            .execute()
+        userBan.createdAt = now
+        userBan.updatedAt = now
+        return userBan
+    }
+
+    override fun delete(userBan: UserBan) {
+        userBan.id?.let { dsl.deleteFrom(USER_BANS).where(USER_BANS.ID.eq(it)).execute() }
+    }
+
+    override fun deleteAllInBatch() {
+        dsl.deleteFrom(USER_BANS).execute()
+    }
 
     override fun findByUserIdAndBannedUserId(
         userId: UUID,

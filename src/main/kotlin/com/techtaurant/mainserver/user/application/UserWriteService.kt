@@ -88,6 +88,7 @@ class UserWriteService(
 
         revokePermanentTokensOnRoleChange(targetUserId, user.role, role)
         user.role = role
+        userRepository.flush()
 
         return UpdateUserRoleResponse.from(user)
     }

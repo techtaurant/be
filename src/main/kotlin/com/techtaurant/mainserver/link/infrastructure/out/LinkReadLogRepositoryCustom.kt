@@ -4,6 +4,10 @@ import com.techtaurant.mainserver.link.entity.LinkReadLog
 import java.util.UUID
 
 interface LinkReadLogRepositoryCustom {
+    fun save(log: LinkReadLog): LinkReadLog
+
+    fun delete(log: LinkReadLog)
+
     fun findByUserIdAndLinkId(
         userId: UUID,
         linkId: UUID,

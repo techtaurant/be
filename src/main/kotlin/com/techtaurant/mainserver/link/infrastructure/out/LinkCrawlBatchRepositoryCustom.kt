@@ -1,11 +1,16 @@
 package com.techtaurant.mainserver.link.infrastructure.out
 
 import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
-import java.util.Optional
 import java.util.UUID
 
 interface LinkCrawlBatchRepositoryCustom {
-    fun findById(id: UUID): Optional<LinkCrawlBatch>
+    fun save(batch: LinkCrawlBatch): LinkCrawlBatch
+
+    fun saveAndFlush(batch: LinkCrawlBatch): LinkCrawlBatch
+
+    fun findAll(): List<LinkCrawlBatch>
+
+    fun findById(id: UUID): java.util.Optional<LinkCrawlBatch>
 
     fun existsById(id: UUID): Boolean
 

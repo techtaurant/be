@@ -3,7 +3,6 @@ import org.jooq.meta.jaxb.ForcedType
 plugins {
     kotlin("jvm") version "1.9.25"
     kotlin("plugin.spring") version "1.9.25"
-    kotlin("kapt") version "1.9.25"
     id("org.springframework.boot") version "3.5.7"
     id("io.spring.dependency-management") version "1.1.7"
     id("org.jooq.jooq-codegen-gradle") version "3.19.27"
@@ -82,9 +81,6 @@ dependencies {
     // UUID V7
     implementation("com.github.f4b6a3:uuid-creator:6.0.0")
 
-    // JPA Metamodel (타입 안전 Criteria Query)
-    kapt("org.hibernate.orm:hibernate-jpamodelgen")
-
     // Caffeine Cache
     implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
@@ -106,6 +102,10 @@ dependencies {
 }
 
 kotlin {
+    sourceSets.named("main") {
+        kotlin.srcDir("src/main/generated")
+    }
+
     compilerOptions {
         freeCompilerArgs.addAll("-Xjsr305=strict")
     }
@@ -148,18 +148,10 @@ jooq {
             }
             target {
                 packageName = "com.techtaurant.mainserver.jooq"
-                directory = "build/generated-src/jooq/main"
+                directory = "src/main/generated"
             }
         }
     }
-}
-
-tasks.named("compileKotlin") {
-    dependsOn(tasks.named("jooqCodegen"))
-}
-
-tasks.matching { it.name.startsWith("kapt") }.configureEach {
-    dependsOn(tasks.named("jooqCodegen"))
 }
 
 allOpen {
@@ -202,6 +194,7 @@ tasks.named<JacocoReport>("jacocoTestReport") {
                         "**/config/**",
                         "**/entity/**",
                         "**/dto/**",
+                        "**/jooq/**",
                         "**/Application.class",
                         "**/ApplicationKt.class",
                     )
@@ -246,6 +239,7 @@ tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
 spotless {
     kotlin {
         target("src/**/*.kt")
+        targetExclude("src/main/generated/**/*.kt")
         ktlint("1.2.1")
         trimTrailingWhitespace()
         endWithNewline()

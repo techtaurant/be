@@ -6,6 +6,12 @@ import java.time.Instant
 import java.util.UUID
 
 interface NotificationRecipientRepositoryCustom {
+    fun save(recipient: NotificationRecipient): NotificationRecipient
+
+    fun saveAll(recipients: Iterable<NotificationRecipient>): List<NotificationRecipient>
+
+    fun findById(id: UUID): java.util.Optional<NotificationRecipient>
+
     fun findAllByNotificationIdOrderByCreatedAtAsc(notificationId: UUID): List<NotificationRecipient>
 
     fun findAllByRecipientUserIdOrderByCreatedAtDescIdDesc(

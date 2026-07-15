@@ -1,7 +1,11 @@
 package com.techtaurant.mainserver.comment.infrastructure.out
 
 import com.techtaurant.mainserver.comment.entity.CommentLikeLog
-import org.springframework.data.jpa.repository.JpaRepository
-import java.util.*
+import org.springframework.data.repository.Repository
+import java.util.UUID
 
-interface CommentLikeLogRepository : JpaRepository<CommentLikeLog, UUID>, CommentLikeLogRepositoryCustom
+interface CommentLikeLogRepository : Repository<CommentLikeLog, UUID>, CommentLikeLogRepositoryCustom {
+    override fun save(log: CommentLikeLog): CommentLikeLog
+
+    override fun delete(log: CommentLikeLog)
+}

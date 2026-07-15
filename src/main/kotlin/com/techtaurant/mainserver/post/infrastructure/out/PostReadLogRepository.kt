@@ -1,10 +1,18 @@
 package com.techtaurant.mainserver.post.infrastructure.out
 
 import com.techtaurant.mainserver.post.entity.PostReadLog
-import org.springframework.data.jpa.repository.JpaRepository
-import java.util.*
+import org.springframework.data.repository.Repository
+import java.util.UUID
 
-interface PostReadLogRepository : JpaRepository<PostReadLog, UUID>, PostReadLogRepositoryCustom {
+interface PostReadLogRepository : Repository<PostReadLog, UUID>, PostReadLogRepositoryCustom {
+    override fun save(log: PostReadLog): PostReadLog
+
+    override fun delete(log: PostReadLog)
+
+    override fun deleteAllInBatch()
+
+    override fun findById(id: UUID): java.util.Optional<PostReadLog>
+
     /**
      * 특정 게시물에 대한 특정 사용자의 읽음 기록을 조회합니다.
      *

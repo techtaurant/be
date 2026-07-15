@@ -9,12 +9,45 @@ import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
 import org.jooq.DSLContext
 import org.springframework.stereotype.Repository
+import java.time.Instant
+import java.time.ZoneOffset
+import java.util.Optional
 import java.util.UUID
 
 @Repository
 class PostLikeLogRepositoryCustomImpl(
     private val dsl: DSLContext,
 ) : PostLikeLogRepositoryCustom {
+    override fun save(log: PostLikeLog): PostLikeLog {
+        val id = log.id ?: com.github.f4b6a3.uuid.UuidCreator.getTimeOrderedEpoch().also { log.id = it }
+        val now = Instant.now().atOffset(ZoneOffset.UTC)
+        dsl.insertInto(POST_LIKE_LOG)
+            .set(POST_LIKE_LOG.ID, id)
+            .set(POST_LIKE_LOG.POST_ID, requireNotNull(log.post.id))
+            .set(POST_LIKE_LOG.USER_ID, requireNotNull(log.user.id))
+            .set(POST_LIKE_LOG.IS_LIKED, log.isLiked)
+            .set(POST_LIKE_LOG.CREATED_AT_UTC, log.createdAt.atOffset(ZoneOffset.UTC))
+            .set(POST_LIKE_LOG.UPDATED_AT_UTC, now)
+            .onConflict(POST_LIKE_LOG.ID)
+            .doUpdate()
+            .set(POST_LIKE_LOG.IS_LIKED, log.isLiked)
+            .set(POST_LIKE_LOG.UPDATED_AT_UTC, now)
+            .execute()
+        log.updatedAt = now.toInstant()
+        return log
+    }
+
+    override fun delete(log: PostLikeLog) {
+        log.id?.let { dsl.deleteFrom(POST_LIKE_LOG).where(POST_LIKE_LOG.ID.eq(it)).execute() }
+    }
+
+    override fun deleteAllInBatch() {
+        dsl.deleteFrom(POST_LIKE_LOG).execute()
+    }
+
+    override fun findById(id: UUID): Optional<PostLikeLog> =
+        Optional.ofNullable(dsl.selectFrom(POST_LIKE_LOG).where(POST_LIKE_LOG.ID.eq(id)).fetchOne()?.toPostLikeLog())
+
     override fun findByPostIdAndUserId(
         postId: UUID,
         userId: UUID,

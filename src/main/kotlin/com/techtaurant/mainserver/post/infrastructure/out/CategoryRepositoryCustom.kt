@@ -5,6 +5,10 @@ import com.techtaurant.mainserver.user.entity.User
 import java.util.UUID
 
 interface CategoryRepositoryCustom {
+    fun save(category: Category): Category
+
+    fun deleteAllInBatch()
+
     fun findByUserAndPath(
         user: User,
         path: String,

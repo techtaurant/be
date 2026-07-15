@@ -4,6 +4,10 @@ import com.techtaurant.mainserver.comment.entity.CommentLikeLog
 import java.util.UUID
 
 interface CommentLikeLogRepositoryCustom {
+    fun save(log: CommentLikeLog): CommentLikeLog
+
+    fun delete(log: CommentLikeLog)
+
     fun findByCommentIdAndUserId(
         commentId: UUID,
         userId: UUID,

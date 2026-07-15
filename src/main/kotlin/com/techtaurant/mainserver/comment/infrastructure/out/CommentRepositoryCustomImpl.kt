@@ -1,5 +1,6 @@
 package com.techtaurant.mainserver.comment.infrastructure.out
 
+import com.github.f4b6a3.uuid.UuidCreator
 import com.techtaurant.mainserver.comment.dto.CommentCursor
 import com.techtaurant.mainserver.comment.entity.Comment
 import com.techtaurant.mainserver.comment.enums.CommentSortType
@@ -18,6 +19,8 @@ import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.Record
 import org.springframework.stereotype.Repository
+import java.time.Instant
+import java.time.ZoneOffset
 import java.util.Optional
 import java.util.UUID
 
@@ -32,6 +35,71 @@ class CommentRepositoryCustomImpl(
     private val dsl: DSLContext,
     private val entityManager: EntityManager,
 ) : CommentRepositoryCustom {
+    override fun save(comment: Comment): Comment {
+        if (entityManager.isJoinedToTransaction) entityManager.flush()
+        val now = Instant.now()
+        val id = comment.id ?: UuidCreator.getTimeOrderedEpoch().also { comment.id = it }
+        if (dsl.fetchExists(COMMENTS, COMMENTS.ID.eq(id))) {
+            dsl.update(COMMENTS)
+                .set(COMMENTS.CONTENT, comment.content).set(COMMENTS.POST_ID, requireNotNull(comment.post.id))
+                .set(COMMENTS.AUTHOR_ID, requireNotNull(comment.author.id)).set(COMMENTS.PARENT_ID, comment.parent?.id)
+                .set(
+                    COMMENTS.DEPTH,
+                    comment.depth,
+                ).set(COMMENTS.LIKE_COUNT, comment.likeCount).set(COMMENTS.REPLY_COUNT, comment.replyCount)
+                .set(
+                    COMMENTS.DELETED_AT_UTC,
+                    comment.deletedAt?.atOffset(ZoneOffset.UTC),
+                ).set(COMMENTS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
+                .where(COMMENTS.ID.eq(id)).execute()
+        } else {
+            dsl.insertInto(COMMENTS)
+                .set(COMMENTS.ID, id).set(COMMENTS.CONTENT, comment.content).set(COMMENTS.POST_ID, requireNotNull(comment.post.id))
+                .set(COMMENTS.AUTHOR_ID, requireNotNull(comment.author.id)).set(COMMENTS.PARENT_ID, comment.parent?.id)
+                .set(
+                    COMMENTS.DEPTH,
+                    comment.depth,
+                ).set(COMMENTS.LIKE_COUNT, comment.likeCount).set(COMMENTS.REPLY_COUNT, comment.replyCount)
+                .set(
+                    COMMENTS.DELETED_AT_UTC,
+                    comment.deletedAt?.atOffset(ZoneOffset.UTC),
+                ).set(COMMENTS.CREATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
+                .set(COMMENTS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC)).execute()
+            comment.createdAt = now
+        }
+        comment.updatedAt = now
+        return entityManager.find(Comment::class.java, id)?.also(entityManager::refresh) ?: comment
+    }
+
+    override fun saveAll(comments: Iterable<Comment>): List<Comment> = comments.map(::save)
+
+    override fun deleteAllInBatch() {
+        dsl.deleteFrom(COMMENTS).execute()
+    }
+
+    override fun flush() = Unit
+
+    override fun incrementLikeCount(commentId: UUID) {
+        dsl.update(COMMENTS).set(COMMENTS.LIKE_COUNT, COMMENTS.LIKE_COUNT.plus(1L)).where(COMMENTS.ID.eq(commentId)).execute()
+    }
+
+    override fun decrementLikeCount(commentId: UUID) {
+        dsl.update(COMMENTS).set(COMMENTS.LIKE_COUNT, COMMENTS.LIKE_COUNT.minus(1L)).where(COMMENTS.ID.eq(commentId)).execute()
+    }
+
+    override fun incrementReplyCount(commentId: UUID) {
+        dsl.update(COMMENTS).set(COMMENTS.REPLY_COUNT, COMMENTS.REPLY_COUNT.plus(1L)).where(COMMENTS.ID.eq(commentId)).execute()
+    }
+
+    override fun decrementReplyCount(commentId: UUID) {
+        dsl.update(
+            COMMENTS,
+        ).set(
+            COMMENTS.REPLY_COUNT,
+            org.jooq.impl.DSL.`when`(COMMENTS.REPLY_COUNT.gt(0L), COMMENTS.REPLY_COUNT.minus(1L)).otherwise(0L),
+        ).where(COMMENTS.ID.eq(commentId)).execute()
+    }
+
     override fun findByPostIdAndDeletedAtIsNullOrderByCreatedAtAsc(postId: UUID): List<Comment> =
         flushThen { fetchComments(COMMENTS.POST_ID.eq(postId).and(COMMENTS.DELETED_AT_UTC.isNull)) }
             .sortedBy { it.createdAt }

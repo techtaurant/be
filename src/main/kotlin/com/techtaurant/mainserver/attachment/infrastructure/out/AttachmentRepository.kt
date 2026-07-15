@@ -3,10 +3,20 @@ package com.techtaurant.mainserver.attachment.infrastructure.out
 import com.techtaurant.mainserver.attachment.entity.Attachment
 import com.techtaurant.mainserver.attachment.enums.AttachmentReferenceType
 import com.techtaurant.mainserver.attachment.enums.AttachmentStatus
-import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.repository.Repository
 import java.util.UUID
 
-interface AttachmentRepository : JpaRepository<Attachment, UUID>, AttachmentRepositoryCustom {
+interface AttachmentRepository : Repository<Attachment, UUID>, AttachmentRepositoryCustom {
+    override fun save(attachment: Attachment): Attachment
+
+    override fun saveAll(attachments: Iterable<Attachment>): List<Attachment>
+
+    override fun deleteAll(attachments: Iterable<Attachment>)
+
+    override fun deleteAllInBatch()
+
+    override fun existsById(id: UUID): Boolean
+
     override fun findAllById(ids: Iterable<UUID>): List<Attachment>
 
     override fun findAllByObjectKeyInAndStatus(
@@ -30,7 +40,7 @@ interface AttachmentRepository : JpaRepository<Attachment, UUID>, AttachmentRepo
         referenceType: AttachmentReferenceType,
     ): List<Attachment>
 
-    fun deleteAllByReferenceIdAndReferenceType(
+    override fun deleteAllByReferenceIdAndReferenceType(
         referenceId: UUID,
         referenceType: AttachmentReferenceType,
     )

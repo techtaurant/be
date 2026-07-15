@@ -1,5 +1,6 @@
 package com.techtaurant.mainserver.link.infrastructure.out
 
+import com.github.f4b6a3.uuid.UuidCreator
 import com.techtaurant.mainserver.jooq.tables.LinkDailyStats.Companion.LINK_DAILY_STATS
 import com.techtaurant.mainserver.jooq.tables.LinkTags.Companion.LINK_TAGS
 import com.techtaurant.mainserver.jooq.tables.Links.Companion.LINKS
@@ -32,6 +33,67 @@ class LinkRepositoryCustomImpl(
     private val dsl: DSLContext,
     private val entityManager: EntityManager,
 ) : LinkRepositoryCustom {
+    override fun save(link: Link): Link {
+        val id = link.id ?: UuidCreator.getTimeOrderedEpoch().also { link.id = it }
+        val now = Instant.now()
+        if (dsl.fetchExists(LINKS, LINKS.ID.eq(id))) {
+            dsl.update(LINKS).set(LINKS.TITLE, link.title).set(LINKS.URL, link.url).set(LINKS.SUMMARY, link.summary)
+                .set(LINKS.VIEW_COUNT, link.viewCount).set(LINKS.LIKE_COUNT, link.likeCount)
+                .set(LINKS.CREATED_AT_UTC, link.createdAt.atOffset(ZoneOffset.UTC))
+                .set(LINKS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC)).where(LINKS.ID.eq(id)).execute()
+            dsl.deleteFrom(LINK_TAGS).where(LINK_TAGS.LINK_ID.eq(id)).execute()
+        } else {
+            dsl.insertInto(LINKS).set(LINKS.ID, id).set(LINKS.TITLE, link.title).set(LINKS.URL, link.url).set(LINKS.SUMMARY, link.summary)
+                .set(
+                    LINKS.VIEW_COUNT,
+                    link.viewCount,
+                ).set(
+                    LINKS.LIKE_COUNT,
+                    link.likeCount,
+                ).set(
+                    LINKS.CREATED_AT_UTC,
+                    link.createdAt.atOffset(ZoneOffset.UTC),
+                ).set(LINKS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC)).execute()
+        }
+        link.tags.forEach {
+                tag ->
+            dsl.insertInto(LINK_TAGS).set(LINK_TAGS.LINK_ID, id).set(LINK_TAGS.TAG_ID, requireNotNull(tag.id)).execute()
+        }
+        link.updatedAt = now
+        return link
+    }
+
+    override fun saveAndFlush(link: Link): Link = save(link)
+
+    override fun delete(link: Link) {
+        link.id?.let { id ->
+            dsl.deleteFrom(LINK_TAGS).where(LINK_TAGS.LINK_ID.eq(id)).execute()
+            dsl.deleteFrom(LINKS).where(LINKS.ID.eq(id)).execute()
+        }
+    }
+
+    override fun deleteAll() {
+        dsl.deleteFrom(LINKS).execute()
+    }
+
+    override fun deleteAllInBatch() {
+        dsl.deleteFrom(LINKS).execute()
+    }
+
+    override fun findAll(): List<Link> = fetchLinks(DSL.trueCondition())
+
+    override fun incrementViewCount(linkId: UUID) {
+        dsl.update(LINKS).set(LINKS.VIEW_COUNT, LINKS.VIEW_COUNT.plus(1L)).where(LINKS.ID.eq(linkId)).execute()
+    }
+
+    override fun incrementLikeCount(linkId: UUID) {
+        dsl.update(LINKS).set(LINKS.LIKE_COUNT, LINKS.LIKE_COUNT.plus(1L)).where(LINKS.ID.eq(linkId)).execute()
+    }
+
+    override fun decrementLikeCount(linkId: UUID) {
+        dsl.update(LINKS).set(LINKS.LIKE_COUNT, LINKS.LIKE_COUNT.minus(1L)).where(LINKS.ID.eq(linkId)).execute()
+    }
+
     override fun findById(id: UUID): Optional<Link> = Optional.ofNullable(findByIdWithTags(id))
 
     override fun existsById(id: UUID): Boolean = dsl.fetchExists(LINKS, LINKS.ID.eq(id))

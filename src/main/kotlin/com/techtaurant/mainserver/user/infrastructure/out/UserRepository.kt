@@ -3,11 +3,11 @@ package com.techtaurant.mainserver.user.infrastructure.out
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
-import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.repository.Repository
 import java.util.Optional
 import java.util.UUID
 
-interface UserRepository : JpaRepository<User, UUID>, UserRepositoryCustom {
+interface UserRepository : Repository<User, UUID>, UserRepositoryCustom {
     override fun findById(id: UUID): Optional<User>
 
     override fun findAllById(ids: Iterable<UUID>): List<User>

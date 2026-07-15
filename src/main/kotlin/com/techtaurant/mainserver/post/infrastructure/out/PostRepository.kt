@@ -1,15 +1,12 @@
 package com.techtaurant.mainserver.post.infrastructure.out
 
 import com.techtaurant.mainserver.post.entity.Post
-import org.springframework.data.jpa.repository.JpaRepository
-import org.springframework.data.jpa.repository.Modifying
-import org.springframework.data.jpa.repository.Query
-import org.springframework.data.repository.query.Param
+import org.springframework.data.repository.Repository
 import java.time.Instant
 import java.util.Optional
 import java.util.UUID
 
-interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
+interface PostRepository : Repository<Post, UUID>, PostRepositoryCustom {
     override fun findById(id: UUID): Optional<Post>
 
     override fun findAllById(ids: Iterable<UUID>): List<Post>
@@ -87,11 +84,7 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      *
      * @param postId 조회수를 증가시킬 게시물 ID
      */
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Query("UPDATE Post p SET p.viewCount = p.viewCount + 1 WHERE p.id = :postId")
-    fun incrementViewCount(
-        @Param("postId") postId: UUID,
-    )
+    override fun incrementViewCount(postId: UUID)
 
     /**
      * 게시물의 좋아요수를 원자적으로 1 증가시킵니다.
@@ -105,11 +98,7 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      *
      * @param postId 좋아요수를 증가시킬 게시물 ID
      */
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Query("UPDATE Post p SET p.likeCount = p.likeCount + 1 WHERE p.id = :postId")
-    fun incrementLikeCount(
-        @Param("postId") postId: UUID,
-    )
+    override fun incrementLikeCount(postId: UUID)
 
     /**
      * 게시물의 좋아요수를 원자적으로 1 감소시킵니다.
@@ -123,11 +112,7 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      *
      * @param postId 좋아요수를 감소시킬 게시물 ID
      */
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Query("UPDATE Post p SET p.likeCount = p.likeCount - 1 WHERE p.id = :postId")
-    fun decrementLikeCount(
-        @Param("postId") postId: UUID,
-    )
+    override fun decrementLikeCount(postId: UUID)
 
     /**
      * 게시물의 댓글수를 원자적으로 1 증가시킵니다.
@@ -142,22 +127,14 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      *
      * @param postId 댓글수를 증가시킬 게시물 ID
      */
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Query("UPDATE Post p SET p.commentCount = p.commentCount + 1 WHERE p.id = :postId")
-    fun incrementCommentCount(
-        @Param("postId") postId: UUID,
-    )
+    override fun incrementCommentCount(postId: UUID)
 
     /**
      * 게시물의 댓글수를 원자적으로 1 감소시킵니다.
      *
      * @param postId 댓글수를 감소시킬 게시물 ID
      */
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Query("UPDATE Post p SET p.commentCount = CASE WHEN p.commentCount > 0 THEN p.commentCount - 1 ELSE 0 END WHERE p.id = :postId")
-    fun decrementCommentCount(
-        @Param("postId") postId: UUID,
-    )
+    override fun decrementCommentCount(postId: UUID)
 
     /**
      * 특정 사용자의 2주 이상 경과한 DRAFT 게시물 목록을 조회합니다.

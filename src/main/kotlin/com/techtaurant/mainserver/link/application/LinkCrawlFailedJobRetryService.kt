@@ -140,6 +140,7 @@ class LinkCrawlFailedJobRetryService(
                 run.failedJobCount > 0 -> LinkCrawlRunStatus.RESOLVED
                 else -> LinkCrawlRunStatus.COMPLETED
             }
+        linkCrawlRunRepository.save(run)
     }
 
     private fun summarizeRetryRun(runId: UUID): LinkFailedJobRetrySummary {

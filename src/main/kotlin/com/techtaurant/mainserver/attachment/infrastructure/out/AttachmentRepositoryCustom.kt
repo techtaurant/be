@@ -6,6 +6,21 @@ import com.techtaurant.mainserver.attachment.enums.AttachmentStatus
 import java.util.UUID
 
 interface AttachmentRepositoryCustom {
+    fun save(attachment: Attachment): Attachment
+
+    fun saveAll(attachments: Iterable<Attachment>): List<Attachment>
+
+    fun deleteAll(attachments: Iterable<Attachment>)
+
+    fun deleteAllInBatch()
+
+    fun existsById(id: UUID): Boolean
+
+    fun deleteAllByReferenceIdAndReferenceType(
+        referenceId: UUID,
+        referenceType: AttachmentReferenceType,
+    )
+
     fun findAllById(ids: Iterable<UUID>): List<Attachment>
 
     fun findAllByObjectKeyInAndStatus(

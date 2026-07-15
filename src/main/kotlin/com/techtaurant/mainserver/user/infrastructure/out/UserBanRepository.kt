@@ -1,10 +1,10 @@
 package com.techtaurant.mainserver.user.infrastructure.out
 
 import com.techtaurant.mainserver.user.entity.UserBan
-import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.repository.Repository
 import java.util.UUID
 
-interface UserBanRepository : JpaRepository<UserBan, UUID>, UserBanRepositoryCustom {
+interface UserBanRepository : Repository<UserBan, UUID>, UserBanRepositoryCustom {
     override fun findByUserIdAndBannedUserId(
         userId: UUID,
         bannedUserId: UUID,

@@ -16,12 +16,28 @@ import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Repository
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.Optional
 import java.util.UUID
 
 @Repository
 class NotificationRecipientRepositoryCustomImpl(
     private val dsl: DSLContext,
 ) : NotificationRecipientRepositoryCustom {
+    override fun save(recipient: NotificationRecipient): NotificationRecipient {
+        val id = requireNotNull(recipient.id)
+        dsl.update(NOTIFICATION_RECIPIENTS)
+            .set(NOTIFICATION_RECIPIENTS.READ_AT_UTC, recipient.readAt?.atOffset(ZoneOffset.UTC))
+            .set(NOTIFICATION_RECIPIENTS.UPDATED_AT_UTC, Instant.now().atOffset(ZoneOffset.UTC))
+            .where(NOTIFICATION_RECIPIENTS.ID.eq(id))
+            .execute()
+        return recipient
+    }
+
+    override fun saveAll(recipients: Iterable<NotificationRecipient>): List<NotificationRecipient> = recipients.map(::save)
+
+    override fun findById(id: UUID): Optional<NotificationRecipient> =
+        Optional.ofNullable(fetchRecipients(NOTIFICATION_RECIPIENTS.ID.eq(id)).firstOrNull())
+
     override fun findAllByNotificationIdOrderByCreatedAtAsc(notificationId: UUID): List<NotificationRecipient> =
         fetchRecipients(NOTIFICATION_RECIPIENTS.NOTIFICATION_ID.eq(notificationId), null, NOTIFICATION_RECIPIENTS.CREATED_AT_UTC.asc())
 

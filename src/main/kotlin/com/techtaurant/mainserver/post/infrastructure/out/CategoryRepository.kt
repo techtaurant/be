@@ -2,10 +2,14 @@ package com.techtaurant.mainserver.post.infrastructure.out
 
 import com.techtaurant.mainserver.post.entity.Category
 import com.techtaurant.mainserver.user.entity.User
-import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.repository.Repository
 import java.util.UUID
 
-interface CategoryRepository : JpaRepository<Category, UUID>, CategoryRepositoryCustom {
+interface CategoryRepository : Repository<Category, UUID>, CategoryRepositoryCustom {
+    override fun save(category: Category): Category
+
+    override fun deleteAllInBatch()
+
     override fun findByUserAndPath(
         user: User,
         path: String,

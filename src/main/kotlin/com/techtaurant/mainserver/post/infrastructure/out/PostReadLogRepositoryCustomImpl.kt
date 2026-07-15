@@ -9,6 +9,9 @@ import com.techtaurant.mainserver.user.enums.UserRole
 import jakarta.persistence.EntityManager
 import org.jooq.DSLContext
 import org.springframework.stereotype.Repository
+import java.time.Instant
+import java.time.ZoneOffset
+import java.util.Optional
 import java.util.UUID
 
 @Repository
@@ -16,6 +19,34 @@ class PostReadLogRepositoryCustomImpl(
     private val dsl: DSLContext,
     private val entityManager: EntityManager,
 ) : PostReadLogRepositoryCustom {
+    override fun save(log: PostReadLog): PostReadLog {
+        val id = log.id ?: com.github.f4b6a3.uuid.UuidCreator.getTimeOrderedEpoch().also { log.id = it }
+        val now = Instant.now().atOffset(ZoneOffset.UTC)
+        dsl.insertInto(POST_READ_LOG)
+            .set(POST_READ_LOG.ID, id)
+            .set(POST_READ_LOG.POST_ID, log.postId)
+            .set(POST_READ_LOG.USER_ID, requireNotNull(log.user.id))
+            .set(POST_READ_LOG.CREATED_AT_UTC, log.createdAt.atOffset(ZoneOffset.UTC))
+            .set(POST_READ_LOG.UPDATED_AT_UTC, now)
+            .onConflict(POST_READ_LOG.ID)
+            .doUpdate()
+            .set(POST_READ_LOG.UPDATED_AT_UTC, now)
+            .execute()
+        log.updatedAt = now.toInstant()
+        return log
+    }
+
+    override fun delete(log: PostReadLog) {
+        log.id?.let { dsl.deleteFrom(POST_READ_LOG).where(POST_READ_LOG.ID.eq(it)).execute() }
+    }
+
+    override fun deleteAllInBatch() {
+        dsl.deleteFrom(POST_READ_LOG).execute()
+    }
+
+    override fun findById(id: UUID): Optional<PostReadLog> =
+        Optional.ofNullable(dsl.selectFrom(POST_READ_LOG).where(POST_READ_LOG.ID.eq(id)).fetchOne()?.toPostReadLog())
+
     override fun findByPostIdAndUserId(
         postId: UUID,
         userId: UUID,

@@ -1,5 +1,6 @@
 package com.techtaurant.mainserver.post.infrastructure.out
 
+import com.github.f4b6a3.uuid.UuidCreator
 import com.techtaurant.mainserver.jooq.tables.Categories.Companion.CATEGORIES
 import com.techtaurant.mainserver.jooq.tables.Posts.Companion.POSTS
 import com.techtaurant.mainserver.jooq.tables.records.CategoriesRecord
@@ -11,6 +12,8 @@ import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 import org.springframework.stereotype.Repository
+import java.time.Instant
+import java.time.ZoneOffset
 import java.util.UUID
 
 @Repository
@@ -18,6 +21,34 @@ class CategoryRepositoryCustomImpl(
     private val dsl: DSLContext,
 ) : CategoryRepositoryCustom {
     private val descendant = CATEGORIES.`as`("descendant")
+
+    override fun save(category: Category): Category {
+        val id = category.id ?: UuidCreator.getTimeOrderedEpoch().also { category.id = it }
+        val now = Instant.now().atOffset(ZoneOffset.UTC)
+        dsl.insertInto(CATEGORIES)
+            .set(CATEGORIES.ID, id)
+            .set(CATEGORIES.USER_ID, requireNotNull(category.user.id))
+            .set(CATEGORIES.NAME, category.name)
+            .set(CATEGORIES.PATH, category.path)
+            .set(CATEGORIES.DEPTH, category.depth)
+            .set(CATEGORIES.PARENT_ID, category.parent?.id)
+            .set(CATEGORIES.CREATED_AT_UTC, category.createdAt.atOffset(ZoneOffset.UTC))
+            .set(CATEGORIES.UPDATED_AT_UTC, now)
+            .onConflict(CATEGORIES.ID)
+            .doUpdate()
+            .set(CATEGORIES.NAME, category.name)
+            .set(CATEGORIES.PATH, category.path)
+            .set(CATEGORIES.DEPTH, category.depth)
+            .set(CATEGORIES.PARENT_ID, category.parent?.id)
+            .set(CATEGORIES.UPDATED_AT_UTC, now)
+            .execute()
+        category.updatedAt = now.toInstant()
+        return category
+    }
+
+    override fun deleteAllInBatch() {
+        dsl.deleteFrom(CATEGORIES).execute()
+    }
 
     override fun findByUserAndPath(
         user: User,

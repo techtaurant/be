@@ -4,6 +4,19 @@ import com.techtaurant.mainserver.link.entity.LinkLikeLog
 import java.util.UUID
 
 interface LinkLikeLogRepositoryCustom {
+    fun save(log: LinkLikeLog): LinkLikeLog
+
+    fun saveAndFlush(log: LinkLikeLog): LinkLikeLog
+
+    fun delete(log: LinkLikeLog)
+
+    fun insertIfAbsent(
+        id: UUID,
+        linkId: UUID,
+        userId: UUID,
+        isLiked: Boolean,
+    ): Int
+
     fun findByLinkIdAndUserId(
         linkId: UUID,
         userId: UUID,

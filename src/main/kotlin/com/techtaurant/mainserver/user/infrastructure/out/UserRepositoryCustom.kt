@@ -11,6 +11,22 @@ interface UserRepositoryCustom {
 
     fun findAllById(ids: Iterable<UUID>): List<User>
 
+    fun findAll(): List<User>
+
+    fun existsById(id: UUID): Boolean
+
+    fun count(): Long
+
+    fun save(user: User): User
+
+    fun saveAndFlush(user: User): User
+
+    fun delete(user: User)
+
+    fun deleteAllInBatch()
+
+    fun flush()
+
     fun findByIdentifierAndProvider(
         identifier: String,
         provider: OAuthProvider,

@@ -6,6 +6,14 @@ import com.techtaurant.mainserver.notification.enums.NotificationType
 import java.util.UUID
 
 interface NotificationRepositoryCustom {
+    fun save(notification: Notification): Notification
+
+    fun deleteAll(notifications: Iterable<Notification>)
+
+    fun findAll(): List<Notification>
+
+    fun findById(id: UUID): java.util.Optional<Notification>
+
     fun findAllByTypeAndActorAndTarget(
         type: NotificationType,
         actorUserId: UUID,

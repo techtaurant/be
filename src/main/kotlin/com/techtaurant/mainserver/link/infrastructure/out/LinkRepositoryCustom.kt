@@ -13,6 +13,24 @@ import java.util.UUID
  * 공개 링크 동적 정렬/페이지네이션을 위한 커스텀 Repository
  */
 interface LinkRepositoryCustom {
+    fun save(link: Link): Link
+
+    fun saveAndFlush(link: Link): Link
+
+    fun delete(link: Link)
+
+    fun deleteAll()
+
+    fun deleteAllInBatch()
+
+    fun findAll(): List<Link>
+
+    fun incrementViewCount(linkId: UUID)
+
+    fun incrementLikeCount(linkId: UUID)
+
+    fun decrementLikeCount(linkId: UUID)
+
     fun findById(id: UUID): Optional<Link>
 
     fun existsById(id: UUID): Boolean

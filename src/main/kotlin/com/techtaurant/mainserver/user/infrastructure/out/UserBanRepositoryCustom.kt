@@ -4,6 +4,12 @@ import com.techtaurant.mainserver.user.entity.UserBan
 import java.util.UUID
 
 interface UserBanRepositoryCustom {
+    fun save(userBan: UserBan): UserBan
+
+    fun delete(userBan: UserBan)
+
+    fun deleteAllInBatch()
+
     fun findByUserIdAndBannedUserId(
         userId: UUID,
         bannedUserId: UUID,

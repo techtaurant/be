@@ -14,6 +14,38 @@ import java.util.UUID
  * 게시물 동적 쿼리를 위한 커스텀 Repository
  */
 interface PostRepositoryCustom {
+    fun save(post: Post): Post
+
+    fun saveAndFlush(post: Post): Post
+
+    fun saveAll(posts: Iterable<Post>): List<Post>
+
+    fun saveAllAndFlush(posts: Iterable<Post>): List<Post>
+
+    fun delete(post: Post)
+
+    fun deleteAll(posts: Iterable<Post>)
+
+    fun deleteAll()
+
+    fun deleteAllInBatch()
+
+    fun findAll(): List<Post>
+
+    fun flush()
+
+    fun getReferenceById(id: UUID): Post
+
+    fun incrementViewCount(postId: UUID)
+
+    fun incrementLikeCount(postId: UUID)
+
+    fun decrementLikeCount(postId: UUID)
+
+    fun incrementCommentCount(postId: UUID)
+
+    fun decrementCommentCount(postId: UUID)
+
     fun findById(id: UUID): Optional<Post>
 
     fun findAllById(ids: Iterable<UUID>): List<Post>

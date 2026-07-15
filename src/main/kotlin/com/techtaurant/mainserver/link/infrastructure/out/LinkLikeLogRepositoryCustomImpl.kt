@@ -9,12 +9,56 @@ import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
 import org.jooq.DSLContext
 import org.springframework.stereotype.Repository
+import java.time.Instant
+import java.time.ZoneOffset
 import java.util.UUID
 
 @Repository
 class LinkLikeLogRepositoryCustomImpl(
     private val dsl: DSLContext,
 ) : LinkLikeLogRepositoryCustom {
+    override fun save(log: LinkLikeLog): LinkLikeLog {
+        val id = log.id ?: com.github.f4b6a3.uuid.UuidCreator.getTimeOrderedEpoch().also { log.id = it }
+        val now = Instant.now().atOffset(ZoneOffset.UTC)
+        dsl.insertInto(LINK_LIKE_LOG)
+            .set(LINK_LIKE_LOG.ID, id)
+            .set(LINK_LIKE_LOG.LINK_ID, requireNotNull(log.link.id))
+            .set(LINK_LIKE_LOG.USER_ID, requireNotNull(log.user.id))
+            .set(LINK_LIKE_LOG.IS_LIKED, log.isLiked)
+            .set(LINK_LIKE_LOG.CREATED_AT_UTC, log.createdAt.atOffset(ZoneOffset.UTC))
+            .set(LINK_LIKE_LOG.UPDATED_AT_UTC, now)
+            .onConflict(LINK_LIKE_LOG.ID)
+            .doUpdate()
+            .set(LINK_LIKE_LOG.IS_LIKED, log.isLiked)
+            .set(LINK_LIKE_LOG.UPDATED_AT_UTC, now)
+            .execute()
+        log.updatedAt = now.toInstant()
+        return log
+    }
+
+    override fun saveAndFlush(log: LinkLikeLog): LinkLikeLog = save(log)
+
+    override fun delete(log: LinkLikeLog) {
+        log.id?.let { dsl.deleteFrom(LINK_LIKE_LOG).where(LINK_LIKE_LOG.ID.eq(it)).execute() }
+    }
+
+    override fun insertIfAbsent(
+        id: UUID,
+        linkId: UUID,
+        userId: UUID,
+        isLiked: Boolean,
+    ): Int =
+        dsl.insertInto(LINK_LIKE_LOG)
+            .set(LINK_LIKE_LOG.ID, id)
+            .set(LINK_LIKE_LOG.LINK_ID, linkId)
+            .set(LINK_LIKE_LOG.USER_ID, userId)
+            .set(LINK_LIKE_LOG.IS_LIKED, isLiked)
+            .set(LINK_LIKE_LOG.CREATED_AT_UTC, Instant.now().atOffset(ZoneOffset.UTC))
+            .set(LINK_LIKE_LOG.UPDATED_AT_UTC, Instant.now().atOffset(ZoneOffset.UTC))
+            .onConflict(LINK_LIKE_LOG.LINK_ID, LINK_LIKE_LOG.USER_ID)
+            .doNothing()
+            .execute()
+
     override fun findByLinkIdAndUserId(
         linkId: UUID,
         userId: UUID,

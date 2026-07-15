@@ -1,5 +1,6 @@
 package com.techtaurant.mainserver.user.infrastructure.out
 
+import com.github.f4b6a3.uuid.UuidCreator
 import com.techtaurant.mainserver.jooq.tables.UserFollows.Companion.USER_FOLLOWS
 import com.techtaurant.mainserver.jooq.tables.Users.Companion.USERS
 import com.techtaurant.mainserver.jooq.tables.records.UsersRecord
@@ -11,6 +12,8 @@ import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.Record
 import org.springframework.stereotype.Repository
+import java.time.Instant
+import java.time.ZoneOffset
 import java.util.UUID
 
 @Repository
@@ -19,6 +22,40 @@ class UserFollowRepositoryCustomImpl(
 ) : UserFollowRepositoryCustom {
     private val follower = USERS.`as`("follower")
     private val following = USERS.`as`("following")
+
+    override fun save(userFollow: UserFollow): UserFollow {
+        val now = Instant.now()
+        val id = userFollow.id ?: UuidCreator.getTimeOrderedEpoch().also { userFollow.id = it }
+        dsl.insertInto(USER_FOLLOWS)
+            .set(USER_FOLLOWS.ID, id)
+            .set(USER_FOLLOWS.FOLLOWER_ID, requireNotNull(userFollow.follower.id))
+            .set(USER_FOLLOWS.FOLLOWING_ID, requireNotNull(userFollow.following.id))
+            .set(USER_FOLLOWS.CREATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
+            .set(USER_FOLLOWS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
+            .execute()
+        userFollow.createdAt = now
+        userFollow.updatedAt = now
+        return userFollow
+    }
+
+    override fun delete(userFollow: UserFollow) {
+        userFollow.id?.let { dsl.deleteFrom(USER_FOLLOWS).where(USER_FOLLOWS.ID.eq(it)).execute() }
+    }
+
+    override fun deleteAllInBatch() {
+        dsl.deleteFrom(USER_FOLLOWS).execute()
+    }
+
+    override fun deleteMutualFollows(
+        firstUserId: UUID,
+        secondUserId: UUID,
+    ): Int =
+        dsl.deleteFrom(USER_FOLLOWS)
+            .where(
+                USER_FOLLOWS.FOLLOWER_ID.eq(firstUserId).and(USER_FOLLOWS.FOLLOWING_ID.eq(secondUserId))
+                    .or(USER_FOLLOWS.FOLLOWER_ID.eq(secondUserId).and(USER_FOLLOWS.FOLLOWING_ID.eq(firstUserId))),
+            )
+            .execute()
 
     override fun findByFollowerIdAndFollowingId(
         followerId: UUID,

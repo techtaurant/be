@@ -1,5 +1,6 @@
 package com.techtaurant.mainserver.post.infrastructure.out
 
+import com.github.f4b6a3.uuid.UuidCreator
 import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.jooq.tables.Categories.Companion.CATEGORIES
 import com.techtaurant.mainserver.jooq.tables.PostDailyStats.Companion.POST_DAILY_STATS
@@ -24,6 +25,7 @@ import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
 import jakarta.persistence.EntityManager
+import org.hibernate.Hibernate
 import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.Field
@@ -43,6 +45,111 @@ class PostRepositoryCustomImpl(
     private val dsl: DSLContext,
     private val entityManager: EntityManager,
 ) : PostRepositoryCustom {
+    override fun save(post: Post): Post {
+        if (entityManager.isJoinedToTransaction) {
+            entityManager.flush()
+        }
+        val now = Instant.now()
+        val postId = post.id ?: UuidCreator.getTimeOrderedEpoch().also { post.id = it }
+        if (dsl.fetchExists(POSTS, POSTS.ID.eq(postId))) {
+            dsl.update(POSTS)
+                .set(POSTS.TITLE, post.title)
+                .set(POSTS.CONTENT, post.content)
+                .set(POSTS.AUTHOR_ID, requireNotNull(post.author.id))
+                .set(POSTS.CATEGORY_ID, post.category?.id)
+                .set(POSTS.VIEW_COUNT, post.viewCount)
+                .set(POSTS.LIKE_COUNT, post.likeCount)
+                .set(POSTS.COMMENT_COUNT, post.commentCount)
+                .set(POSTS.THUMBNAIL_IMAGE, post.thumbnailImage)
+                .set(POSTS.STATUS, post.status.name)
+                .set(POSTS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
+                .where(POSTS.ID.eq(postId))
+                .execute()
+            dsl.deleteFrom(POST_TAGS).where(POST_TAGS.POST_ID.eq(postId)).execute()
+        } else {
+            post.createdAt = now
+            dsl.insertInto(POSTS)
+                .set(POSTS.ID, postId)
+                .set(POSTS.TITLE, post.title)
+                .set(POSTS.CONTENT, post.content)
+                .set(POSTS.AUTHOR_ID, requireNotNull(post.author.id))
+                .set(POSTS.CATEGORY_ID, post.category?.id)
+                .set(POSTS.VIEW_COUNT, post.viewCount)
+                .set(POSTS.LIKE_COUNT, post.likeCount)
+                .set(POSTS.COMMENT_COUNT, post.commentCount)
+                .set(POSTS.THUMBNAIL_IMAGE, post.thumbnailImage)
+                .set(POSTS.STATUS, post.status.name)
+                .set(POSTS.CREATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
+                .set(POSTS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
+                .execute()
+        }
+        post.tags.forEach { tag ->
+            dsl.insertInto(POST_TAGS)
+                .set(POST_TAGS.POST_ID, postId)
+                .set(POST_TAGS.TAG_ID, requireNotNull(tag.id))
+                .execute()
+        }
+        post.updatedAt = now
+        return entityManager.find(Post::class.java, postId)?.also {
+            entityManager.refresh(it)
+            Hibernate.initialize(it.tags)
+        } ?: post
+    }
+
+    override fun saveAndFlush(post: Post): Post = save(post)
+
+    override fun saveAll(posts: Iterable<Post>): List<Post> = posts.map(::save)
+
+    override fun saveAllAndFlush(posts: Iterable<Post>): List<Post> = saveAll(posts)
+
+    override fun delete(post: Post) {
+        post.id?.let(::deleteById)
+    }
+
+    override fun deleteAll(posts: Iterable<Post>) {
+        posts.mapNotNull(Post::id).forEach(::deleteById)
+    }
+
+    override fun deleteAll() {
+        deleteAllInBatch()
+    }
+
+    override fun deleteAllInBatch() {
+        dsl.deleteFrom(POSTS).execute()
+    }
+
+    override fun findAll(): List<Post> = fetchPosts(dsl.select(POSTS.ID).from(POSTS).fetch(POSTS.ID).filterNotNull())
+
+    override fun flush() = Unit
+
+    override fun getReferenceById(id: UUID): Post = findById(id).orElseThrow()
+
+    override fun incrementViewCount(postId: UUID) {
+        dsl.update(POSTS).set(POSTS.VIEW_COUNT, POSTS.VIEW_COUNT.plus(1)).where(POSTS.ID.eq(postId)).execute()
+    }
+
+    override fun incrementLikeCount(postId: UUID) {
+        dsl.update(POSTS).set(POSTS.LIKE_COUNT, POSTS.LIKE_COUNT.plus(1)).where(POSTS.ID.eq(postId)).execute()
+    }
+
+    override fun decrementLikeCount(postId: UUID) {
+        dsl.update(POSTS)
+            .set(POSTS.LIKE_COUNT, POSTS.LIKE_COUNT.minus(1L))
+            .where(POSTS.ID.eq(postId))
+            .execute()
+    }
+
+    override fun incrementCommentCount(postId: UUID) {
+        dsl.update(POSTS).set(POSTS.COMMENT_COUNT, POSTS.COMMENT_COUNT.plus(1)).where(POSTS.ID.eq(postId)).execute()
+    }
+
+    override fun decrementCommentCount(postId: UUID) {
+        dsl.update(POSTS)
+            .set(POSTS.COMMENT_COUNT, DSL.`when`(POSTS.COMMENT_COUNT.gt(0L), POSTS.COMMENT_COUNT.minus(1L)).otherwise(0L))
+            .where(POSTS.ID.eq(postId))
+            .execute()
+    }
+
     override fun findById(id: UUID): Optional<Post> = flushThen { Optional.ofNullable(findPostDetailById(id)) }
 
     override fun findAllById(ids: Iterable<UUID>): List<Post> = flushThen { fetchPosts(ids.toList()) }
@@ -331,6 +438,11 @@ class PostRepositoryCustomImpl(
         val normalizedIds = postIds.filterNotNull()
         val postsById = fetchPosts(normalizedIds).associateBy { it.id!! }
         return normalizedIds.mapNotNull(postsById::get)
+    }
+
+    private fun deleteById(postId: UUID) {
+        dsl.deleteFrom(POST_TAGS).where(POST_TAGS.POST_ID.eq(postId)).execute()
+        dsl.deleteFrom(POSTS).where(POSTS.ID.eq(postId)).execute()
     }
 
     private fun toPost(rows: List<Record>): Post {
