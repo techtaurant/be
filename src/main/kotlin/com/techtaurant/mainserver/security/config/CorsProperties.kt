@@ -3,8 +3,6 @@ package com.techtaurant.mainserver.security.config
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.web.cors.CorsConfiguration
 
-private val ORIGIN_PATTERN_SEPARATOR_REGEX = Regex(",(?![^\\[]*\\])")
-
 @ConfigurationProperties(prefix = "cors")
 data class CorsProperties(
     val allowedOriginPatterns: String = "",
@@ -12,7 +10,7 @@ data class CorsProperties(
     val parsedAllowedOriginPatterns: List<String>
         get() =
             allowedOriginPatterns
-                .split(ORIGIN_PATTERN_SEPARATOR_REGEX)
+                .split(",")
                 .map { it.trim().trimEnd('/') }
                 .filter { it.isNotEmpty() }
 
