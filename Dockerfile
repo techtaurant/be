@@ -11,6 +11,7 @@ COPY gradlew .
 COPY gradle gradle
 COPY build.gradle.kts .
 COPY settings.gradle.kts .
+COPY gradle.properties .
 
 # Gradle 캐시를 BuildKit cache mount로 유지하여 빌드 간 의존성 재다운로드 방지
 RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
