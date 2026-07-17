@@ -23,6 +23,7 @@ class OAuth2RedirectResolver(
         const val DEFAULT_SUCCESS_REDIRECT_URI = "/oauth/callback"
         const val DEFAULT_FAILURE_REDIRECT_URI = "/oauth/error"
         private const val DEFAULT_ORIGIN = "http://localhost:3000"
+        private const val WILDCARD_HOST_PLACEHOLDER = "wildcard"
     }
 
     fun resolveSuccessRedirectUrl(request: HttpServletRequest): String =
@@ -83,7 +84,7 @@ class OAuth2RedirectResolver(
         origin: String?,
         allowedOrigins: List<String>,
     ): String {
-        if (origin != null && origin in allowedOrigins) {
+        if (origin != null && isOriginAllowed(origin, allowedOrigins)) {
             return origin
         }
 
@@ -92,7 +93,7 @@ class OAuth2RedirectResolver(
             origin,
             allowedOrigins,
         )
-        return allowedOrigins.firstOrNull() ?: DEFAULT_ORIGIN
+        return allowedOrigins.firstOrNull { parseOrigin(it) != null } ?: DEFAULT_ORIGIN
     }
 
     private fun resolveRedirectUrl(
@@ -126,7 +127,7 @@ class OAuth2RedirectResolver(
         return try {
             val uri = URI(redirectUri)
             val origin = uri.toOrigin()
-            if (origin != null && origin in allowedOrigins) {
+            if (origin != null && isOriginAllowed(origin, allowedOrigins)) {
                 redirectUri
             } else {
                 logger.warn(
@@ -142,10 +143,77 @@ class OAuth2RedirectResolver(
         }
     }
 
+    private fun isOriginAllowed(
+        origin: String,
+        allowedOrigins: List<String>,
+    ): Boolean {
+        val actualOrigin = parseOrigin(origin) ?: return false
+        return allowedOrigins.any { allowedOrigin ->
+            matchesAllowedOrigin(actualOrigin, allowedOrigin)
+        }
+    }
+
+    private fun matchesAllowedOrigin(
+        actualOrigin: Origin,
+        allowedOrigin: String,
+    ): Boolean {
+        val isWildcard = allowedOrigin.substringAfter("://", "").startsWith("*.")
+        if (!isWildcard) {
+            return parseOrigin(allowedOrigin) == actualOrigin
+        }
+        if (allowedOrigin.count { it == '*' } != 1) {
+            return false
+        }
+
+        val patternOrigin =
+            parseOrigin(
+                allowedOrigin.replaceFirst("*.", "$WILDCARD_HOST_PLACEHOLDER."),
+            ) ?: return false
+        val baseHost = patternOrigin.host.removePrefix("$WILDCARD_HOST_PLACEHOLDER.")
+
+        return actualOrigin.scheme == patternOrigin.scheme &&
+            actualOrigin.port == patternOrigin.port &&
+            actualOrigin.host.endsWith(".$baseHost")
+    }
+
+    private fun parseOrigin(value: String): Origin? {
+        return try {
+            val uri = URI(value)
+            val scheme = uri.scheme?.lowercase() ?: return null
+            val host = uri.host?.lowercase() ?: return null
+            if (scheme != "http" && scheme != "https") return null
+            if (uri.userInfo != null || uri.query != null || uri.fragment != null) return null
+            if (!uri.path.isNullOrEmpty() && uri.path != "/") return null
+
+            Origin(
+                scheme = scheme,
+                host = host,
+                port = uri.normalizedPort(scheme),
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private fun URI.toOrigin(): String? {
         val scheme = this.scheme ?: return null
         val host = this.host ?: return null
         val port = if (this.port != -1) ":${this.port}" else ""
         return "$scheme://$host$port".trimEnd('/')
     }
+
+    private fun URI.normalizedPort(scheme: String): Int {
+        if (port != -1) return port
+        return when (scheme) {
+            "http" -> 80
+            "https" -> 443
+            else -> -1
+        }
+    }
+
+    private data class Origin(
+        val scheme: String,
+        val host: String,
+        val port: Int,
+    )
 }
