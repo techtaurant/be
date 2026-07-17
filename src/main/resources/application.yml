@@ -108,7 +108,7 @@ otel:
 
 # CORS
 cors:
-    allowed-origins: ${CORS_ORIGINS}
+    allowed-origin-patterns: ${CORS_ORIGINS}
 
 # JWT
 jwt:
