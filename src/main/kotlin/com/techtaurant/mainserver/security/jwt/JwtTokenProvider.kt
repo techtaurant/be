@@ -68,6 +68,7 @@ class JwtTokenProvider(
         val expiryAt = now.plusMillis(expiration)
 
         return Jwts.builder()
+            .id(UUID.randomUUID().toString())
             .subject(userId.toString())
             .issuedAt(Date.from(now))
             .expiration(Date.from(expiryAt))

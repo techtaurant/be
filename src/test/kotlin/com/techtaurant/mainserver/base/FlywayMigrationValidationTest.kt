@@ -28,7 +28,52 @@ class FlywayMigrationValidationTest : IntegrationTest() {
 
         assertThat(failedMigrationCount).isZero()
         assertThat(appliedVersions).doesNotHaveDuplicates()
-        assertThat(appliedVersions).contains("32", "33", "35", "36", "37")
+        assertThat(appliedVersions).contains("32", "33", "35", "36", "37", "43")
+    }
+
+    @Test
+    @DisplayName("Refresh Token whitelist 테이블은 해시 유일성과 사용자별 생성순 인덱스를 갖는다")
+    fun refreshTokenWhitelistSchemaHasRequiredConstraintsAndIndex() {
+        val columns =
+            jdbcTemplate.queryForList(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'refresh_tokens'
+                """.trimIndent(),
+                String::class.java,
+            )
+        val constraintNames =
+            jdbcTemplate.queryForList(
+                """
+                SELECT constraint_name
+                FROM information_schema.table_constraints
+                WHERE table_schema = 'public'
+                  AND table_name = 'refresh_tokens'
+                """.trimIndent(),
+                String::class.java,
+            )
+        val indexNames =
+            jdbcTemplate.queryForList(
+                """
+                SELECT indexname
+                FROM pg_indexes
+                WHERE schemaname = 'public'
+                  AND tablename = 'refresh_tokens'
+                """.trimIndent(),
+                String::class.java,
+            )
+
+        assertThat(columns).containsExactlyInAnyOrder(
+            "id",
+            "user_id",
+            "token_hash",
+            "created_at_utc",
+            "updated_at_utc",
+        )
+        assertThat(constraintNames).contains("uk_refresh_tokens_token_hash")
+        assertThat(indexNames).contains("idx_refresh_tokens_user_created_id")
     }
 
     @Test
@@ -192,6 +237,7 @@ class FlywayMigrationValidationTest : IntegrationTest() {
                 "post_read_log",
                 "post_view_log",
                 "posts",
+                "refresh_tokens",
                 "tags",
                 "user_bans",
                 "user_follows",

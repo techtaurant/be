@@ -1,31 +1,29 @@
 package com.techtaurant.mainserver.security.oauth.handler
 
 import com.techtaurant.mainserver.common.exception.ApiException
-import com.techtaurant.mainserver.security.cache.TokenCachePort
 import com.techtaurant.mainserver.security.helper.CookieHelper
 import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtProperties
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.security.oauth.CustomOAuth2User
 import com.techtaurant.mainserver.security.oauth.repository.HttpCookieOAuth2AuthorizationRequestRepository
+import com.techtaurant.mainserver.security.service.RefreshTokenWhitelistService
 import com.techtaurant.mainserver.user.enums.UserStatus
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.security.core.Authentication
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler
 import org.springframework.stereotype.Component
-import org.springframework.transaction.annotation.Transactional
 
 @Component
 class OAuth2SuccessHandler(
     private val jwtTokenProvider: JwtTokenProvider,
     private val jwtProperties: JwtProperties,
     private val cookieHelper: CookieHelper,
-    private val tokenCacheManager: TokenCachePort,
+    private val refreshTokenWhitelistService: RefreshTokenWhitelistService,
     private val cookieOAuth2AuthorizationRequestRepository: HttpCookieOAuth2AuthorizationRequestRepository,
     private val redirectResolver: OAuth2RedirectResolver,
 ) : AuthenticationSuccessHandler {
-    @Transactional
     override fun onAuthenticationSuccess(
         request: HttpServletRequest,
         response: HttpServletResponse,
@@ -39,8 +37,7 @@ class OAuth2SuccessHandler(
         val accessToken = jwtTokenProvider.createAccessToken(userId, user.role)
         val refreshToken = jwtTokenProvider.createRefreshToken(userId)
 
-        // userId 기반으로 refresh token 저장 (기존 토큰은 자동으로 덮어씌워짐)
-        tokenCacheManager.saveRefreshToken(userId.toString(), refreshToken)
+        refreshTokenWhitelistService.register(userId, jwtTokenProvider.hashToken(refreshToken))
 
         cookieHelper.addCookie(
             response,

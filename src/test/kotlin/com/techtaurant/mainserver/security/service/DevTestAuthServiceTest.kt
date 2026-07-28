@@ -1,6 +1,5 @@
 package com.techtaurant.mainserver.security.service
 
-import com.techtaurant.mainserver.security.cache.TokenCachePort
 import com.techtaurant.mainserver.security.dto.DevTestLoginRequest
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.security.helper.CookieHelper
@@ -31,7 +30,7 @@ class DevTestAuthServiceTest {
             refreshTokenExpireMs = 604800000,
         )
     private val cookieHelper: CookieHelper = mockk(relaxed = true)
-    private val tokenCacheManager: TokenCachePort = mockk(relaxed = true)
+    private val refreshTokenWhitelistService: RefreshTokenWhitelistService = mockk(relaxed = true)
     private val userUniqueNameService: UserUniqueNameService = mockk()
     private lateinit var devTestAuthService: DevTestAuthService
 
@@ -43,7 +42,7 @@ class DevTestAuthServiceTest {
                 jwtTokenProvider,
                 jwtProperties,
                 cookieHelper,
-                tokenCacheManager,
+                refreshTokenWhitelistService,
                 userUniqueNameService,
             )
     }
@@ -71,6 +70,7 @@ class DevTestAuthServiceTest {
         every { userUniqueNameService.saveNewUser(any()) } returns createdUser
         every { jwtTokenProvider.createAccessToken(userId, UserRole.ADMIN) } returns "access-token"
         every { jwtTokenProvider.createRefreshToken(userId) } returns "refresh-token"
+        every { jwtTokenProvider.hashToken("refresh-token") } returns "refresh-token-hash"
 
         val result = devTestAuthService.execute(request, response)
 
@@ -101,7 +101,7 @@ class DevTestAuthServiceTest {
                 (jwtProperties.refreshTokenExpireMs / 1000).toInt(),
             )
         }
-        verify { tokenCacheManager.saveRefreshToken(userId.toString(), "refresh-token") }
+        verify { refreshTokenWhitelistService.register(userId, "refresh-token-hash") }
     }
 
     @Test
@@ -124,8 +124,10 @@ class DevTestAuthServiceTest {
             }
 
         every { userRepository.findByIdentifierAndProvider(identifier, OAuthProvider.DEV_LOCAL) } returns existingUser
+        every { userRepository.save(existingUser) } returns existingUser
         every { jwtTokenProvider.createAccessToken(userId, UserRole.ADMIN) } returns "access-token"
         every { jwtTokenProvider.createRefreshToken(userId) } returns "refresh-token"
+        every { jwtTokenProvider.hashToken("refresh-token") } returns "refresh-token-hash"
 
         val result = devTestAuthService.execute(request, response)
 
@@ -133,5 +135,7 @@ class DevTestAuthServiceTest {
         assertEquals("access-token", result.accessToken)
         assertEquals("refresh-token", result.refreshToken)
         verify(exactly = 0) { userUniqueNameService.saveNewUser(any()) }
+        verify(exactly = 1) { userRepository.save(existingUser) }
+        verify(exactly = 1) { refreshTokenWhitelistService.register(userId, "refresh-token-hash") }
     }
 }

@@ -2,7 +2,6 @@ package com.techtaurant.mainserver.security.service
 
 import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.common.status.DefaultStatus
-import com.techtaurant.mainserver.security.cache.TokenCachePort
 import com.techtaurant.mainserver.security.dto.DevTestLoginRequest
 import com.techtaurant.mainserver.security.dto.DevTestLoginResponse
 import com.techtaurant.mainserver.security.enums.OAuthProvider
@@ -18,7 +17,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.context.annotation.Profile
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 
 /**
  * 개발 환경 전용 테스트 인증 서비스
@@ -34,7 +32,7 @@ class DevTestAuthService(
     private val jwtTokenProvider: JwtTokenProvider,
     private val jwtProperties: JwtProperties,
     private val cookieHelper: CookieHelper,
-    private val tokenCacheManager: TokenCachePort,
+    private val refreshTokenWhitelistService: RefreshTokenWhitelistService,
     private val userUniqueNameService: UserUniqueNameService,
 ) {
     companion object {
@@ -51,7 +49,6 @@ class DevTestAuthService(
      * @return 발급된 JWT 토큰 정보
      * @throws ApiException password가 일치하지 않는 경우
      */
-    @Transactional
     fun execute(
         request: DevTestLoginRequest,
         response: HttpServletResponse,
@@ -64,7 +61,7 @@ class DevTestAuthService(
         val accessToken = jwtTokenProvider.createAccessToken(userId, user.role)
         val refreshToken = jwtTokenProvider.createRefreshToken(userId)
 
-        tokenCacheManager.saveRefreshToken(userId.toString(), refreshToken)
+        refreshTokenWhitelistService.register(userId, jwtTokenProvider.hashToken(refreshToken))
 
         cookieHelper.addCookie(
             response,
@@ -95,7 +92,7 @@ class DevTestAuthService(
         val existingUser = userRepository.findByIdentifierAndProvider(request.identifier, OAuthProvider.DEV_LOCAL)
         if (existingUser != null) {
             existingUser.role = request.role
-            return existingUser
+            return userRepository.save(existingUser)
         }
 
         return userUniqueNameService.saveNewUser(

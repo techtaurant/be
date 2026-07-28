@@ -26,6 +26,7 @@ import com.techtaurant.mainserver.jooq.tables.PostReadLog
 import com.techtaurant.mainserver.jooq.tables.PostTags
 import com.techtaurant.mainserver.jooq.tables.PostViewLog
 import com.techtaurant.mainserver.jooq.tables.Posts
+import com.techtaurant.mainserver.jooq.tables.RefreshTokens
 import com.techtaurant.mainserver.jooq.tables.Tags
 import com.techtaurant.mainserver.jooq.tables.UserBans
 import com.techtaurant.mainserver.jooq.tables.UserFollows
@@ -164,6 +165,11 @@ open class Public : SchemaImpl("public", DefaultCatalog.DEFAULT_CATALOG) {
     val POSTS: Posts get() = Posts.POSTS
 
     /**
+     * The table <code>public.refresh_tokens</code>.
+     */
+    val REFRESH_TOKENS: RefreshTokens get() = RefreshTokens.REFRESH_TOKENS
+
+    /**
      * The table <code>public.tags</code>.
      */
     val TAGS: Tags get() = Tags.TAGS
@@ -218,6 +224,7 @@ open class Public : SchemaImpl("public", DefaultCatalog.DEFAULT_CATALOG) {
         PostTags.POST_TAGS,
         PostViewLog.POST_VIEW_LOG,
         Posts.POSTS,
+        RefreshTokens.REFRESH_TOKENS,
         Tags.TAGS,
         UserBans.USER_BANS,
         UserFollows.USER_FOLLOWS,

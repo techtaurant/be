@@ -116,12 +116,15 @@ jwt:
     access-token-expire-ms: ${JWT_ACCESS_TOKEN_EXPIRE_MS:3600000}
     refresh-token-expire-ms: ${JWT_REFRESH_TOKEN_EXPIRE_MS:604800000}
 
+security:
+    refresh-token-whitelist:
+        max-active-tokens-per-user: ${REFRESH_TOKEN_MAX_ACTIVE_PER_USER:3}
+
 # Cookie
-# 주의: SameSite=None은 반드시 Secure=true와 함께 사용해야 함 (Chrome 80+)
 cookie:
     secure: ${COOKIE_SECURE:true}
     http-only: ${COOKIE_HTTP_ONLY:true}
-    same-site: ${COOKIE_SAME_SITE:None}
+    same-site: ${COOKIE_SAME_SITE:Lax}
     path: ${COOKIE_PATH:/}
 
 # Springdoc OpenAPI

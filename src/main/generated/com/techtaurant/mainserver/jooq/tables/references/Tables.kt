@@ -26,6 +26,7 @@ import com.techtaurant.mainserver.jooq.tables.PostReadLog
 import com.techtaurant.mainserver.jooq.tables.PostTags
 import com.techtaurant.mainserver.jooq.tables.PostViewLog
 import com.techtaurant.mainserver.jooq.tables.Posts
+import com.techtaurant.mainserver.jooq.tables.RefreshTokens
 import com.techtaurant.mainserver.jooq.tables.Tags
 import com.techtaurant.mainserver.jooq.tables.UserBans
 import com.techtaurant.mainserver.jooq.tables.UserFollows
@@ -144,6 +145,11 @@ val POST_VIEW_LOG: PostViewLog = PostViewLog.POST_VIEW_LOG
  * The table <code>public.posts</code>.
  */
 val POSTS: Posts = Posts.POSTS
+
+/**
+ * The table <code>public.refresh_tokens</code>.
+ */
+val REFRESH_TOKENS: RefreshTokens = RefreshTokens.REFRESH_TOKENS
 
 /**
  * The table <code>public.tags</code>.

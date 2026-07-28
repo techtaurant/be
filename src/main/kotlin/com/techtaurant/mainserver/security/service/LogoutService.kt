@@ -1,9 +1,9 @@
 package com.techtaurant.mainserver.security.service
 
-import com.techtaurant.mainserver.security.cache.TokenCachePort
 import com.techtaurant.mainserver.security.helper.CookieHelper
 import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
+import io.jsonwebtoken.ExpiredJwtException
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.stereotype.Service
@@ -12,14 +12,14 @@ import java.util.UUID
 /**
  * 로그아웃 서비스
  *
- * 캐시에서 토큰을 무효화하고 인증 쿠키를 삭제합니다.
+ * 사용자의 Refresh Token을 모두 폐기하고 인증 쿠키를 삭제합니다.
  * 멱등성을 보장하여 중복 호출 시에도 안전합니다.
  */
 @Service
 class LogoutService(
     private val cookieHelper: CookieHelper,
     private val jwtTokenProvider: JwtTokenProvider,
-    private val tokenCacheManager: TokenCachePort,
+    private val refreshTokenWhitelistService: RefreshTokenWhitelistService,
 ) {
     fun logout(
         request: HttpServletRequest,
@@ -29,7 +29,7 @@ class LogoutService(
         val accessToken = request.cookies?.find { it.name == JwtConstants.ACCESS_TOKEN_COOKIE }?.value
         val refreshToken = request.cookies?.find { it.name == JwtConstants.REFRESH_TOKEN_COOKIE }?.value
 
-        // 캐시에서 토큰 무효화
+        // 서버 whitelist에서 사용자의 모든 Refresh Token 무효화
         invalidateTokens(accessToken, refreshToken)
 
         // 쿠키 삭제
@@ -37,10 +37,9 @@ class LogoutService(
     }
 
     /**
-     * 캐시에서 토큰을 무효화합니다.
+     * 서버 whitelist에서 사용자의 모든 Refresh Token을 무효화합니다.
      *
-     * REFRESH_TOKEN만 캐싱하므로 userId로 RefreshToken을 삭제합니다.
-     * ACCESS_TOKEN은 캐싱하지 않으므로 별도 삭제가 불필요합니다.
+     * ACCESS_TOKEN은 서버에 저장하지 않으므로 별도 삭제가 불필요합니다.
      *
      * @param accessToken AccessToken 값 (nullable, userId 추출용)
      * @param refreshToken RefreshToken 값 (nullable, userId 추출용)
@@ -52,8 +51,7 @@ class LogoutService(
         // userId 추출 (둘 중 하나라도 있으면 가능)
         val userId = extractUserId(accessToken, refreshToken) ?: return
 
-        // REFRESH_TOKEN 캐시에서 삭제 (userId를 키로 사용)
-        tokenCacheManager.deleteRefreshToken(userId.toString())
+        refreshTokenWhitelistService.revokeAll(userId)
     }
 
     /**
@@ -67,18 +65,18 @@ class LogoutService(
     private fun extractUserId(
         accessToken: String?,
         refreshToken: String?,
-    ): UUID? {
+    ): UUID? =
+        sequenceOf(accessToken, refreshToken)
+            .filterNotNull()
+            .mapNotNull(::extractUserId)
+            .firstOrNull()
+
+    private fun extractUserId(token: String): UUID? {
         return try {
-            // accessToken 우선 시도
-            if (accessToken != null) {
-                jwtTokenProvider.validateAndGetUserId(accessToken)
-            } else if (refreshToken != null) {
-                jwtTokenProvider.validateAndGetUserId(refreshToken)
-            } else {
-                null
-            }
+            jwtTokenProvider.validateAndGetUserId(token)
+        } catch (e: ExpiredJwtException) {
+            runCatching { UUID.fromString(e.claims.subject) }.getOrNull()
         } catch (e: Exception) {
-            // 토큰이 만료되었거나 유효하지 않아도 로그아웃은 성공 처리 (멱등성)
             null
         }
     }

@@ -1,7 +1,6 @@
 package com.techtaurant.mainserver.security.service
 
 import com.techtaurant.mainserver.common.exception.ApiException
-import com.techtaurant.mainserver.security.cache.TokenCachePort
 import com.techtaurant.mainserver.security.helper.CookieHelper
 import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtProperties
@@ -34,7 +33,7 @@ class TokenRefreshServiceTest {
             accessTokenExpireMs = 3600000,
             refreshTokenExpireMs = 604800000,
         )
-    private val tokenCacheManager: TokenCachePort = mockk()
+    private val refreshTokenWhitelistService: RefreshTokenWhitelistService = mockk()
     private val userRepository: UserRepository = mockk()
 
     @BeforeEach
@@ -44,7 +43,7 @@ class TokenRefreshServiceTest {
                 cookieHelper,
                 jwtTokenProvider,
                 jwtProperties,
-                tokenCacheManager,
+                refreshTokenWhitelistService,
                 userRepository,
             )
     }
@@ -67,11 +66,12 @@ class TokenRefreshServiceTest {
         every { cookieHelper.getCookie(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns refreshTokenValue
         every { cookieHelper.addCookie(any(), any(), any(), any()) } returns Unit
         every { jwtTokenProvider.validateAndGetUserId(refreshTokenValue) } returns userId
-        every { tokenCacheManager.getRefreshToken(userId.toString()) } returns refreshTokenValue
         every { userRepository.findById(userId) } returns Optional.of(user)
         every { jwtTokenProvider.createAccessToken(userId, UserRole.USER) } returns newAccessToken
         every { jwtTokenProvider.createRefreshToken(userId) } returns newRefreshToken
-        every { tokenCacheManager.saveRefreshToken(userId.toString(), newRefreshToken) } returns Unit
+        every { jwtTokenProvider.hashToken(refreshTokenValue) } returns "old-hash"
+        every { jwtTokenProvider.hashToken(newRefreshToken) } returns "new-hash"
+        every { refreshTokenWhitelistService.rotate(userId, "old-hash", "new-hash") } returns true
 
         // when
         tokenRefreshService.execute(request, response)
@@ -93,21 +93,30 @@ class TokenRefreshServiceTest {
                 (jwtProperties.refreshTokenExpireMs / 1000).toInt(),
             )
         }
-        verify { tokenCacheManager.saveRefreshToken(userId.toString(), newRefreshToken) }
+        verify { refreshTokenWhitelistService.rotate(userId, "old-hash", "new-hash") }
     }
 
     @Test
-    @DisplayName("캐시에 존재하지 않는 리프레시 토큰으로 요청 시 예외 발생")
-    fun `refresh with non-existent token in cache`() {
+    @DisplayName("whitelist에 존재하지 않는 리프레시 토큰으로 요청하면 쿠키를 발급하지 않는다")
+    fun `refresh with non-existent token in whitelist`() {
         // given
         val userId = UUID.randomUUID()
         val refreshTokenValue = "non-existent-token"
         val request = mockk<HttpServletRequest>()
         val response = mockk<HttpServletResponse>()
+        val user =
+            mockk<User> {
+                every { role } returns UserRole.USER
+            }
 
         every { cookieHelper.getCookie(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns refreshTokenValue
         every { jwtTokenProvider.validateAndGetUserId(refreshTokenValue) } returns userId
-        every { tokenCacheManager.getRefreshToken(userId.toString()) } returns null
+        every { userRepository.findById(userId) } returns Optional.of(user)
+        every { jwtTokenProvider.createAccessToken(userId, UserRole.USER) } returns "new-access-token"
+        every { jwtTokenProvider.createRefreshToken(userId) } returns "new-refresh-token"
+        every { jwtTokenProvider.hashToken(refreshTokenValue) } returns "missing-hash"
+        every { jwtTokenProvider.hashToken("new-refresh-token") } returns "new-hash"
+        every { refreshTokenWhitelistService.rotate(userId, "missing-hash", "new-hash") } returns false
 
         // when & then
         val exception =
@@ -115,6 +124,7 @@ class TokenRefreshServiceTest {
                 tokenRefreshService.execute(request, response)
             }
         assertEquals(JwtStatus.INVALID_REFRESH_TOKEN, exception.status)
+        verify(exactly = 0) { cookieHelper.addCookie(any(), any(), any(), any()) }
     }
 
     @Test
@@ -134,28 +144,7 @@ class TokenRefreshServiceTest {
                 tokenRefreshService.execute(request, response)
             }
         assertEquals(JwtStatus.REFRESH_TOKEN_EXPIRED, exception.status)
-    }
-
-    @Test
-    @DisplayName("클라이언트 토큰과 캐시 토큰이 다를 경우 예외 발생 (토큰 재사용 공격 방어)")
-    fun `refresh with mismatched tokens`() {
-        // given
-        val userId = UUID.randomUUID()
-        val clientToken = "client-token"
-        val cachedToken = "cached-token" // 다른 토큰
-        val request = mockk<HttpServletRequest>()
-        val response = mockk<HttpServletResponse>()
-
-        every { cookieHelper.getCookie(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns clientToken
-        every { jwtTokenProvider.validateAndGetUserId(clientToken) } returns userId
-        every { tokenCacheManager.getRefreshToken(userId.toString()) } returns cachedToken
-
-        // when & then
-        val exception =
-            assertThrows<ApiException> {
-                tokenRefreshService.execute(request, response)
-            }
-        assertEquals(JwtStatus.INVALID_REFRESH_TOKEN, exception.status)
+        verify(exactly = 0) { refreshTokenWhitelistService.rotate(any(), any(), any()) }
     }
 
     @Test
@@ -169,7 +158,6 @@ class TokenRefreshServiceTest {
 
         every { cookieHelper.getCookie(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns refreshTokenValue
         every { jwtTokenProvider.validateAndGetUserId(refreshTokenValue) } returns userId
-        every { tokenCacheManager.getRefreshToken(userId.toString()) } returns refreshTokenValue
         every { userRepository.findById(userId) } returns Optional.empty()
 
         // when & then
@@ -178,5 +166,6 @@ class TokenRefreshServiceTest {
                 tokenRefreshService.execute(request, response)
             }
         assertEquals(JwtStatus.INVALID_REFRESH_TOKEN, exception.status)
+        verify(exactly = 0) { refreshTokenWhitelistService.rotate(any(), any(), any()) }
     }
 }
