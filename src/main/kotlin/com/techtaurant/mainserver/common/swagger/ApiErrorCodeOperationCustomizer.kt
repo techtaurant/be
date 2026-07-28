@@ -130,7 +130,7 @@ class ApiErrorCodeOperationCustomizer : OperationCustomizer {
 
     private fun businessErrorSchema(): Schema<*> =
         ObjectSchema()
-            .addProperty("status", IntegerSchema().description("커스텀 상태 코드").example(3001))
+            .addProperty("status", IntegerSchema().description("커스텀 상태 코드").example(2001))
             .addProperty(
                 "data",
                 Schema<Any>().apply {
