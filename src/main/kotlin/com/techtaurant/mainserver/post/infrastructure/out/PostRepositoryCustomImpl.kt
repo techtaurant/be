@@ -42,6 +42,10 @@ import java.util.UUID
 class PostRepositoryCustomImpl(
     private val dsl: DSLContext,
 ) : PostRepository {
+    companion object {
+        private const val LIKE_ESCAPE_CHAR = '\\'
+    }
+
     override fun save(post: Post): Post {
         val now = Instant.now()
         val postId = post.id ?: UuidCreator.getTimeOrderedEpoch().also { post.id = it }
@@ -162,6 +166,7 @@ class PostRepositoryCustomImpl(
         visibleToUserId: UUID?,
         tagIds: List<UUID>?,
         viewerId: UUID?,
+        keyword: String?,
     ): List<PostWithSortValue> {
         val rankedPostIds =
             when (sortType) {
@@ -176,6 +181,7 @@ class PostRepositoryCustomImpl(
                         visibleToUserId,
                         tagIds,
                         viewerId,
+                        keyword,
                     )
                 else ->
                     findStatRankedPostIds(
@@ -189,6 +195,7 @@ class PostRepositoryCustomImpl(
                         visibleToUserId,
                         tagIds,
                         viewerId,
+                        keyword,
                     )
             }
 
@@ -270,8 +277,9 @@ class PostRepositoryCustomImpl(
         visibleToUserId: UUID?,
         tagIds: List<UUID>?,
         viewerId: UUID?,
+        keyword: String?,
     ): List<RankedPostId> {
-        val conditions = baseConditions(authorId, statuses, categoryId, visibleToUserId, tagIds, viewerId).toMutableList()
+        val conditions = baseConditions(authorId, statuses, categoryId, visibleToUserId, tagIds, viewerId, keyword).toMutableList()
         period.days?.let {
                 days ->
             conditions += POSTS.CREATED_AT_UTC.ge(Instant.now().minus(days.toLong(), ChronoUnit.DAYS).atOffset(ZoneOffset.UTC))
@@ -302,9 +310,10 @@ class PostRepositoryCustomImpl(
         visibleToUserId: UUID?,
         tagIds: List<UUID>?,
         viewerId: UUID?,
+        keyword: String?,
     ): List<RankedPostId> {
         val sortValue = dailyStatSum(sortType)
-        val conditions = baseConditions(authorId, statuses, categoryId, visibleToUserId, tagIds, viewerId).toMutableList()
+        val conditions = baseConditions(authorId, statuses, categoryId, visibleToUserId, tagIds, viewerId, keyword).toMutableList()
         period.days?.let { days -> conditions += POST_DAILY_STATS.STAT_DATE.ge(statsCutoffDate(days)) }
         val cursorCondition = cursor?.let { statsCursorCondition(it, sortValue) }
 
@@ -326,11 +335,13 @@ class PostRepositoryCustomImpl(
         visibleToUserId: UUID?,
         tagIds: List<UUID>?,
         viewerId: UUID?,
+        keyword: String?,
     ): List<Condition> {
         val conditions = mutableListOf<Condition>()
         conditions += visibilityCondition(statuses, visibleToUserId)
         authorId?.let { conditions += POSTS.AUTHOR_ID.eq(it) }
         categoryId?.let { conditions += POSTS.CATEGORY_ID.eq(it) }
+        keyword?.let { conditions += keywordCondition(it) }
         tagIds?.takeIf { it.isNotEmpty() }?.let { ids ->
             conditions += DSL.exists(dsl.selectOne().from(POST_TAGS).where(POST_TAGS.POST_ID.eq(POSTS.ID).and(POST_TAGS.TAG_ID.`in`(ids))))
         }
@@ -355,6 +366,26 @@ class PostRepositoryCustomImpl(
         } else {
             POSTS.STATUS.eq(PostStatusEnum.PUBLISHED.name)
         }
+
+    /**
+     * 제목 또는 본문에 검색어가 포함된 게시물을 찾는 조건을 만든다.
+     *
+     * 양쪽 컬럼 모두 `lower(컬럼) LIKE ?` 형태로 고정한다. 이 형태여야 pg_bigm 도입 시
+     * `GIN (lower(컬럼) gin_bigm_ops)` 표현식 인덱스가 그대로 매칭된다.
+     * gin_bigm_ops는 LIKE만 지원하므로 ILIKE를 렌더링하는 likeIgnoreCase를 쓰면 인덱스를 타지 못한다.
+     */
+    private fun keywordCondition(keyword: String): Condition {
+        val pattern = "%${escapeLikeWildcards(keyword.lowercase())}%"
+
+        return DSL.lower(POSTS.TITLE).like(pattern, LIKE_ESCAPE_CHAR)
+            .or(DSL.lower(POSTS.CONTENT).like(pattern, LIKE_ESCAPE_CHAR))
+    }
+
+    /** 검색어에 포함된 LIKE 와일드카드를 리터럴로 취급하도록 이스케이프한다. 역슬래시를 먼저 처리해야 이중 이스케이프를 피한다. */
+    private fun escapeLikeWildcards(keyword: String): String =
+        keyword.replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
 
     private fun latestCursorCondition(cursor: PostCursor): Condition {
         val cursorInstant = cursor.createdAt.atOffset(ZoneOffset.UTC)
