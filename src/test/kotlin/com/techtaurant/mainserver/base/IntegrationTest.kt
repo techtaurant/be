@@ -11,6 +11,9 @@ import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.containers.wait.strategy.Wait
+import org.testcontainers.images.builder.ImageFromDockerfile
+import org.testcontainers.utility.DockerImageName
+import java.nio.file.Path
 import java.time.Duration
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -57,13 +60,27 @@ abstract class IntegrationTest {
     }
 
     companion object {
+        /**
+         * 게시물 검색 인덱스가 pg_bigm 확장을 요구하므로 공식 이미지 대신 확장을 빌드해 넣은 이미지를 쓴다.
+         * docker-compose와 같은 Dockerfile을 쓰되 기존 테스트 PostgreSQL 버전은 유지한다.
+         */
+        private val postgresImageName =
+            ImageFromDockerfile("techtaurant/postgres-bigm-test:15-alpine", false)
+                .withDockerfile(Path.of("docker/postgres/Dockerfile"))
+                .withBuildArg("POSTGRES_VERSION", "15-alpine")
+                .get()
+
         private val postgresContainer =
-            PostgreSQLContainer("postgres:15-alpine")
+            PostgreSQLContainer(DockerImageName.parse(postgresImageName).asCompatibleSubstituteFor("postgres"))
                 .withDatabaseName("techtaurant_test")
                 .withUsername("test_user")
                 .withPassword("test_password")
                 .withExposedPorts(5432)
-                .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofSeconds(60)))
+                // shared_preload_libraries는 서버 시작 시점에만 읽힌다.
+                // PostgreSQLContainer 기본 명령의 fsync=off를 덮어쓰게 되므로 함께 넘긴다.
+                // 빠지면 테스트마다 수행하는 전체 테이블 TRUNCATE가 디스크로 fsync하며 스위트가 수십 배 느려진다.
+                .withCommand("postgres", "-c", "fsync=off", "-c", "shared_preload_libraries=pg_bigm")
+                .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofSeconds(120)))
 
         init {
             postgresContainer.start()
