@@ -32,61 +32,57 @@ open class PostsRecord() : UpdatableRecordImpl<PostsRecord>(Posts.POSTS) {
         set(value): Unit = set(2, value)
         get(): String? = get(2) as String?
 
-    open var contentTsvector: String?
-        set(value): Unit = set(3, value)
-        get(): String? = get(3) as String?
-
     open var authorId: UUID?
+        set(value): Unit = set(3, value)
+        get(): UUID? = get(3) as UUID?
+
+    open var categoryId: UUID?
         set(value): Unit = set(4, value)
         get(): UUID? = get(4) as UUID?
 
-    open var categoryId: UUID?
-        set(value): Unit = set(5, value)
-        get(): UUID? = get(5) as UUID?
-
     open var createdAt: LocalDateTime?
+        set(value): Unit = set(5, value)
+        get(): LocalDateTime? = get(5) as LocalDateTime?
+
+    open var updatedAt: LocalDateTime?
         set(value): Unit = set(6, value)
         get(): LocalDateTime? = get(6) as LocalDateTime?
 
-    open var updatedAt: LocalDateTime?
-        set(value): Unit = set(7, value)
-        get(): LocalDateTime? = get(7) as LocalDateTime?
-
     open var viewCount: Long?
+        set(value): Unit = set(7, value)
+        get(): Long? = get(7) as Long?
+
+    open var likeCount: Long?
         set(value): Unit = set(8, value)
         get(): Long? = get(8) as Long?
 
-    open var likeCount: Long?
+    open var commentCount: Long?
         set(value): Unit = set(9, value)
         get(): Long? = get(9) as Long?
 
-    open var commentCount: Long?
-        set(value): Unit = set(10, value)
-        get(): Long? = get(10) as Long?
-
     open var statsUpdatedAt: LocalDateTime?
-        set(value): Unit = set(11, value)
-        get(): LocalDateTime? = get(11) as LocalDateTime?
+        set(value): Unit = set(10, value)
+        get(): LocalDateTime? = get(10) as LocalDateTime?
 
     open var status: String?
-        set(value): Unit = set(12, value)
-        get(): String? = get(12) as String?
+        set(value): Unit = set(11, value)
+        get(): String? = get(11) as String?
 
     open var thumbnailImage: UUID?
-        set(value): Unit = set(13, value)
-        get(): UUID? = get(13) as UUID?
+        set(value): Unit = set(12, value)
+        get(): UUID? = get(12) as UUID?
 
     open var createdAtUtc: OffsetDateTime?
+        set(value): Unit = set(13, value)
+        get(): OffsetDateTime? = get(13) as OffsetDateTime?
+
+    open var updatedAtUtc: OffsetDateTime?
         set(value): Unit = set(14, value)
         get(): OffsetDateTime? = get(14) as OffsetDateTime?
 
-    open var updatedAtUtc: OffsetDateTime?
+    open var statsUpdatedAtUtc: OffsetDateTime?
         set(value): Unit = set(15, value)
         get(): OffsetDateTime? = get(15) as OffsetDateTime?
-
-    open var statsUpdatedAtUtc: OffsetDateTime?
-        set(value): Unit = set(16, value)
-        get(): OffsetDateTime? = get(16) as OffsetDateTime?
 
     // -------------------------------------------------------------------------
     // Primary key information
@@ -97,11 +93,10 @@ open class PostsRecord() : UpdatableRecordImpl<PostsRecord>(Posts.POSTS) {
     /**
      * Create a detached, initialised PostsRecord
      */
-    constructor(id: UUID? = null, title: String? = null, content: String? = null, contentTsvector: String? = null, authorId: UUID? = null, categoryId: UUID? = null, createdAt: LocalDateTime? = null, updatedAt: LocalDateTime? = null, viewCount: Long? = null, likeCount: Long? = null, commentCount: Long? = null, statsUpdatedAt: LocalDateTime? = null, status: String? = null, thumbnailImage: UUID? = null, createdAtUtc: OffsetDateTime? = null, updatedAtUtc: OffsetDateTime? = null, statsUpdatedAtUtc: OffsetDateTime? = null): this() {
+    constructor(id: UUID? = null, title: String? = null, content: String? = null, authorId: UUID? = null, categoryId: UUID? = null, createdAt: LocalDateTime? = null, updatedAt: LocalDateTime? = null, viewCount: Long? = null, likeCount: Long? = null, commentCount: Long? = null, statsUpdatedAt: LocalDateTime? = null, status: String? = null, thumbnailImage: UUID? = null, createdAtUtc: OffsetDateTime? = null, updatedAtUtc: OffsetDateTime? = null, statsUpdatedAtUtc: OffsetDateTime? = null): this() {
         this.id = id
         this.title = title
         this.content = content
-        this.contentTsvector = contentTsvector
         this.authorId = authorId
         this.categoryId = categoryId
         this.createdAt = createdAt
