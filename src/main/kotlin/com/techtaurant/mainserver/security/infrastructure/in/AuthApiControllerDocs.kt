@@ -4,9 +4,9 @@ import com.techtaurant.mainserver.common.dto.ApiResponse
 import com.techtaurant.mainserver.common.status.DefaultStatus
 import com.techtaurant.mainserver.common.swagger.ApiErrorCodeResponse
 import com.techtaurant.mainserver.common.swagger.ApiErrorCodeResponses
+import com.techtaurant.mainserver.security.jwt.JwtStatus
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
-import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import java.util.UUID
 import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
@@ -20,12 +20,12 @@ interface AuthApiControllerDocs {
     )
     @ApiErrorCodeResponses(
         [
+            ApiErrorCodeResponse(JwtStatus::class, ["AUTHENTICATION_REQUIRED"]),
             ApiErrorCodeResponse(DefaultStatus::class, ["UNKNOWN_EXCEPTION"]),
         ],
     )
     fun logout(
-        authenticatedUserId: UUID?,
-        request: HttpServletRequest,
+        authenticatedUserId: UUID,
         response: HttpServletResponse,
     ): ApiResponse<Unit>
 }

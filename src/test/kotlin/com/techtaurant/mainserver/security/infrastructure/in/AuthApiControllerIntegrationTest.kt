@@ -31,35 +31,20 @@ class AuthApiControllerIntegrationTest : IntegrationTest() {
     private lateinit var tokenCachePort: TokenCachePort
 
     @Test
-    @DisplayName("만료된 accessToken 쿠키로도 로그아웃하여 서버 토큰과 인증 쿠키를 폐기한다")
-    fun expiredAccessTokenCookieLogsOut() {
+    @DisplayName("만료된 accessToken으로 로그아웃하면 인증에 실패하고 서버 토큰을 유지한다")
+    fun expiredAccessTokenCannotLogOut() {
         val userId = UUID.randomUUID()
         val expiredAccessToken = createExpiredAccessToken(userId)
         tokenCachePort.saveRefreshToken(userId.toString(), "refresh-token")
 
-        val response =
-            given()
-                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, expiredAccessToken)
-                .`when`()
-                .post("/api/auth/logout")
+        given()
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, expiredAccessToken)
+            .`when`()
+            .post("/api/auth/logout")
+            .then()
+            .statusCode(HttpStatus.UNAUTHORIZED.value())
 
-        response.then().statusCode(HttpStatus.OK.value())
-        assertThat(tokenCachePort.getRefreshToken(userId.toString())).isNull()
-        val setCookieHeaders = response.headers.getValues(HttpHeaders.SET_COOKIE)
-        assertThat(
-            setCookieHeaders.any {
-                it.startsWith("${JwtConstants.ACCESS_TOKEN_COOKIE}=") &&
-                    it.contains("Max-Age=0") &&
-                    it.contains("Path=/")
-            },
-        ).isTrue()
-        assertThat(
-            setCookieHeaders.any {
-                it.startsWith("${JwtConstants.REFRESH_TOKEN_COOKIE}=") &&
-                    it.contains("Max-Age=0") &&
-                    it.contains("Path=/open-api/auth/refresh")
-            },
-        ).isTrue()
+        assertThat(tokenCachePort.getRefreshToken(userId.toString())).isEqualTo("refresh-token")
     }
 
     @Test
