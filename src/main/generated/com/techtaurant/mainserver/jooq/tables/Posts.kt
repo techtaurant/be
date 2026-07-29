@@ -8,7 +8,6 @@ import com.techtaurant.mainserver.jooq.Public
 import com.techtaurant.mainserver.jooq.indexes.IDX_POSTS_AUTHOR_ID
 import com.techtaurant.mainserver.jooq.indexes.IDX_POSTS_AUTHOR_STATUS
 import com.techtaurant.mainserver.jooq.indexes.IDX_POSTS_CATEGORY_ID
-import com.techtaurant.mainserver.jooq.indexes.IDX_POSTS_CONTENT_TSVECTOR
 import com.techtaurant.mainserver.jooq.indexes.IDX_POSTS_CREATED_AT
 import com.techtaurant.mainserver.jooq.indexes.IDX_POSTS_CREATED_AT_UTC
 import com.techtaurant.mainserver.jooq.indexes.IDX_POSTS_CURSOR
@@ -105,11 +104,6 @@ open class Posts(
     val CONTENT: TableField<PostsRecord, String?> = createField(DSL.name("content"), SQLDataType.CLOB.nullable(false), this, "")
 
     /**
-     * The column <code>public.posts.content_tsvector</code>.
-     */
-    val CONTENT_TSVECTOR: TableField<PostsRecord, String?> = createField(DSL.name("content_tsvector"), SQLDataType.VARCHAR, this, "")
-
-    /**
      * The column <code>public.posts.author_id</code>.
      */
     val AUTHOR_ID: TableField<PostsRecord, UUID?> = createField(DSL.name("author_id"), SQLDataType.UUID.nullable(false), this, "")
@@ -193,7 +187,7 @@ open class Posts(
      */
     constructor(): this(DSL.name("posts"), null)
     override fun getSchema(): Schema? = if (aliased()) null else Public.PUBLIC
-    override fun getIndexes(): List<Index> = listOf(IDX_POSTS_AUTHOR_ID, IDX_POSTS_AUTHOR_STATUS, IDX_POSTS_CATEGORY_ID, IDX_POSTS_CONTENT_TSVECTOR, IDX_POSTS_CREATED_AT, IDX_POSTS_CREATED_AT_UTC, IDX_POSTS_CURSOR, IDX_POSTS_CURSOR_UTC, IDX_POSTS_STATS_SYNC, IDX_POSTS_STATS_SYNC_UTC, IDX_POSTS_STATUS, IDX_POSTS_UPDATED_AT_UTC)
+    override fun getIndexes(): List<Index> = listOf(IDX_POSTS_AUTHOR_ID, IDX_POSTS_AUTHOR_STATUS, IDX_POSTS_CATEGORY_ID, IDX_POSTS_CREATED_AT, IDX_POSTS_CREATED_AT_UTC, IDX_POSTS_CURSOR, IDX_POSTS_CURSOR_UTC, IDX_POSTS_STATS_SYNC, IDX_POSTS_STATS_SYNC_UTC, IDX_POSTS_STATUS, IDX_POSTS_UPDATED_AT_UTC)
     override fun getPrimaryKey(): UniqueKey<PostsRecord> = POSTS_PKEY
     override fun getReferences(): List<ForeignKey<PostsRecord, *>> = listOf(POSTS__FK_POSTS_THUMBNAIL_IMAGE, POSTS__POSTS_AUTHOR_ID_FKEY, POSTS__POSTS_CATEGORY_ID_FKEY)
     override fun `as`(alias: String): Posts = Posts(DSL.name(alias), this)

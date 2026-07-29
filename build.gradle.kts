@@ -137,7 +137,7 @@ jooq {
                         ForcedType()
                             .withName("VARCHAR")
                             .withIncludeTypes(
-                                "attachment_reference_type|attachment_status|notification_target_type|notification_type|tsvector",
+                                "attachment_reference_type|attachment_status|notification_target_type|notification_type",
                             ),
                     )
             }
