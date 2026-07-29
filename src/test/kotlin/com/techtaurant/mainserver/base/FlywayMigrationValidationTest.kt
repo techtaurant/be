@@ -32,7 +32,7 @@ class FlywayMigrationValidationTest : IntegrationTest() {
     }
 
     @Test
-    @DisplayName("게시물 pg_bigm 검색 인덱스 마이그레이션은 각각 적용되고 유효한 인덱스를 생성한다")
+    @DisplayName("게시물 검색 마이그레이션은 tsvector 자산을 제거하고 유효한 pg_bigm 인덱스를 생성한다")
     fun postBigmSearchIndexMigrationsCreateValidIndexes() {
         val appliedVersions =
             jdbcTemplate.queryForList(
@@ -52,8 +52,14 @@ class FlywayMigrationValidationTest : IntegrationTest() {
                 """.trimIndent(),
                 String::class.java,
             )
+        val tsvectorColumnCount =
+            jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM information_schema.columns WHERE table_name = 'posts' AND column_name = 'content_tsvector'",
+                Int::class.java,
+            )
 
         assertThat(appliedVersions).containsExactlyInAnyOrder("45", "46")
+        assertThat(tsvectorColumnCount).isZero()
         assertThat(validIndexNames)
             .containsExactlyInAnyOrder(
                 "idx_posts_title_lower_bigm",

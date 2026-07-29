@@ -16,6 +16,8 @@ import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.Pattern
+import jakarta.validation.constraints.Size
 import java.util.UUID
 import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 
@@ -28,7 +30,9 @@ interface PostReadOpenApiV2ControllerDocs {
                 "조회수, 좋아요수, 댓글수, 상태, 썸네일/첨부 presigned URL은 " +
                 "GET /open-api/posts/metadatas?postIds=... API로, 작성자 이름과 프로필 이미지는 " +
                 "GET /open-api/users/profile-images?userIds=... API로 분리되었습니다. " +
-                "로그인 사용자의 읽음/좋아요/차단 상태는 GET /api/posts/me/states?postIds=... API를 사용하세요.",
+                "로그인 사용자의 읽음/좋아요/차단 상태는 GET /api/posts/me/states?postIds=... API를 사용하세요. " +
+                "keyword를 지정하면 제목 또는 본문에 검색어가 포함된 게시물만 대소문자 구분 없이 조회하며, " +
+                "검색어의 `%`와 `_`는 와일드카드가 아닌 일반 문자로 취급합니다.",
     )
     @SwaggerApiResponse(
         responseCode = "200",
@@ -43,6 +47,10 @@ interface PostReadOpenApiV2ControllerDocs {
         @Parameter(description = "작성자 ID 필터 (생략 시 전체 조회)") authorId: UUID?,
         @Parameter(description = "카테고리 ID 필터 (생략 시 전체)") categoryId: UUID?,
         @Parameter(description = "태그 UUID 필터 (여러 개 전달 시 OR 조건으로 조회)") tagIds: List<UUID>?,
+        @Parameter(description = "검색어 (2-100자, 제목·본문 부분 일치)")
+        @Size(min = 2, max = 100)
+        @Pattern(regexp = "(?s).*\\S.*")
+        keyword: String?,
     ): ApiResponse<CursorPageResponse<PostContentListItemResponse>>
 
     @Operation(

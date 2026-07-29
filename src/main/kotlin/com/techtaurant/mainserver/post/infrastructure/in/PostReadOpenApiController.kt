@@ -14,8 +14,6 @@ import com.techtaurant.mainserver.post.enums.PostStatus
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
-import jakarta.validation.constraints.NotBlank
-import jakarta.validation.constraints.Size
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
@@ -54,34 +52,6 @@ class PostReadOpenApiController(
                 authorId = authorId,
                 categoryId = categoryId,
                 tagIds = tagIds,
-            ),
-        )
-    }
-
-    @ApiErrorResponses(includeValidationError = true)
-    @GetMapping("/search")
-    override fun searchPosts(
-        @RequestParam @NotBlank @Size(min = 2, max = 100) keyword: String,
-        @RequestParam(required = false) cursor: String?,
-        @RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
-        @RequestParam(defaultValue = "ALL") period: PostPeriod,
-        @RequestParam(defaultValue = "LATEST") sort: PostSortType,
-        @RequestParam(required = false) authorId: UUID?,
-        @RequestParam(required = false) categoryId: UUID?,
-        @RequestParam(required = false) tagIds: List<UUID>?,
-        @AuthenticationPrincipal currentUserId: UUID?,
-    ): ApiResponse<CursorPageResponse<PostListItemResponse>> {
-        return ApiResponse.ok(
-            postListReadService.getPosts(
-                cursor = cursor,
-                size = size,
-                period = period,
-                sortType = sort,
-                currentUserId = currentUserId,
-                authorId = authorId,
-                categoryId = categoryId,
-                tagIds = tagIds,
-                keyword = keyword,
             ),
         )
     }

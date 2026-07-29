@@ -13,6 +13,8 @@ import com.techtaurant.mainserver.post.enums.PostStatus
 import com.techtaurant.mainserver.security.SecurityConstants
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.Pattern
+import jakarta.validation.constraints.Size
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -38,6 +40,10 @@ class PostReadOpenApiV2Controller(
         @RequestParam(required = false) authorId: UUID?,
         @RequestParam(required = false) categoryId: UUID?,
         @RequestParam(required = false) tagIds: List<UUID>?,
+        @RequestParam(required = false)
+        @Size(min = 2, max = 100)
+        @Pattern(regexp = "(?s).*\\S.*")
+        keyword: String?,
     ): ApiResponse<CursorPageResponse<PostContentListItemResponse>> {
         return ApiResponse.ok(
             postListReadService.getPostContents(
@@ -48,6 +54,7 @@ class PostReadOpenApiV2Controller(
                 authorId = authorId,
                 categoryId = categoryId,
                 tagIds = tagIds,
+                keyword = keyword,
             ),
         )
     }

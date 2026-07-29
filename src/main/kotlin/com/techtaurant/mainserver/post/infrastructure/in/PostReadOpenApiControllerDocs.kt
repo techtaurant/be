@@ -17,8 +17,6 @@ import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
-import jakarta.validation.constraints.NotBlank
-import jakarta.validation.constraints.Size
 import java.util.UUID
 import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 
@@ -48,35 +46,6 @@ interface PostReadOpenApiControllerDocs {
         @Parameter(description = "카테고리 ID 필터 (authorId 지정 시에만 적용, 생략 시 전체)") categoryId: UUID?,
         @Parameter(description = "태그 UUID 필터 (여러 개 전달 시 OR 조건으로 조회)") tagIds: List<UUID>?,
         currentUserId: UUID?,
-    ): ApiResponse<CursorPageResponse<PostListItemResponse>>
-
-    @Operation(
-        summary = "게시물 검색",
-        description =
-            "제목 또는 본문에 검색어가 포함된 게시물을 조회합니다. 대소문자를 구분하지 않으며 " +
-                "`검색`처럼 두 글자 검색어와 `전문검색엔진`처럼 단어 중간에 포함된 문자열도 매칭됩니다. " +
-                "검색어의 `%`와 `_`는 와일드카드가 아닌 일반 문자로 취급됩니다. " +
-                "정렬, 기간, 커서 페이지네이션 동작은 GET /open-api/posts와 동일하며, " +
-                "로그인 상태로 요청하면 본인의 PRIVATE 게시물도 결과에 포함됩니다.",
-    )
-    @SwaggerApiResponse(
-        responseCode = "200",
-        description = "검색 성공 (작성자 프로필 이미지, 게시물 썸네일, 읽음 여부 포함)",
-    )
-    @ApiCommonBadRequestAndUnknown
-    fun searchPosts(
-        @Parameter(description = "검색어 (2-100자, 제목·본문 부분 일치)", required = true)
-        @NotBlank
-        @Size(min = 2, max = 100)
-        keyword: String,
-        @Parameter(description = "이전 응답의 nextCursor (첫 페이지는 생략)") cursor: String?,
-        @Parameter(description = "페이지 크기 (1-100, 기본값 20)") @Min(1) @Max(100) size: Int,
-        @Parameter(description = "기간 필터 (WEEK: 7일, MONTH: 30일, YEAR: 365일, ALL: 전체)") period: PostPeriod,
-        @Parameter(description = "정렬 기준 (LATEST: 최신순, VIEW: 조회순, LIKE: 추천순, COMMENT: 댓글순)") sort: PostSortType,
-        @Parameter(description = "작성자 ID 필터 (생략 시 전체 조회, 본인 조회 시 PRIVATE 포함)") authorId: UUID?,
-        @Parameter(description = "카테고리 ID 필터 (authorId 지정 시에만 적용, 생략 시 전체)") categoryId: UUID?,
-        @Parameter(description = "태그 UUID 필터 (여러 개 전달 시 OR 조건으로 조회)") tagIds: List<UUID>?,
-        @Parameter(hidden = true) currentUserId: UUID?,
     ): ApiResponse<CursorPageResponse<PostListItemResponse>>
 
     @Operation(
