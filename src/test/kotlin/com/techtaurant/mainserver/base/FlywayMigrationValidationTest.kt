@@ -32,6 +32,36 @@ class FlywayMigrationValidationTest : IntegrationTest() {
     }
 
     @Test
+    @DisplayName("게시물 pg_bigm 검색 인덱스 마이그레이션은 각각 적용되고 유효한 인덱스를 생성한다")
+    fun postBigmSearchIndexMigrationsCreateValidIndexes() {
+        val appliedVersions =
+            jdbcTemplate.queryForList(
+                "SELECT version FROM flyway_schema_history WHERE version IN ('45', '46')",
+                String::class.java,
+            )
+        val validIndexNames =
+            jdbcTemplate.queryForList(
+                """
+                SELECT indexrelid::regclass::text
+                FROM pg_index
+                WHERE indexrelid IN (
+                    to_regclass('idx_posts_title_lower_bigm'),
+                    to_regclass('idx_posts_content_lower_bigm')
+                )
+                  AND indisvalid
+                """.trimIndent(),
+                String::class.java,
+            )
+
+        assertThat(appliedVersions).containsExactlyInAnyOrder("45", "46")
+        assertThat(validIndexNames)
+            .containsExactlyInAnyOrder(
+                "idx_posts_title_lower_bigm",
+                "idx_posts_content_lower_bigm",
+            )
+    }
+
+    @Test
     @DisplayName("절대 시각 호환 컬럼은 timestamp with time zone 타입으로 생성된다")
     fun absoluteInstantCompatibilityColumnsUseTimestamptz() {
         val expectedColumns =

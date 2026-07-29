@@ -4,5 +4,5 @@
 
 -- 확장은 shared_preload_libraries에 pg_bigm이 등록된 상태여야 생성할 수 있고, 등록에는 DB 재시작이 필요하다.
 -- 인프라(techtaurant-infra #29)가 선행되지 않으면 이 마이그레이션은 실패한다.
--- 인덱스 생성은 CONCURRENTLY라 트랜잭션 밖에서 실행해야 하므로 V45로 분리했다.
+-- 인덱스 생성은 CONCURRENTLY라 트랜잭션 밖에서 실행해야 하므로 V45와 V46으로 분리했다.
 CREATE EXTENSION IF NOT EXISTS pg_bigm;
