@@ -20,8 +20,8 @@ Google 인증 성공 시 프론트엔드 URL로 리다이렉트되며, HttpOnly 
 
 | 쿠키명 | 설명 | 만료 시간 | 속성 |
 |--------|------|-----------|------|
-| `accessToken` | API 인증용 토큰 | 1시간 | HttpOnly, Secure, SameSite=Lax |
-| `refreshToken` | 토큰 갱신용 | 7일 | HttpOnly, Secure, SameSite=Lax |
+| `accessToken` | API 인증용 토큰 | 1시간 | HttpOnly, Secure, SameSite=Lax, Path=/ |
+| `refreshToken` | 토큰 갱신용 | 7일 | HttpOnly, Secure, SameSite=Lax, Path=/open-api/auth/refresh |
 
 **프론트엔드 처리 예시** (`/oauth/callback` 페이지):
 
