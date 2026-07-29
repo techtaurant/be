@@ -80,7 +80,8 @@ dependencies {
     // UUID V7
     implementation("com.github.f4b6a3:uuid-creator:6.0.0")
 
-    // In-memory lock
+    // Caffeine Cache
+    implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
 
     // HTML Fetching and Sanitization
@@ -129,7 +130,7 @@ jooq {
                 includes =
                     "attachments|categories|comment_like_log|comments|link_crawl_batches|link_crawl_failed_jobs|" +
                     "link_crawl_runs|link_daily_stats|link_like_log|link_read_log|link_tags|link_view_log|links|" +
-                    "notification_arguments|notification_recipients|notifications|post_daily_stats|post_like_log|refresh_tokens|" +
+                    "notification_arguments|notification_recipients|notifications|post_daily_stats|post_like_log|" +
                     "post_read_log|post_tags|post_view_log|posts|tags|user_bans|user_follows|user_links|user_tokens|users"
                 forcedTypes =
                     listOf(

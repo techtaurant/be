@@ -1,5 +1,6 @@
 package com.techtaurant.mainserver.security.service
 
+import com.techtaurant.mainserver.security.cache.TokenCachePort
 import com.techtaurant.mainserver.security.helper.CookieHelper
 import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
@@ -19,7 +20,7 @@ import java.util.UUID
 class LogoutServiceTest {
     private val cookieHelper: CookieHelper = mockk(relaxed = true)
     private val jwtTokenProvider: JwtTokenProvider = mockk()
-    private val refreshTokenWhitelistService: RefreshTokenWhitelistService = mockk(relaxed = true)
+    private val tokenCacheManager: TokenCachePort = mockk(relaxed = true)
     private lateinit var logoutService: LogoutService
 
     @BeforeEach
@@ -28,7 +29,7 @@ class LogoutServiceTest {
             LogoutService(
                 cookieHelper = cookieHelper,
                 jwtTokenProvider = jwtTokenProvider,
-                refreshTokenWhitelistService = refreshTokenWhitelistService,
+                tokenCacheManager = tokenCacheManager,
             )
     }
 
@@ -48,7 +49,7 @@ class LogoutServiceTest {
         logoutService.logout(request, response)
 
         // then
-        verify(exactly = 1) { refreshTokenWhitelistService.revokeAll(userId) }
+        verify(exactly = 1) { tokenCacheManager.deleteRefreshToken(userId.toString()) }
         verify(exactly = 1) { cookieHelper.deleteAllAuthCookies(response) }
     }
 
@@ -70,7 +71,7 @@ class LogoutServiceTest {
         logoutService.logout(request, response)
 
         // then
-        verify(exactly = 1) { refreshTokenWhitelistService.revokeAll(userId) }
+        verify(exactly = 1) { tokenCacheManager.deleteRefreshToken(userId.toString()) }
         verify(exactly = 1) { cookieHelper.deleteAllAuthCookies(response) }
     }
 
@@ -91,7 +92,7 @@ class LogoutServiceTest {
         logoutService.logout(request, response)
 
         // then
-        verify(exactly = 0) { refreshTokenWhitelistService.revokeAll(any()) }
+        verify(exactly = 0) { tokenCacheManager.deleteRefreshToken(any()) }
         verify(exactly = 1) { cookieHelper.deleteAllAuthCookies(response) }
     }
 
@@ -113,7 +114,7 @@ class LogoutServiceTest {
 
         logoutService.logout(request, response)
 
-        verify(exactly = 1) { refreshTokenWhitelistService.revokeAll(userId) }
+        verify(exactly = 1) { tokenCacheManager.deleteRefreshToken(userId.toString()) }
         verify(exactly = 1) { cookieHelper.deleteAllAuthCookies(response) }
     }
 }

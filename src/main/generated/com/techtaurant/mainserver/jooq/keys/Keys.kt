@@ -26,7 +26,6 @@ import com.techtaurant.mainserver.jooq.tables.PostReadLog
 import com.techtaurant.mainserver.jooq.tables.PostTags
 import com.techtaurant.mainserver.jooq.tables.PostViewLog
 import com.techtaurant.mainserver.jooq.tables.Posts
-import com.techtaurant.mainserver.jooq.tables.RefreshTokens
 import com.techtaurant.mainserver.jooq.tables.Tags
 import com.techtaurant.mainserver.jooq.tables.UserBans
 import com.techtaurant.mainserver.jooq.tables.UserFollows
@@ -55,7 +54,6 @@ import com.techtaurant.mainserver.jooq.tables.records.PostReadLogRecord
 import com.techtaurant.mainserver.jooq.tables.records.PostTagsRecord
 import com.techtaurant.mainserver.jooq.tables.records.PostViewLogRecord
 import com.techtaurant.mainserver.jooq.tables.records.PostsRecord
-import com.techtaurant.mainserver.jooq.tables.records.RefreshTokensRecord
 import com.techtaurant.mainserver.jooq.tables.records.TagsRecord
 import com.techtaurant.mainserver.jooq.tables.records.UserBansRecord
 import com.techtaurant.mainserver.jooq.tables.records.UserFollowsRecord
@@ -108,8 +106,6 @@ val POST_READ_LOG_POST_ID_USER_ID_KEY: UniqueKey<PostReadLogRecord> = Internal.c
 val POST_TAGS_PKEY: UniqueKey<PostTagsRecord> = Internal.createUniqueKey(PostTags.POST_TAGS, DSL.name("post_tags_pkey"), arrayOf(PostTags.POST_TAGS.POST_ID, PostTags.POST_TAGS.TAG_ID), true)
 val POST_VIEW_LOG_PKEY: UniqueKey<PostViewLogRecord> = Internal.createUniqueKey(PostViewLog.POST_VIEW_LOG, DSL.name("post_view_log_pkey"), arrayOf(PostViewLog.POST_VIEW_LOG.ID), true)
 val POSTS_PKEY: UniqueKey<PostsRecord> = Internal.createUniqueKey(Posts.POSTS, DSL.name("posts_pkey"), arrayOf(Posts.POSTS.ID), true)
-val REFRESH_TOKENS_PKEY: UniqueKey<RefreshTokensRecord> = Internal.createUniqueKey(RefreshTokens.REFRESH_TOKENS, DSL.name("refresh_tokens_pkey"), arrayOf(RefreshTokens.REFRESH_TOKENS.ID), true)
-val UK_REFRESH_TOKENS_TOKEN_HASH: UniqueKey<RefreshTokensRecord> = Internal.createUniqueKey(RefreshTokens.REFRESH_TOKENS, DSL.name("uk_refresh_tokens_token_hash"), arrayOf(RefreshTokens.REFRESH_TOKENS.TOKEN_HASH), true)
 val TAGS_PKEY: UniqueKey<TagsRecord> = Internal.createUniqueKey(Tags.TAGS, DSL.name("tags_pkey"), arrayOf(Tags.TAGS.ID), true)
 val UK_TAGS_NAME: UniqueKey<TagsRecord> = Internal.createUniqueKey(Tags.TAGS, DSL.name("uk_tags_name"), arrayOf(Tags.TAGS.NAME), true)
 val UK_USER_BANS_USER_ID_BANNED_USER_ID: UniqueKey<UserBansRecord> = Internal.createUniqueKey(UserBans.USER_BANS, DSL.name("uk_user_bans_user_id_banned_user_id"), arrayOf(UserBans.USER_BANS.USER_ID, UserBans.USER_BANS.BANNED_USER_ID), true)
@@ -163,7 +159,6 @@ val POST_VIEW_LOG__POST_VIEW_LOG_USER_ID_FKEY: ForeignKey<PostViewLogRecord, Use
 val POSTS__FK_POSTS_THUMBNAIL_IMAGE: ForeignKey<PostsRecord, AttachmentsRecord> = Internal.createForeignKey(Posts.POSTS, DSL.name("fk_posts_thumbnail_image"), arrayOf(Posts.POSTS.THUMBNAIL_IMAGE), com.techtaurant.mainserver.jooq.keys.ATTACHMENTS_PKEY, arrayOf(Attachments.ATTACHMENTS.ID), true)
 val POSTS__POSTS_AUTHOR_ID_FKEY: ForeignKey<PostsRecord, UsersRecord> = Internal.createForeignKey(Posts.POSTS, DSL.name("posts_author_id_fkey"), arrayOf(Posts.POSTS.AUTHOR_ID), com.techtaurant.mainserver.jooq.keys.USERS_PKEY, arrayOf(Users.USERS.ID), true)
 val POSTS__POSTS_CATEGORY_ID_FKEY: ForeignKey<PostsRecord, CategoriesRecord> = Internal.createForeignKey(Posts.POSTS, DSL.name("posts_category_id_fkey"), arrayOf(Posts.POSTS.CATEGORY_ID), com.techtaurant.mainserver.jooq.keys.CATEGORIES_PKEY, arrayOf(Categories.CATEGORIES.ID), true)
-val REFRESH_TOKENS__REFRESH_TOKENS_USER_ID_FKEY: ForeignKey<RefreshTokensRecord, UsersRecord> = Internal.createForeignKey(RefreshTokens.REFRESH_TOKENS, DSL.name("refresh_tokens_user_id_fkey"), arrayOf(RefreshTokens.REFRESH_TOKENS.USER_ID), com.techtaurant.mainserver.jooq.keys.USERS_PKEY, arrayOf(Users.USERS.ID), true)
 val USER_BANS__USER_BANS_BANNED_USER_ID_FKEY: ForeignKey<UserBansRecord, UsersRecord> = Internal.createForeignKey(UserBans.USER_BANS, DSL.name("user_bans_banned_user_id_fkey"), arrayOf(UserBans.USER_BANS.BANNED_USER_ID), com.techtaurant.mainserver.jooq.keys.USERS_PKEY, arrayOf(Users.USERS.ID), true)
 val USER_BANS__USER_BANS_USER_ID_FKEY: ForeignKey<UserBansRecord, UsersRecord> = Internal.createForeignKey(UserBans.USER_BANS, DSL.name("user_bans_user_id_fkey"), arrayOf(UserBans.USER_BANS.USER_ID), com.techtaurant.mainserver.jooq.keys.USERS_PKEY, arrayOf(Users.USERS.ID), true)
 val USER_FOLLOWS__USER_FOLLOWS_FOLLOWER_ID_FKEY: ForeignKey<UserFollowsRecord, UsersRecord> = Internal.createForeignKey(UserFollows.USER_FOLLOWS, DSL.name("user_follows_follower_id_fkey"), arrayOf(UserFollows.USER_FOLLOWS.FOLLOWER_ID), com.techtaurant.mainserver.jooq.keys.USERS_PKEY, arrayOf(Users.USERS.ID), true)

@@ -26,7 +26,6 @@ import com.techtaurant.mainserver.jooq.tables.PostReadLog
 import com.techtaurant.mainserver.jooq.tables.PostTags
 import com.techtaurant.mainserver.jooq.tables.PostViewLog
 import com.techtaurant.mainserver.jooq.tables.Posts
-import com.techtaurant.mainserver.jooq.tables.RefreshTokens
 import com.techtaurant.mainserver.jooq.tables.Tags
 import com.techtaurant.mainserver.jooq.tables.UserBans
 import com.techtaurant.mainserver.jooq.tables.UserFollows
@@ -115,7 +114,6 @@ val IDX_POSTS_STATS_SYNC: Index = Internal.createIndex(DSL.name("idx_posts_stats
 val IDX_POSTS_STATS_SYNC_UTC: Index = Internal.createIndex(DSL.name("idx_posts_stats_sync_utc"), Posts.POSTS, arrayOf(Posts.POSTS.STATS_UPDATED_AT_UTC, Posts.POSTS.UPDATED_AT_UTC), false)
 val IDX_POSTS_STATUS: Index = Internal.createIndex(DSL.name("idx_posts_status"), Posts.POSTS, arrayOf(Posts.POSTS.STATUS), false)
 val IDX_POSTS_UPDATED_AT_UTC: Index = Internal.createIndex(DSL.name("idx_posts_updated_at_utc"), Posts.POSTS, arrayOf(Posts.POSTS.UPDATED_AT_UTC.desc(), Posts.POSTS.ID.desc()), false)
-val IDX_REFRESH_TOKENS_USER_CREATED_ID: Index = Internal.createIndex(DSL.name("idx_refresh_tokens_user_created_id"), RefreshTokens.REFRESH_TOKENS, arrayOf(RefreshTokens.REFRESH_TOKENS.USER_ID, RefreshTokens.REFRESH_TOKENS.CREATED_AT_UTC, RefreshTokens.REFRESH_TOKENS.ID), false)
 val IDX_TAGS_NAME: Index = Internal.createIndex(DSL.name("idx_tags_name"), Tags.TAGS, arrayOf(Tags.TAGS.NAME), false)
 val IDX_USER_BANS_BANNED_USER_ID: Index = Internal.createIndex(DSL.name("idx_user_bans_banned_user_id"), UserBans.USER_BANS, arrayOf(UserBans.USER_BANS.BANNED_USER_ID), false)
 val IDX_USER_BANS_USER_ID: Index = Internal.createIndex(DSL.name("idx_user_bans_user_id"), UserBans.USER_BANS, arrayOf(UserBans.USER_BANS.USER_ID), false)

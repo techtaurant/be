@@ -64,21 +64,4 @@ class JwtTokenProviderTest {
         assertThat(validatedClaims.isPermanent).isTrue()
         assertThat(parsedClaims.expiration).isNull()
     }
-
-    @Test
-    @DisplayName("같은 사용자의 Refresh Token을 연속 발급해도 서로 다른 jti로 구분된다")
-    fun createRefreshToken_usesUniqueJwtId() {
-        val userId = UUID.randomUUID()
-
-        val firstToken = provider.createRefreshToken(userId)
-        val secondToken = provider.createRefreshToken(userId)
-        val parser = Jwts.parser().verifyWith(secretKey).build()
-        val firstClaims = parser.parseSignedClaims(firstToken).payload
-        val secondClaims = parser.parseSignedClaims(secondToken).payload
-
-        assertThat(firstToken).isNotEqualTo(secondToken)
-        assertThat(firstClaims.id).isNotBlank()
-        assertThat(secondClaims.id).isNotBlank()
-        assertThat(firstClaims.id).isNotEqualTo(secondClaims.id)
-    }
 }

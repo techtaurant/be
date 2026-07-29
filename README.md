@@ -23,8 +23,6 @@ Google 인증 성공 시 프론트엔드 URL로 리다이렉트되며, HttpOnly 
 | `accessToken` | API 인증용 토큰 | 1시간 | HttpOnly, Secure, SameSite=Lax, Path=/ |
 | `refreshToken` | 토큰 갱신용 | 7일 | HttpOnly, Secure, SameSite=Lax, Path=/open-api/auth/refresh |
 
-쿠키 만료, 재발급 오류 및 로그아웃 처리 기준은 [인증 쿠키 및 재발급 정책](docs/auth-cookie-policy.md)을 참고합니다.
-
 **프론트엔드 처리 예시** (`/oauth/callback` 페이지):
 
 ```javascript
