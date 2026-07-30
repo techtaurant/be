@@ -105,7 +105,6 @@ val IDX_POST_VIEW_LOG_POST_CREATED_UTC: Index = Internal.createIndex(DSL.name("i
 val IDX_POSTS_AUTHOR_ID: Index = Internal.createIndex(DSL.name("idx_posts_author_id"), Posts.POSTS, arrayOf(Posts.POSTS.AUTHOR_ID), false)
 val IDX_POSTS_AUTHOR_STATUS: Index = Internal.createIndex(DSL.name("idx_posts_author_status"), Posts.POSTS, arrayOf(Posts.POSTS.AUTHOR_ID, Posts.POSTS.STATUS), false)
 val IDX_POSTS_CATEGORY_ID: Index = Internal.createIndex(DSL.name("idx_posts_category_id"), Posts.POSTS, arrayOf(Posts.POSTS.CATEGORY_ID), false)
-val IDX_POSTS_CONTENT_TSVECTOR: Index = Internal.createIndex(DSL.name("idx_posts_content_tsvector"), Posts.POSTS, arrayOf(Posts.POSTS.CONTENT_TSVECTOR), false)
 val IDX_POSTS_CREATED_AT: Index = Internal.createIndex(DSL.name("idx_posts_created_at"), Posts.POSTS, arrayOf(Posts.POSTS.CREATED_AT.desc()), false)
 val IDX_POSTS_CREATED_AT_UTC: Index = Internal.createIndex(DSL.name("idx_posts_created_at_utc"), Posts.POSTS, arrayOf(Posts.POSTS.CREATED_AT_UTC.desc()), false)
 val IDX_POSTS_CURSOR: Index = Internal.createIndex(DSL.name("idx_posts_cursor"), Posts.POSTS, arrayOf(Posts.POSTS.CREATED_AT.desc(), Posts.POSTS.ID.desc()), false)

@@ -62,6 +62,7 @@ interface PostRepositoryCustom {
      * @param categoryId 카테고리 ID 필터 (null이면 미적용)
      * @param visibleToUserId PUBLISHED + 해당 사용자의 PRIVATE 게시물 조회 (null이면 미적용, statuses보다 우선)
      * @param tagIds 태그 UUID 필터 (여러 개 전달 시 OR 조건)
+     * @param keyword 제목 또는 본문 부분 일치 검색어 (null이면 미적용, 대소문자 무시)
      * @return 실제 정렬값을 포함한 게시물 목록
      */
     fun findPostsWithConditions(
@@ -75,6 +76,7 @@ interface PostRepositoryCustom {
         visibleToUserId: UUID? = null,
         tagIds: List<UUID>? = null,
         viewerId: UUID? = null,
+        keyword: String? = null,
     ): List<PostWithSortValue>
 
     fun findPostDetailByIdForViewer(

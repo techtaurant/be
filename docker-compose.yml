@@ -1,8 +1,12 @@
 # 로컬 개발 전용. 서버 배포용 docker-compose는 techtaurant-infra/dev/ 를 사용한다.
 services:
   db:
-    image: postgres:18-alpine
+    build:
+      context: ./docker/postgres
+    image: techtaurant/postgres-bigm:18-alpine
     container_name: techtaurant-postgres
+    # shared_preload_libraries는 서버 시작 시점에만 읽히므로 실행 인자로 넘긴다.
+    command: postgres -c shared_preload_libraries=pg_bigm
     environment:
       POSTGRES_USER: ${DB_USERNAME:-root}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-1234}
