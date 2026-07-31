@@ -70,6 +70,7 @@ class LinkCrawlLinkCollector(
             existingLink.summary = snapshot.summary
         }
         existingLink.createdAt = snapshot.createdAt
+        linkRepository.save(existingLink)
     }
 
     private fun connectUserToLink(

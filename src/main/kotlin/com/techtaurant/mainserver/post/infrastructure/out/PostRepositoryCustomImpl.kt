@@ -66,7 +66,6 @@ class PostRepositoryCustomImpl(
                 .execute()
             dsl.deleteFrom(POST_TAGS).where(POST_TAGS.POST_ID.eq(postId)).execute()
         } else {
-            post.createdAt = now
             dsl.insertInto(POSTS)
                 .set(POSTS.ID, postId)
                 .set(POSTS.TITLE, post.title)
@@ -78,7 +77,7 @@ class PostRepositoryCustomImpl(
                 .set(POSTS.COMMENT_COUNT, post.commentCount)
                 .set(POSTS.THUMBNAIL_IMAGE, post.thumbnailImage)
                 .set(POSTS.STATUS, post.status.name)
-                .set(POSTS.CREATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
+                .set(POSTS.CREATED_AT_UTC, post.createdAt.atOffset(ZoneOffset.UTC))
                 .set(POSTS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
                 .execute()
         }

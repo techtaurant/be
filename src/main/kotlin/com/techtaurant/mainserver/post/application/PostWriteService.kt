@@ -90,21 +90,30 @@ class PostWriteService(
                 status = status,
             ).apply { replaceTags(tags) }
 
-        val savedPost = postRepository.save(post)
-        request.createdAt?.let { savedPost.createdAt = it }
+        request.createdAt?.let { post.createdAt = it }
 
-        if (status != PostStatusEnum.DRAFT) {
-            val attachmentIds =
+        val isDraft = status == PostStatusEnum.DRAFT
+        val attachmentIds =
+            if (isDraft) {
+                emptyList()
+            } else {
                 mergeAttachmentIds(
-                    filterAttachmentIdsIncludedInContent(savedPost.content, request.attachmentIds),
+                    filterAttachmentIdsIncludedInContent(post.content, request.attachmentIds),
                     request.thumbnailAttachmentId,
                 )
+            }
+        if (!isDraft) {
+            post.thumbnailImage = request.thumbnailAttachmentId ?: attachmentIds.firstOrNull()
+        }
+
+        val savedPost = postRepository.save(post)
+
+        if (!isDraft) {
             attachmentService.confirmAttachmentsByIds(
                 referenceId = savedPost.id!!,
                 referenceType = AttachmentReferenceType.POST,
                 attachmentIds = attachmentIds,
             )
-            savedPost.thumbnailImage = request.thumbnailAttachmentId ?: attachmentIds.firstOrNull()
         }
 
         if (status == PostStatusEnum.PUBLISHED) {
@@ -152,13 +161,11 @@ class PostWriteService(
             post.status = newStatus
         }
 
-        val savedPost = postRepository.save(post)
-
         val newStatus = request.status ?: post.status
         if (newStatus != PostStatusEnum.DRAFT) {
             val attachmentIdsIncludedInContent =
                 mergeAttachmentIds(
-                    filterAttachmentIdsIncludedInContent(savedPost.content, request.attachmentIds),
+                    filterAttachmentIdsIncludedInContent(post.content, request.attachmentIds),
                     request.thumbnailAttachmentId,
                 )
             val thumbnailAttachmentId =
@@ -186,6 +193,7 @@ class PostWriteService(
             post.thumbnailImage = null
         }
 
+        val savedPost = postRepository.save(post)
         return PostResponse.from(savedPost)
     }
 
