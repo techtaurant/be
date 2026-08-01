@@ -35,8 +35,9 @@ class LinkRepositoryCustomImpl(
         val id = link.id ?: UuidCreator.getTimeOrderedEpoch().also { link.id = it }
         val now = Instant.now()
         if (dsl.fetchExists(LINKS, LINKS.ID.eq(id))) {
+            // 조회수/좋아요는 increment/decrement SQL이 원자적으로 소유하므로,
+            // 크롤 갱신이 조회 시점 값을 그대로 덮어써 동시 증감을 유실시키지 않도록 UPDATE 대상에서 제외한다.
             dsl.update(LINKS).set(LINKS.TITLE, link.title).set(LINKS.URL, link.url).set(LINKS.SUMMARY, link.summary)
-                .set(LINKS.VIEW_COUNT, link.viewCount).set(LINKS.LIKE_COUNT, link.likeCount)
                 .set(LINKS.CREATED_AT_UTC, link.createdAt.atOffset(ZoneOffset.UTC))
                 .set(LINKS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC)).where(LINKS.ID.eq(id)).execute()
             dsl.deleteFrom(LINK_TAGS).where(LINK_TAGS.LINK_ID.eq(id)).execute()

@@ -112,8 +112,8 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
         val parentComment = createComment(author, "부모 댓글", replyCount = 1)
         val replyComment = createComment(author, "대댓글", parent = parentComment)
         val statDate = DateUtils.toUtcDate(replyComment.createdAt)
-        post.commentCount = 2
-        postRepository.save(post)
+        // 게시물 댓글수는 원자적 증감 SQL이 소유하므로 엔티티 대입이 아니라 increment로 시딩한다.
+        postRepository.incrementCommentCount(post.id!!)
 
         // when
         given()
@@ -141,8 +141,8 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
         val parentComment = createComment(author, "부모 댓글", replyCount = 0)
         val replyComment = createComment(author, "대댓글", parent = parentComment)
         val statDate = DateUtils.toUtcDate(replyComment.createdAt)
-        post.commentCount = 0
-        postRepository.save(post)
+        // 삭제 대상 대댓글보다 게시물 댓글수가 적은 드리프트 상황을 원자적 감소로 만든다.
+        postRepository.decrementCommentCount(post.id!!)
 
         // when
         given()

@@ -102,18 +102,19 @@ class PostWriteService(
                     request.thumbnailAttachmentId,
                 )
             }
-        if (!isDraft) {
-            post.thumbnailImage = request.thumbnailAttachmentId ?: attachmentIds.firstOrNull()
-        }
-
         val savedPost = postRepository.save(post)
 
         if (!isDraft) {
+            // thumbnail_image는 attachments를 참조하는 FK라, 존재하지 않는 첨부 ID가 오면
+            // 확정 검증보다 먼저 쓰일 경우 NOT_FOUND 대신 FK 위반으로 실패한다.
+            // 따라서 confirm으로 첨부 존재를 검증한 뒤에 썸네일을 저장한다.
             attachmentService.confirmAttachmentsByIds(
                 referenceId = savedPost.id!!,
                 referenceType = AttachmentReferenceType.POST,
                 attachmentIds = attachmentIds,
             )
+            savedPost.thumbnailImage = request.thumbnailAttachmentId ?: attachmentIds.firstOrNull()
+            postRepository.save(savedPost)
         }
 
         if (status == PostStatusEnum.PUBLISHED) {

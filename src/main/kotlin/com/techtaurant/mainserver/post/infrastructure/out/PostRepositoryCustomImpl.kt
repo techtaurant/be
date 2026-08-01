@@ -50,14 +50,13 @@ class PostRepositoryCustomImpl(
         val now = Instant.now()
         val postId = post.id ?: UuidCreator.getTimeOrderedEpoch().also { post.id = it }
         if (dsl.fetchExists(POSTS, POSTS.ID.eq(postId))) {
+            // 조회수/좋아요/댓글수는 increment/decrement SQL이 원자적으로 소유하므로,
+            // 조회 시점 값을 그대로 덮어써 동시 증감을 유실시키지 않도록 UPDATE 대상에서 제외한다.
             dsl.update(POSTS)
                 .set(POSTS.TITLE, post.title)
                 .set(POSTS.CONTENT, post.content)
                 .set(POSTS.AUTHOR_ID, requireNotNull(post.author.id))
                 .set(POSTS.CATEGORY_ID, post.category?.id)
-                .set(POSTS.VIEW_COUNT, post.viewCount)
-                .set(POSTS.LIKE_COUNT, post.likeCount)
-                .set(POSTS.COMMENT_COUNT, post.commentCount)
                 .set(POSTS.THUMBNAIL_IMAGE, post.thumbnailImage)
                 .set(POSTS.STATUS, post.status.name)
                 .set(POSTS.CREATED_AT_UTC, post.createdAt.atOffset(ZoneOffset.UTC))
