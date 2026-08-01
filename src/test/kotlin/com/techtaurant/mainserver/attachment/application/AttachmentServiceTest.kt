@@ -213,6 +213,57 @@ class AttachmentServiceTest {
         }
 
         @Test
+        @DisplayName("S3 업로드가 끝나지 않은 TMP Attachment를 요청하면 400 예외를 던진다")
+        fun confirmAttachmentsByIds_tmpObjectMissingInS3_throwsBadRequest() {
+            // given
+            every { attachmentRepository.findAllById(listOf(tmpAttachment.id!!)) } returns listOf(tmpAttachment)
+            every { s3StorageService.exists(tmpKey) } returns false
+
+            // when & then
+            val exception =
+                assertThrows<ApiException> {
+                    attachmentService.confirmAttachmentsByIds(
+                        referenceId = postId,
+                        referenceType = AttachmentReferenceType.POST,
+                        attachmentIds = listOf(tmpAttachment.id!!),
+                    )
+                }
+
+            assertThat(exception.status).isEqualTo(DefaultStatus.BAD_REQUEST)
+            assertThat(exception).hasMessage("업로드가 완료되지 않은 첨부파일은 사용할 수 없습니다")
+            // 건너뛰고 성공하면 호출부가 미확정 ID를 썸네일 FK로 저장하므로 TMP 상태가 유지되면 안 된다
+            assertThat(tmpAttachment.status).isEqualTo(AttachmentStatus.TMP)
+            assertThat(tmpAttachment.referenceId).isNull()
+            verify(exactly = 0) { s3StorageService.copyObject(any(), any()) }
+            verify(exactly = 0) { attachmentRepository.saveAll(any<List<Attachment>>()) }
+        }
+
+        @Test
+        @DisplayName("여러 첨부 중 하나라도 업로드가 끝나지 않았으면 나머지도 확정하지 않는다")
+        fun confirmAttachmentsByIds_oneTmpObjectMissingInS3_confirmsNothing() {
+            // given
+            val uploadedKey = "tmp/${UUID.randomUUID()}/uploaded.jpg"
+            val uploadedAttachment = makeAttachment(uploadedKey, AttachmentStatus.TMP, referenceId = null)
+            every {
+                attachmentRepository.findAllById(listOf(uploadedAttachment.id!!, tmpAttachment.id!!))
+            } returns listOf(uploadedAttachment, tmpAttachment)
+            every { s3StorageService.exists(uploadedKey) } returns true
+            every { s3StorageService.exists(tmpKey) } returns false
+
+            // when & then
+            assertThrows<ApiException> {
+                attachmentService.confirmAttachmentsByIds(
+                    referenceId = postId,
+                    referenceType = AttachmentReferenceType.POST,
+                    attachmentIds = listOf(uploadedAttachment.id!!, tmpAttachment.id!!),
+                )
+            }
+
+            assertThat(uploadedAttachment.status).isEqualTo(AttachmentStatus.TMP)
+            verify(exactly = 0) { s3StorageService.copyObject(any(), any()) }
+        }
+
+        @Test
         @DisplayName("이미 이 게시물에 확정된 Attachment는 그대로 통과시킨다")
         fun confirmAttachmentsByIds_attachmentAlreadyConfirmedForSamePost_passes() {
             // given

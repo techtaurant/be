@@ -113,6 +113,7 @@ class AttachmentService(
      * @param referenceId 연관 도메인 PK (게시물 ID 등)
      * @param referenceType 연관 도메인 타입
      * @param attachmentIds 확정할 Attachment ID 목록
+     * @throws ApiException 첨부 없음(NOT_FOUND), 다른 대상에 확정된 첨부이거나 업로드 미완료(BAD_REQUEST)
      */
     @Transactional
     fun confirmAttachmentsByIds(
@@ -152,13 +153,18 @@ class AttachmentService(
 
         if (tmpAttachments.isEmpty()) return
 
+        // 업로드가 끝나지 않은 첨부를 건너뛰고 성공을 반환하면 호출부가 그 ID를 썸네일 FK로 저장한다.
+        // FK 제약은 통과하지만 읽기 경로가 CONFIRMED 첨부만 조회하므로 썸네일이 조용히 대체되고,
+        // 수정 경로에서는 직전까지 정상이던 첨부가 orphan으로 삭제된다. 그래서 요청 자체를 거부한다.
+        val attachmentsWithoutUploadedObject = tmpAttachments.filterNot { s3StorageService.exists(it.objectKey) }
+
+        if (attachmentsWithoutUploadedObject.isNotEmpty()) {
+            log.warn("S3 objects not found for confirmation: {}", attachmentsWithoutUploadedObject.map { it.objectKey })
+            throw ApiException(DefaultStatus.BAD_REQUEST, "업로드가 완료되지 않은 첨부파일은 사용할 수 없습니다")
+        }
+
         tmpAttachments.forEach { attachment ->
             val tmpObjectKey = attachment.objectKey
-            if (!s3StorageService.exists(tmpObjectKey)) {
-                log.warn("S3 object not found for confirmation: $tmpObjectKey. Skipping.")
-                return@forEach
-            }
-
             val uniqueId = UUID.randomUUID()
             val fileName = tmpObjectKey.substringAfterLast("/")
             val newObjectKey = buildConfirmedObjectKey(referenceType, referenceId, uniqueId, fileName)
