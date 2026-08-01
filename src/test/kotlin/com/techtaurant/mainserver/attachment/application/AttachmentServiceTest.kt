@@ -213,6 +213,34 @@ class AttachmentServiceTest {
         }
 
         @Test
+        @DisplayName("발급 시 지정한 대상 타입과 다른 TMP Attachment를 요청하면 400 예외를 던진다")
+        fun confirmAttachmentsByIds_tmpAttachmentWithMismatchedReferenceType_throwsBadRequest() {
+            // given
+            val userTypeAttachment =
+                makeAttachment(tmpKey, AttachmentStatus.TMP, referenceId = null).apply {
+                    referenceType = AttachmentReferenceType.USER
+                }
+            every { attachmentRepository.findAllById(listOf(userTypeAttachment.id!!)) } returns listOf(userTypeAttachment)
+
+            // when & then
+            val exception =
+                assertThrows<ApiException> {
+                    attachmentService.confirmAttachmentsByIds(
+                        referenceId = postId,
+                        referenceType = AttachmentReferenceType.POST,
+                        attachmentIds = listOf(userTypeAttachment.id!!),
+                    )
+                }
+
+            assertThat(exception.status).isEqualTo(DefaultStatus.BAD_REQUEST)
+            assertThat(exception).hasMessage("요청한 대상 타입과 다른 첨부파일은 사용할 수 없습니다")
+            // 조용히 건너뛰고 성공하면 호출부가 확정되지 않은 ID를 썸네일 FK로 저장한다
+            assertThat(userTypeAttachment.status).isEqualTo(AttachmentStatus.TMP)
+            verify(exactly = 0) { s3StorageService.copyObject(any(), any()) }
+            verify(exactly = 0) { attachmentRepository.saveAll(any<List<Attachment>>()) }
+        }
+
+        @Test
         @DisplayName("S3 업로드가 끝나지 않은 TMP Attachment를 요청하면 400 예외를 던진다")
         fun confirmAttachmentsByIds_tmpObjectMissingInS3_throwsBadRequest() {
             // given
