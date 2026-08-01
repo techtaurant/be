@@ -129,6 +129,21 @@ class AttachmentService(
             throw ApiException(DefaultStatus.NOT_FOUND, "첨부파일을 찾을 수 없습니다")
         }
 
+        // 이미 확정된 첨부는 아래 TMP 필터에서 제외되어 이 리소스로 재바인딩되지 않는다.
+        // 다른 리소스의 확정 첨부를 그대로 받으면 FK 제약은 통과하지만, 읽기 경로가 해당 리소스의
+        // 첨부만 조회하므로 썸네일이 조용히 기본 이미지로 대체된다. 따라서 여기서 거부한다.
+        val attachmentsOwnedByOtherReference =
+            distinctAttachmentIds.mapNotNull(attachmentsById::get)
+                .filter { attachment ->
+                    attachment.status == AttachmentStatus.CONFIRMED &&
+                        attachment.referenceId != null &&
+                        (attachment.referenceId != referenceId || attachment.referenceType != referenceType)
+                }
+
+        if (attachmentsOwnedByOtherReference.isNotEmpty()) {
+            throw ApiException(DefaultStatus.BAD_REQUEST, "다른 대상에 연결된 첨부파일은 사용할 수 없습니다")
+        }
+
         val tmpAttachments =
             distinctAttachmentIds.mapNotNull(attachmentsById::get)
                 .filter { attachment ->

@@ -86,6 +86,30 @@ class CorsPropertiesTest {
     }
 
     @Test
+    @DisplayName("와일드카드를 반복한 host 패턴도 생성 시점에 거부한다")
+    fun `reject repeated wildcard host origin pattern`() {
+        // given
+        val repeatedWildcardPattern = "https://**"
+
+        // when & then
+        assertThatThrownBy { CorsProperties(allowedOriginPatterns = repeatedWildcardPattern) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining(repeatedWildcardPattern)
+    }
+
+    @Test
+    @DisplayName("와일드카드와 구분자만으로 이뤄진 host 패턴도 생성 시점에 거부한다")
+    fun `reject wildcard only host origin pattern with separator`() {
+        // given
+        val wildcardOnlyPattern = "https://*.*:[*]"
+
+        // when & then
+        assertThatThrownBy { CorsProperties(allowedOriginPatterns = wildcardOnlyPattern) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining(wildcardOnlyPattern)
+    }
+
+    @Test
     @DisplayName("서브도메인 와일드카드는 포트 패턴이 붙어도 허용한다")
     fun `allow subdomain wildcard origin pattern with port pattern`() {
         // given

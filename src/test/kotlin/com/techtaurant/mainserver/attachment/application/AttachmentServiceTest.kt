@@ -189,6 +189,49 @@ class AttachmentServiceTest {
         }
 
         @Test
+        @DisplayName("다른 게시물에 확정된 Attachment를 요청하면 400 예외를 던진다")
+        fun confirmAttachmentsByIds_attachmentConfirmedForOtherPost_throwsBadRequest() {
+            // given
+            val otherPostId = UUID.randomUUID()
+            val foreignAttachment =
+                makeAttachment("posts/$otherPostId/${UUID.randomUUID()}/photo.jpg", referenceId = otherPostId)
+            every { attachmentRepository.findAllById(listOf(foreignAttachment.id!!)) } returns listOf(foreignAttachment)
+
+            // when & then
+            val exception =
+                assertThrows<ApiException> {
+                    attachmentService.confirmAttachmentsByIds(
+                        referenceId = postId,
+                        referenceType = AttachmentReferenceType.POST,
+                        attachmentIds = listOf(foreignAttachment.id!!),
+                    )
+                }
+
+            assertThat(exception.status).isEqualTo(DefaultStatus.BAD_REQUEST)
+            assertThat(exception).hasMessage("다른 대상에 연결된 첨부파일은 사용할 수 없습니다")
+            verify(exactly = 0) { s3StorageService.copyObject(any(), any()) }
+        }
+
+        @Test
+        @DisplayName("이미 이 게시물에 확정된 Attachment는 그대로 통과시킨다")
+        fun confirmAttachmentsByIds_attachmentAlreadyConfirmedForSamePost_passes() {
+            // given
+            val ownedAttachment = makeAttachment("posts/$postId/${UUID.randomUUID()}/photo.jpg", referenceId = postId)
+            every { attachmentRepository.findAllById(listOf(ownedAttachment.id!!)) } returns listOf(ownedAttachment)
+
+            // when
+            attachmentService.confirmAttachmentsByIds(
+                referenceId = postId,
+                referenceType = AttachmentReferenceType.POST,
+                attachmentIds = listOf(ownedAttachment.id!!),
+            )
+
+            // then
+            assertThat(ownedAttachment.referenceId).isEqualTo(postId)
+            verify(exactly = 0) { s3StorageService.copyObject(any(), any()) }
+        }
+
+        @Test
         @DisplayName("TMP 파일을 posts/{referenceId}/ 경로로 복사하고 원본을 삭제한다")
         fun confirmAttachmentsByIds_tmpAttachment_copiesAndDeletesS3Object() {
             // given
