@@ -152,13 +152,13 @@ class PostRepositoryCustomImpl(
         postId: UUID,
         thumbnailAttachmentId: UUID?,
     ): Instant {
-        val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
+        val now = Instant.now().truncatedTo(ChronoUnit.MICROS).atOffset(ZoneOffset.UTC)
         dsl.update(POSTS)
             .set(POSTS.THUMBNAIL_IMAGE, thumbnailAttachmentId)
-            .set(POSTS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
+            .set(POSTS.UPDATED_AT_UTC, now)
             .where(POSTS.ID.eq(postId))
             .execute()
-        return now
+        return now.toInstant()
     }
 
     override fun incrementViewCount(postId: UUID) {
