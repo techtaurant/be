@@ -60,4 +60,41 @@ class CorsPropertiesTest {
             .isInstanceOf(IllegalArgumentException::class.java)
             .hasMessageContaining("https://*")
     }
+
+    @Test
+    @DisplayName("포트 패턴이 붙은 host 와일드카드 origin 패턴도 생성 시점에 거부한다")
+    fun `reject host wildcard origin pattern with port pattern`() {
+        // given
+        val anyPortWildcardPattern = "https://techtaurant.com, https://*:[*]"
+
+        // when & then
+        assertThatThrownBy { CorsProperties(allowedOriginPatterns = anyPortWildcardPattern) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("https://*:[*]")
+    }
+
+    @Test
+    @DisplayName("포트를 지정해도 host가 와일드카드면 생성 시점에 거부한다")
+    fun `reject host wildcard origin pattern with fixed port`() {
+        // given
+        val fixedPortWildcardPattern = "https://*:8080"
+
+        // when & then
+        assertThatThrownBy { CorsProperties(allowedOriginPatterns = fixedPortWildcardPattern) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining(fixedPortWildcardPattern)
+    }
+
+    @Test
+    @DisplayName("서브도메인 와일드카드는 포트 패턴이 붙어도 허용한다")
+    fun `allow subdomain wildcard origin pattern with port pattern`() {
+        // given
+        val subdomainWildcardPattern = "https://*.techtaurant.com:[*]"
+
+        // when
+        val patterns = CorsProperties(allowedOriginPatterns = subdomainWildcardPattern).parsedAllowedOriginPatterns
+
+        // then
+        assertThat(patterns).containsExactly(subdomainWildcardPattern)
+    }
 }

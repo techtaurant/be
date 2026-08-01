@@ -27,10 +27,20 @@ data class CorsProperties(
      * allowedOrigins와 달리 allowedOriginPatterns에는 Spring의 와일드카드 검증이 없고 매칭된 origin을 그대로 반사한다.
      * 따라서 이런 패턴이 들어오면 임의 origin에 쿠키 포함 요청과 OAuth2 리다이렉트가 허용되므로 기동 시점에 차단한다.
      *
+     * 문자열 접미사가 아니라 파싱한 host를 기준으로 판별한다.
+     * Spring이 지원하는 포트 와일드카드 패턴은 스킴 뒤 와일드카드로 끝나지 않으면서도 모든 host와 일치하기 때문이다.
+     *
      * @param pattern 설정에서 파싱된 origin 패턴 하나
      * @return 특정 도메인으로 범위가 좁혀지지 않은 패턴이면 true
      */
-    private fun isHostWideWildcardPattern(pattern: String): Boolean = pattern == "*" || pattern.endsWith("://*")
+    private fun isHostWideWildcardPattern(pattern: String): Boolean {
+        if (pattern == "*") {
+            return true
+        }
+
+        val hostAndPort = pattern.substringAfter("://", missingDelimiterValue = pattern)
+        return hostAndPort.substringBefore(":") == "*"
+    }
 
     fun createCorsConfiguration(): CorsConfiguration =
         CorsConfiguration().apply {
