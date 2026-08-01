@@ -82,6 +82,9 @@ class PostWriteServiceValidationTest {
         every { tagWriteService.resolveTags(any()) } returns emptySet()
         every { attachmentService.confirmAttachmentsByIds(any(), any(), any()) } just runs
         every { attachmentService.deleteOrphanedAttachmentsByIds(any(), any(), any()) } just runs
+        every { postRepository.findPostByIdWithAuthorForUpdate(any()) } answers {
+            postRepository.findPostByIdWithAuthor(firstArg())
+        }
         every { postRepository.save(any()) } answers {
             firstArg<Post>().apply {
                 if (id == null) {

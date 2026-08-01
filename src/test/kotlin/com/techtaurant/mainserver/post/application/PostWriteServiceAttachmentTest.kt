@@ -71,6 +71,9 @@ class PostWriteServiceAttachmentTest {
         every { attachmentService.confirmAttachmentsByIds(any(), any(), any()) } just runs
         every { attachmentService.deleteOrphanedAttachmentsByIds(any(), any(), any()) } just runs
         every { attachmentService.deleteAttachmentsByReference(any(), any()) } just runs
+        every { postRepository.findPostByIdWithAuthorForUpdate(any()) } answers {
+            postRepository.findPostByIdWithAuthor(firstArg())
+        }
 
         every { postRepository.save(any()) } answers {
             firstArg<Post>().apply {
@@ -81,6 +84,32 @@ class PostWriteServiceAttachmentTest {
         }
         every { postRepository.delete(any()) } just runs
         every { postRepository.updateThumbnailImage(any(), any()) } just runs
+    }
+
+    @Nested
+    @DisplayName("updatePost 동시성")
+    inner class UpdatePostConcurrency {
+        @Test
+        @DisplayName("게시물 수정은 행 잠금 조회를 사용한다")
+        fun updatePost_existingPost_usesLockedLookup() {
+            // given
+            val postId = UUID.randomUUID()
+            val post =
+                Post(
+                    title = "기존 제목",
+                    content = "기존 본문",
+                    author = author,
+                    status = PostStatusEnum.PUBLISHED,
+                ).apply { id = postId }
+            every { postRepository.findPostByIdWithAuthor(postId) } returns post
+
+            // when
+            val response = postWriteService.updatePost(postId, UpdatePostRequest(title = "수정 제목"), author.id!!)
+
+            // then
+            assertThat(response.title).isEqualTo("수정 제목")
+            verify(exactly = 1) { postRepository.findPostByIdWithAuthorForUpdate(postId) }
+        }
     }
 
     @Nested

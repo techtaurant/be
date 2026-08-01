@@ -293,6 +293,18 @@ class PostRepositoryCustomImpl(
 
     override fun findPostByIdWithAuthor(postId: UUID): Post? = fetchPosts(listOf(postId)).firstOrNull()
 
+    override fun findPostByIdWithAuthorForUpdate(postId: UUID): Post? {
+        val lockedPostId =
+            dsl.select(POSTS.ID)
+                .from(POSTS)
+                .where(POSTS.ID.eq(postId))
+                .forUpdate()
+                .fetchOne(POSTS.ID)
+                ?: return null
+
+        return fetchPosts(listOf(lockedPostId)).firstOrNull()
+    }
+
     override fun findPublishedPostsByIdIn(postIds: List<UUID>): List<Post> =
         fetchPosts(fetchPostIds(POSTS.ID.`in`(postIds).and(POSTS.STATUS.eq(PostStatusEnum.PUBLISHED.name))))
 

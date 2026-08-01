@@ -124,7 +124,7 @@ class AttachmentService(
         if (attachmentIds.isEmpty()) return
 
         val distinctAttachmentIds = attachmentIds.distinct()
-        val attachmentsById = attachmentRepository.findAllById(distinctAttachmentIds).associateBy { it.id!! }
+        val attachmentsById = attachmentRepository.findAllByIdForUpdate(distinctAttachmentIds).associateBy { it.id!! }
 
         if (attachmentsById.size != distinctAttachmentIds.size) {
             throw ApiException(DefaultStatus.NOT_FOUND, "첨부파일을 찾을 수 없습니다")

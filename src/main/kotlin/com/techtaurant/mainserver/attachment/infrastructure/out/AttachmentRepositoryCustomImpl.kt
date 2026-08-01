@@ -68,6 +68,20 @@ class AttachmentRepositoryCustomImpl(
         return if (attachmentIds.isEmpty()) emptyList() else fetchAttachments(ATTACHMENTS.ID.`in`(attachmentIds))
     }
 
+    override fun findAllByIdForUpdate(ids: Iterable<UUID>): List<Attachment> {
+        val attachmentIds = ids.toSet()
+        return if (attachmentIds.isEmpty()) {
+            emptyList()
+        } else {
+            dsl.selectFrom(ATTACHMENTS)
+                .where(ATTACHMENTS.ID.`in`(attachmentIds))
+                .orderBy(ATTACHMENTS.ID)
+                .forUpdate()
+                .fetch()
+                .map { record -> record.toAttachment() }
+        }
+    }
+
     override fun findAllByObjectKeyInAndStatus(
         objectKeys: List<String>,
         status: AttachmentStatus,

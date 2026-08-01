@@ -114,6 +114,8 @@ interface PostRepositoryCustom {
 
     fun findPostByIdWithAuthor(postId: UUID): Post?
 
+    fun findPostByIdWithAuthorForUpdate(postId: UUID): Post?
+
     fun findPublishedPostsByIdIn(postIds: List<UUID>): List<Post>
 
     fun findStaleDraftsByAuthor(

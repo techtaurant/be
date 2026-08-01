@@ -125,6 +125,9 @@ class AttachmentServiceTest {
 
         @BeforeEach
         fun setUp() {
+            every { attachmentRepository.findAllByIdForUpdate(any()) } answers {
+                attachmentRepository.findAllById(firstArg<List<UUID>>())
+            }
             every { s3StorageService.exists(any()) } returns true
             every { s3StorageService.copyObject(any(), any()) } just runs
             every { s3StorageService.deleteObject(any()) } just runs
@@ -349,6 +352,25 @@ class AttachmentServiceTest {
             assertThat(tmpAttachment.status).isEqualTo(AttachmentStatus.CONFIRMED)
             assertThat(tmpAttachment.referenceId).isEqualTo(postId)
             assertThat(tmpAttachment.referenceType).isEqualTo(AttachmentReferenceType.POST)
+        }
+
+        @Test
+        @DisplayName("TMP 첨부 확정은 행 잠금 조회를 사용한다")
+        fun confirmAttachmentsByIds_tmpAttachment_usesLockedLookup() {
+            // given
+            every { attachmentRepository.findAllById(listOf(tmpAttachment.id!!)) } returns listOf(tmpAttachment)
+
+            // when
+            attachmentService.confirmAttachmentsByIds(
+                referenceId = postId,
+                referenceType = AttachmentReferenceType.POST,
+                attachmentIds = listOf(tmpAttachment.id!!),
+            )
+
+            // then
+            assertThat(tmpAttachment.status).isEqualTo(AttachmentStatus.CONFIRMED)
+            assertThat(tmpAttachment.referenceId).isEqualTo(postId)
+            verify(exactly = 1) { attachmentRepository.findAllByIdForUpdate(listOf(tmpAttachment.id!!)) }
         }
 
         @Test
