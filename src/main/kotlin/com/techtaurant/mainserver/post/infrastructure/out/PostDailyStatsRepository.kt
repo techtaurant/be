@@ -14,6 +14,12 @@ interface PostDailyStatsRepository : Repository<PostDailyStats, UUID>, PostDaily
 
     override fun findAll(): List<PostDailyStats>
 
+    override fun insertIfAbsent(
+        id: UUID,
+        postId: UUID,
+        statDate: LocalDate,
+    ): Int
+
     override fun incrementViewCount(
         postId: UUID,
         statDate: LocalDate,

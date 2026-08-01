@@ -51,6 +51,29 @@ class PostDailyStatsRepositoryCustomImpl(
 
     override fun findAll(): List<PostDailyStats> = dsl.selectFrom(POST_DAILY_STATS).fetch().map { it.toPostDailyStats() }
 
+    override fun insertIfAbsent(
+        id: UUID,
+        postId: UUID,
+        statDate: LocalDate,
+    ): Int {
+        val now = Instant.now().atOffset(ZoneOffset.UTC)
+
+        // 충돌 타깃은 실제 제약인 UNIQUE(post_id, stat_date)여야 한다.
+        // PK(id)를 타깃으로 두면 매번 새 UUID라 충돌이 잡히지 않고 23505가 트랜잭션을 중단시킨다.
+        return dsl.insertInto(POST_DAILY_STATS)
+            .set(POST_DAILY_STATS.ID, id)
+            .set(POST_DAILY_STATS.POST_ID, postId)
+            .set(POST_DAILY_STATS.STAT_DATE, statDate)
+            .set(POST_DAILY_STATS.VIEW_COUNT, 0L)
+            .set(POST_DAILY_STATS.LIKE_COUNT, 0L)
+            .set(POST_DAILY_STATS.COMMENT_COUNT, 0L)
+            .set(POST_DAILY_STATS.CREATED_AT_UTC, now)
+            .set(POST_DAILY_STATS.UPDATED_AT_UTC, now)
+            .onConflict(POST_DAILY_STATS.POST_ID, POST_DAILY_STATS.STAT_DATE)
+            .doNothing()
+            .execute()
+    }
+
     override fun incrementViewCount(
         postId: UUID,
         statDate: LocalDate,
