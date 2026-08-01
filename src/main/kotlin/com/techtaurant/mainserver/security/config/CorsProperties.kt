@@ -1,5 +1,6 @@
 package com.techtaurant.mainserver.security.config
 
+import com.google.common.net.InternetDomainName
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.web.cors.CorsConfiguration
 import java.net.URI
@@ -51,7 +52,7 @@ data class CorsProperties(
         if (WILDCARD_CHAR in host) {
             return host.count { it == WILDCARD_CHAR } == 1 &&
                 host.startsWith(DNS_WILDCARD_PREFIX) &&
-                isValidDnsHost(host.removePrefix(DNS_WILDCARD_PREFIX))
+                isValidWildcardDnsSuffix(host.removePrefix(DNS_WILDCARD_PREFIX))
         }
 
         return isValidDnsHost(host)
@@ -94,6 +95,11 @@ data class CorsProperties(
     private fun isValidDnsHost(host: String): Boolean =
         host.length in 1..MAX_DNS_HOST_LENGTH &&
             host.split(DOMAIN_SEPARATOR_CHAR).all(::isValidDnsLabel)
+
+    private fun isValidWildcardDnsSuffix(host: String): Boolean =
+        isValidDnsHost(host) &&
+            runCatching { InternetDomainName.from(host).isUnderPublicSuffix }
+                .getOrDefault(false)
 
     private fun isValidDnsLabel(label: String): Boolean =
         label.length in 1..MAX_DNS_LABEL_LENGTH &&

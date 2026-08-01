@@ -518,14 +518,14 @@ class PostWriteServiceAttachmentTest {
                     thumbnailImage = thumbnailAttachmentId,
                     status = PostStatusEnum.PUBLISHED,
                 ).apply { id = postId }
-            every { postRepository.findPostByIdWithAuthor(postId) } returns post
+            every { postRepository.findPostByIdWithAuthorForUpdate(postId) } returns post
 
             // when
             postWriteService.deletePost(postId, author.id!!)
 
             // then
             verifyOrder {
-                postRepository.findPostByIdWithAuthor(postId)
+                postRepository.findPostByIdWithAuthorForUpdate(postId)
                 attachmentService.deleteAttachmentsByReference(postId, AttachmentReferenceType.POST)
                 postRepository.delete(post)
             }

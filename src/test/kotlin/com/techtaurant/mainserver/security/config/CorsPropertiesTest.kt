@@ -127,6 +127,22 @@ class CorsPropertiesTest {
     @ParameterizedTest(name = "[{index}] {0}")
     @ValueSource(
         strings = [
+            "https://*.com",
+            "https://*.co.uk",
+            "https://*.blogspot.com",
+        ],
+    )
+    @DisplayName("public suffix 전체를 신뢰하는 서브도메인 wildcard를 거부한다")
+    fun `reject wildcard origin pattern over public suffix`(publicSuffixPattern: String) {
+        // when & then
+        assertThatThrownBy { CorsProperties(allowedOriginPatterns = publicSuffixPattern) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining(publicSuffixPattern)
+    }
+
+    @ParameterizedTest(name = "[{index}] {0}")
+    @ValueSource(
+        strings = [
             "https://[*]",
             "https://[*]:[*]",
             "https://[*:*]",

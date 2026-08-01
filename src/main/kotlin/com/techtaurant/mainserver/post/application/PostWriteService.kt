@@ -212,7 +212,7 @@ class PostWriteService(
         userId: UUID,
     ) {
         val post =
-            postRepository.findPostByIdWithAuthor(postId)
+            postRepository.findPostByIdWithAuthorForUpdate(postId)
                 ?: throw ApiException(PostStatus.POST_NOT_FOUND)
 
         if (post.author.id != userId) {

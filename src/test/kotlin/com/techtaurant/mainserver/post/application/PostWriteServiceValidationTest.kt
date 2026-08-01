@@ -375,7 +375,7 @@ class PostWriteServiceValidationTest {
         fun deletePost_withUnknownPost_throwsPostNotFound() {
             // given
             val postId = UUID.randomUUID()
-            every { postRepository.findPostByIdWithAuthor(postId) } returns null
+            every { postRepository.findPostByIdWithAuthorForUpdate(postId) } returns null
 
             // when & then
             assertThatThrownBy { postWriteService.deletePost(postId, author.id!!) }
@@ -388,7 +388,7 @@ class PostWriteServiceValidationTest {
         fun deletePost_withOtherAuthor_throwsAndKeepsAttachments() {
             // given
             val post = publishedPost()
-            every { postRepository.findPostByIdWithAuthor(post.id!!) } returns post
+            every { postRepository.findPostByIdWithAuthorForUpdate(post.id!!) } returns post
             every { attachmentService.deleteAttachmentsByReference(any(), any()) } just runs
 
             // when & then
@@ -403,7 +403,7 @@ class PostWriteServiceValidationTest {
         fun deletePost_withAuthor_clearsThumbnailAndDeletesAttachments() {
             // given
             val post = publishedPost().apply { thumbnailImage = UUID.randomUUID() }
-            every { postRepository.findPostByIdWithAuthor(post.id!!) } returns post
+            every { postRepository.findPostByIdWithAuthorForUpdate(post.id!!) } returns post
             every { attachmentService.deleteAttachmentsByReference(any(), any()) } just runs
             every { postRepository.delete(post) } just runs
 
