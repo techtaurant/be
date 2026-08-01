@@ -36,6 +36,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+    implementation("com.google.guava:guava:33.6.0-jre")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     // Database
@@ -202,6 +203,10 @@ tasks.named<JacocoReport>("jacocoTestReport") {
 // Configure JaCoCo Coverage Verification Task
 tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
     dependsOn("jacocoTestReport")
+
+    // 리포트와 같은 대상을 측정해야 두 태스크의 커버리지 수치가 갈라지지 않는다.
+    // 검증에만 src/main/generated의 jOOQ 생성 코드가 포함되어 기준을 왜곡하고 있었다.
+    classDirectories.setFrom(tasks.named<JacocoReport>("jacocoTestReport").map { it.classDirectories })
 
     violationRules {
         rule {

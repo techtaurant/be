@@ -23,6 +23,8 @@ interface AttachmentRepositoryCustom {
 
     fun findAllById(ids: Iterable<UUID>): List<Attachment>
 
+    fun findAllByIdForUpdate(ids: Iterable<UUID>): List<Attachment>
+
     fun findAllByObjectKeyInAndStatus(
         objectKeys: List<String>,
         status: AttachmentStatus,

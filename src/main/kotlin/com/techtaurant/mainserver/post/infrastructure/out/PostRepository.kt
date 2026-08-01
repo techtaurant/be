@@ -65,6 +65,14 @@ interface PostRepository : Repository<Post, UUID>, PostRepositoryCustom {
     override fun findPostByIdWithAuthor(postId: UUID): Post?
 
     /**
+     * 게시물 수정 트랜잭션 동안 같은 게시물의 동시 수정을 직렬화합니다.
+     *
+     * @param postId 게시물 ID
+     * @return 작성자 정보를 포함한 게시물, 없으면 null
+     */
+    override fun findPostByIdWithAuthorForUpdate(postId: UUID): Post?
+
+    /**
      * 공개 가능한 게시물 목록을 ID 목록으로 조회합니다.
      *
      * @param postIds 게시물 ID 목록

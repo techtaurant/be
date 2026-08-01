@@ -90,21 +90,31 @@ class PostWriteService(
                 status = status,
             ).apply { replaceTags(tags) }
 
-        val savedPost = postRepository.save(post)
-        request.createdAt?.let { savedPost.createdAt = it }
+        request.createdAt?.let { post.createdAt = it }
 
-        if (status != PostStatusEnum.DRAFT) {
-            val attachmentIds =
+        val isDraft = status == PostStatusEnum.DRAFT
+        val attachmentIds =
+            if (isDraft) {
+                emptyList()
+            } else {
                 mergeAttachmentIds(
-                    filterAttachmentIdsIncludedInContent(savedPost.content, request.attachmentIds),
+                    filterAttachmentIdsIncludedInContent(post.content, request.attachmentIds),
                     request.thumbnailAttachmentId,
                 )
+            }
+        val savedPost = postRepository.save(post)
+
+        if (!isDraft) {
+            // thumbnail_image는 attachments를 참조하는 FK라, 존재하지 않는 첨부 ID가 오면
+            // 확정 검증보다 먼저 쓰일 경우 NOT_FOUND 대신 FK 위반으로 실패한다.
+            // 따라서 confirm으로 첨부 존재를 검증한 뒤에 썸네일을 저장한다.
             attachmentService.confirmAttachmentsByIds(
                 referenceId = savedPost.id!!,
                 referenceType = AttachmentReferenceType.POST,
                 attachmentIds = attachmentIds,
             )
             savedPost.thumbnailImage = request.thumbnailAttachmentId ?: attachmentIds.firstOrNull()
+            savedPost.updatedAt = postRepository.updateThumbnailImage(savedPost.id!!, savedPost.thumbnailImage)
         }
 
         if (status == PostStatusEnum.PUBLISHED) {
@@ -132,7 +142,7 @@ class PostWriteService(
         userId: UUID,
     ): PostResponse {
         val post =
-            postRepository.findPostByIdWithAuthor(postId)
+            postRepository.findPostByIdWithAuthorForUpdate(postId)
                 ?: throw ApiException(PostStatus.POST_NOT_FOUND)
 
         if (post.author.id != userId) {
@@ -152,13 +162,11 @@ class PostWriteService(
             post.status = newStatus
         }
 
-        val savedPost = postRepository.save(post)
-
         val newStatus = request.status ?: post.status
         if (newStatus != PostStatusEnum.DRAFT) {
             val attachmentIdsIncludedInContent =
                 mergeAttachmentIds(
-                    filterAttachmentIdsIncludedInContent(savedPost.content, request.attachmentIds),
+                    filterAttachmentIdsIncludedInContent(post.content, request.attachmentIds),
                     request.thumbnailAttachmentId,
                 )
             val thumbnailAttachmentId =
@@ -186,6 +194,7 @@ class PostWriteService(
             post.thumbnailImage = null
         }
 
+        val savedPost = postRepository.save(post)
         return PostResponse.from(savedPost)
     }
 
@@ -203,7 +212,7 @@ class PostWriteService(
         userId: UUID,
     ) {
         val post =
-            postRepository.findPostByIdWithAuthor(postId)
+            postRepository.findPostByIdWithAuthorForUpdate(postId)
                 ?: throw ApiException(PostStatus.POST_NOT_FOUND)
 
         if (post.author.id != userId) {

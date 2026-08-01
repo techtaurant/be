@@ -34,6 +34,18 @@ interface PostRepositoryCustom {
 
     fun getReferenceById(id: UUID): Post
 
+    /**
+     * 게시물의 썸네일 첨부만 갱신합니다.
+     * 첨부 확정 이후에 썸네일을 써야 하는 생성 경로에서 게시물 전체를 다시 저장하지 않기 위해 사용합니다.
+     *
+     * @param postId 게시물 ID
+     * @param thumbnailAttachmentId 썸네일로 사용할 attachmentId, 없으면 null
+     */
+    fun updateThumbnailImage(
+        postId: UUID,
+        thumbnailAttachmentId: UUID?,
+    ): Instant
+
     fun incrementViewCount(postId: UUID)
 
     fun incrementLikeCount(postId: UUID)
@@ -101,6 +113,8 @@ interface PostRepositoryCustom {
     ): List<Post>
 
     fun findPostByIdWithAuthor(postId: UUID): Post?
+
+    fun findPostByIdWithAuthorForUpdate(postId: UUID): Post?
 
     fun findPublishedPostsByIdIn(postIds: List<UUID>): List<Post>
 

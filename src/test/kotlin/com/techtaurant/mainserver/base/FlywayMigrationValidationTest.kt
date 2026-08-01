@@ -99,6 +99,30 @@ class FlywayMigrationValidationTest : IntegrationTest() {
     }
 
     @Test
+    @DisplayName("일별 통계 버킷 키는 timestamp가 아니라 date 타입으로 생성된다")
+    fun dailyStatsBucketColumnsUseDate() {
+        val columnTypes =
+            jdbcTemplate.query(
+                """
+                SELECT table_name, data_type
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name IN ('post_daily_stats', 'link_daily_stats')
+                  AND column_name = 'stat_date'
+                """.trimIndent(),
+                { rs, _ -> rs.getString("table_name") to rs.getString("data_type") },
+            ).toMap()
+
+        assertThat(columnTypes)
+            .containsExactlyInAnyOrderEntriesOf(
+                mapOf(
+                    "post_daily_stats" to "date",
+                    "link_daily_stats" to "date",
+                ),
+            )
+    }
+
+    @Test
     @DisplayName("절대 시각 sync trigger는 old TIMESTAMP와 new TIMESTAMPTZ 컬럼을 양방향 동기화한다")
     fun temporalSyncTriggersKeepOldAndUtcColumnsAligned() {
         val oldWriterTagId = UUID.randomUUID()

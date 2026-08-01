@@ -19,6 +19,14 @@ interface AttachmentRepository : Repository<Attachment, UUID>, AttachmentReposit
 
     override fun findAllById(ids: Iterable<UUID>): List<Attachment>
 
+    /**
+     * 첨부 확정 트랜잭션 동안 요청된 첨부 행을 ID 순서로 잠급니다.
+     *
+     * @param ids 잠글 첨부 ID 목록
+     * @return 존재하는 첨부 목록
+     */
+    override fun findAllByIdForUpdate(ids: Iterable<UUID>): List<Attachment>
+
     override fun findAllByObjectKeyInAndStatus(
         objectKeys: List<String>,
         status: AttachmentStatus,

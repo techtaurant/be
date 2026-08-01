@@ -37,14 +37,15 @@ class CommentRepositoryCustomImpl(
         val now = Instant.now()
         val id = comment.id ?: UuidCreator.getTimeOrderedEpoch().also { comment.id = it }
         if (dsl.fetchExists(COMMENTS, COMMENTS.ID.eq(id))) {
+            // 좋아요수/대댓글수는 increment/decrement SQL이 원자적으로 소유하므로,
+            // 댓글 수정과 소프트 삭제가 조회 시점 값을 그대로 덮어써 동시 증감을 유실시키지 않도록 UPDATE 대상에서 제외한다.
             dsl.update(COMMENTS)
                 .set(COMMENTS.CONTENT, comment.content).set(COMMENTS.POST_ID, requireNotNull(comment.post.id))
                 .set(COMMENTS.AUTHOR_ID, requireNotNull(comment.author.id)).set(COMMENTS.PARENT_ID, comment.parent?.id)
                 .set(
                     COMMENTS.DEPTH,
                     comment.depth,
-                ).set(COMMENTS.LIKE_COUNT, comment.likeCount).set(COMMENTS.REPLY_COUNT, comment.replyCount)
-                .set(
+                ).set(
                     COMMENTS.DELETED_AT_UTC,
                     comment.deletedAt?.atOffset(ZoneOffset.UTC),
                 ).set(COMMENTS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
