@@ -95,7 +95,7 @@ class DevTestAuthService(
         val existingUser = userRepository.findByIdentifierAndProvider(request.identifier, OAuthProvider.DEV_LOCAL)
         if (existingUser != null) {
             existingUser.role = request.role
-            return existingUser
+            return userRepository.save(existingUser)
         }
 
         return userUniqueNameService.saveNewUser(
