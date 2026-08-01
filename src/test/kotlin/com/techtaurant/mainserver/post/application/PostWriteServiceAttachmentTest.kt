@@ -80,6 +80,7 @@ class PostWriteServiceAttachmentTest {
             }
         }
         every { postRepository.delete(any()) } just runs
+        every { postRepository.updateThumbnailImage(any(), any()) } just runs
     }
 
     @Nested

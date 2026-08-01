@@ -114,7 +114,7 @@ class PostWriteService(
                 attachmentIds = attachmentIds,
             )
             savedPost.thumbnailImage = request.thumbnailAttachmentId ?: attachmentIds.firstOrNull()
-            postRepository.save(savedPost)
+            postRepository.updateThumbnailImage(savedPost.id!!, savedPost.thumbnailImage)
         }
 
         if (status == PostStatusEnum.PUBLISHED) {

@@ -63,7 +63,7 @@ class PostRepositoryCustomImpl(
                 .set(POSTS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
                 .where(POSTS.ID.eq(postId))
                 .execute()
-            dsl.deleteFrom(POST_TAGS).where(POST_TAGS.POST_ID.eq(postId)).execute()
+            syncPostTags(postId, post.tags.map { requireNotNull(it.id) }.toSet())
         } else {
             dsl.insertInto(POSTS)
                 .set(POSTS.ID, postId)
@@ -79,15 +79,47 @@ class PostRepositoryCustomImpl(
                 .set(POSTS.CREATED_AT_UTC, post.createdAt.atOffset(ZoneOffset.UTC))
                 .set(POSTS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
                 .execute()
-        }
-        post.tags.forEach { tag ->
-            dsl.insertInto(POST_TAGS)
-                .set(POST_TAGS.POST_ID, postId)
-                .set(POST_TAGS.TAG_ID, requireNotNull(tag.id))
-                .execute()
+            insertPostTags(postId, post.tags.map { requireNotNull(it.id) })
         }
         post.updatedAt = now
         return post
+    }
+
+    /**
+     * 저장하려는 태그 집합과 현재 post_tags 행을 비교해 실제 변경분만 반영한다.
+     * 태그를 건드리지 않는 저장에서 전체 삭제/재삽입이 나가면 같은 게시물을 저장하는 트랜잭션끼리
+     * post_tags에서 서로를 대기하게 되므로, 델타만 적용해 불필요한 쓰기와 잠금 경합을 없앤다.
+     */
+    private fun syncPostTags(
+        postId: UUID,
+        tagIds: Set<UUID>,
+    ) {
+        val currentTagIds =
+            dsl.select(POST_TAGS.TAG_ID)
+                .from(POST_TAGS)
+                .where(POST_TAGS.POST_ID.eq(postId))
+                .fetch(POST_TAGS.TAG_ID)
+                .filterNotNull()
+                .toSet()
+        val removedTagIds = currentTagIds - tagIds
+        val addedTagIds = tagIds - currentTagIds
+
+        if (removedTagIds.isNotEmpty()) {
+            dsl.deleteFrom(POST_TAGS).where(POST_TAGS.POST_ID.eq(postId).and(POST_TAGS.TAG_ID.`in`(removedTagIds))).execute()
+        }
+        insertPostTags(postId, addedTagIds)
+    }
+
+    private fun insertPostTags(
+        postId: UUID,
+        tagIds: Collection<UUID>,
+    ) {
+        tagIds.forEach { tagId ->
+            dsl.insertInto(POST_TAGS)
+                .set(POST_TAGS.POST_ID, postId)
+                .set(POST_TAGS.TAG_ID, tagId)
+                .execute()
+        }
     }
 
     override fun saveAndFlush(post: Post): Post = save(post)
@@ -115,6 +147,17 @@ class PostRepositoryCustomImpl(
     override fun findAll(): List<Post> = fetchPosts(dsl.select(POSTS.ID).from(POSTS).fetch(POSTS.ID).filterNotNull())
 
     override fun getReferenceById(id: UUID): Post = findById(id).orElseThrow()
+
+    override fun updateThumbnailImage(
+        postId: UUID,
+        thumbnailAttachmentId: UUID?,
+    ) {
+        dsl.update(POSTS)
+            .set(POSTS.THUMBNAIL_IMAGE, thumbnailAttachmentId)
+            .set(POSTS.UPDATED_AT_UTC, Instant.now().atOffset(ZoneOffset.UTC))
+            .where(POSTS.ID.eq(postId))
+            .execute()
+    }
 
     override fun incrementViewCount(postId: UUID) {
         dsl.update(POSTS).set(POSTS.VIEW_COUNT, POSTS.VIEW_COUNT.plus(1)).where(POSTS.ID.eq(postId)).execute()

@@ -89,6 +89,7 @@ class PostWriteServiceValidationTest {
                 }
             }
         }
+        every { postRepository.updateThumbnailImage(any(), any()) } just runs
         every { distributedLock.withLockAndTransaction<Category>(any(), any(), any()) } answers {
             thirdArg<() -> Category>().invoke()
         }

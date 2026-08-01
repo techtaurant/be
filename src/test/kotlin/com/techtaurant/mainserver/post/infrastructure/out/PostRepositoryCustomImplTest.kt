@@ -7,6 +7,7 @@ import com.techtaurant.mainserver.post.entity.Post
 import com.techtaurant.mainserver.post.entity.PostDailyStats
 import com.techtaurant.mainserver.post.entity.PostPeriod
 import com.techtaurant.mainserver.post.entity.PostSortType
+import com.techtaurant.mainserver.post.entity.Tag
 import com.techtaurant.mainserver.post.enums.PostStatusEnum
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.user.entity.User
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -45,6 +47,12 @@ class PostRepositoryCustomImplTest : IntegrationTest() {
 
     @Autowired
     private lateinit var categoryRepository: CategoryRepository
+
+    @Autowired
+    private lateinit var tagRepository: TagRepository
+
+    @Autowired
+    private lateinit var jdbcTemplate: JdbcTemplate
 
     private lateinit var userA: User
     private lateinit var userB: User
@@ -165,6 +173,62 @@ class PostRepositoryCustomImplTest : IntegrationTest() {
             assertThat(reloadedPost.commentCount).isEqualTo(1L)
         }
     }
+
+    @Nested
+    @DisplayName("save 태그 동기화")
+    inner class SaveTagSynchronization {
+        @Test
+        @DisplayName("태그가 그대로면 post_tags 행을 다시 쓰지 않는다")
+        fun save_withUnchangedTags_doesNotRewritePostTagRows() {
+            // given
+            val post = createPost(userA).apply { replaceTags(setOf(createTag("kotlin"), createTag("spring"))) }
+            postRepository.save(post)
+            val tagRowLocationsBeforeSave = fetchPostTagRowLocations(post.id!!)
+
+            // when
+            post.title = "수정된 제목"
+            postRepository.save(post)
+
+            // then
+            assertThat(fetchPostTagRowLocations(post.id!!)).isEqualTo(tagRowLocationsBeforeSave)
+        }
+
+        @Test
+        @DisplayName("태그가 바뀌면 삭제/추가된 태그만 반영한다")
+        fun save_withChangedTags_appliesOnlyDelta() {
+            // given
+            val keptTag = createTag("kotlin")
+            val removedTag = createTag("spring")
+            val addedTag = createTag("jooq")
+            val post = createPost(userA).apply { replaceTags(setOf(keptTag, removedTag)) }
+            postRepository.save(post)
+            val keptTagRowLocation = fetchPostTagRowLocation(post.id!!, keptTag.id!!)
+
+            // when
+            post.replaceTags(setOf(keptTag, addedTag))
+            postRepository.save(post)
+
+            // then
+            val reloadedPost = postRepository.findById(post.id!!).orElseThrow()
+            assertThat(reloadedPost.tags).extracting("id").containsExactlyInAnyOrder(keptTag.id, addedTag.id)
+            assertThat(fetchPostTagRowLocation(post.id!!, keptTag.id!!)).isEqualTo(keptTagRowLocation)
+        }
+    }
+
+    private fun createTag(name: String): Tag = tagRepository.save(Tag(name))
+
+    /**
+     * post_tags 행의 물리적 위치(ctid)를 태그별로 조회한다.
+     * 행을 삭제 후 재삽입하면 ctid가 달라지므로, 저장이 태그 행을 그대로 두었는지 판별할 수 있다.
+     */
+    private fun fetchPostTagRowLocations(postId: UUID): Map<UUID, String> =
+        jdbcTemplate.queryForList("SELECT tag_id, ctid::text AS row_location FROM post_tags WHERE post_id = ?", postId)
+            .associate { row -> row["tag_id"] as UUID to row["row_location"] as String }
+
+    private fun fetchPostTagRowLocation(
+        postId: UUID,
+        tagId: UUID,
+    ): String = requireNotNull(fetchPostTagRowLocations(postId)[tagId])
 
     @Nested
     @DisplayName("authorId 필터링")

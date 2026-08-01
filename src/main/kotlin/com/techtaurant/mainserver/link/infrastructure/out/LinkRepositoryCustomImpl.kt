@@ -40,7 +40,7 @@ class LinkRepositoryCustomImpl(
             dsl.update(LINKS).set(LINKS.TITLE, link.title).set(LINKS.URL, link.url).set(LINKS.SUMMARY, link.summary)
                 .set(LINKS.CREATED_AT_UTC, link.createdAt.atOffset(ZoneOffset.UTC))
                 .set(LINKS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC)).where(LINKS.ID.eq(id)).execute()
-            dsl.deleteFrom(LINK_TAGS).where(LINK_TAGS.LINK_ID.eq(id)).execute()
+            syncLinkTags(id, link.tags.map { requireNotNull(it.id) }.toSet())
         } else {
             dsl.insertInto(LINKS).set(LINKS.ID, id).set(LINKS.TITLE, link.title).set(LINKS.URL, link.url).set(LINKS.SUMMARY, link.summary)
                 .set(
@@ -53,13 +53,44 @@ class LinkRepositoryCustomImpl(
                     LINKS.CREATED_AT_UTC,
                     link.createdAt.atOffset(ZoneOffset.UTC),
                 ).set(LINKS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC)).execute()
-        }
-        link.tags.forEach {
-                tag ->
-            dsl.insertInto(LINK_TAGS).set(LINK_TAGS.LINK_ID, id).set(LINK_TAGS.TAG_ID, requireNotNull(tag.id)).execute()
+            insertLinkTags(id, link.tags.map { requireNotNull(it.id) })
         }
         link.updatedAt = now
         return link
+    }
+
+    /**
+     * 저장하려는 태그 집합과 현재 link_tags 행을 비교해 실제 변경분만 반영한다.
+     * 크롤 갱신은 태그를 바꾸지 않으므로, 전체 삭제/재삽입을 두면 실행마다 기존 링크의 태그 행이
+     * 그대로 재작성되고 같은 링크를 동시에 갱신하는 배치끼리 잠금 경합이 생긴다.
+     */
+    private fun syncLinkTags(
+        linkId: UUID,
+        tagIds: Set<UUID>,
+    ) {
+        val currentTagIds =
+            dsl.select(LINK_TAGS.TAG_ID)
+                .from(LINK_TAGS)
+                .where(LINK_TAGS.LINK_ID.eq(linkId))
+                .fetch(LINK_TAGS.TAG_ID)
+                .filterNotNull()
+                .toSet()
+        val removedTagIds = currentTagIds - tagIds
+        val addedTagIds = tagIds - currentTagIds
+
+        if (removedTagIds.isNotEmpty()) {
+            dsl.deleteFrom(LINK_TAGS).where(LINK_TAGS.LINK_ID.eq(linkId).and(LINK_TAGS.TAG_ID.`in`(removedTagIds))).execute()
+        }
+        insertLinkTags(linkId, addedTagIds)
+    }
+
+    private fun insertLinkTags(
+        linkId: UUID,
+        tagIds: Collection<UUID>,
+    ) {
+        tagIds.forEach { tagId ->
+            dsl.insertInto(LINK_TAGS).set(LINK_TAGS.LINK_ID, linkId).set(LINK_TAGS.TAG_ID, tagId).execute()
+        }
     }
 
     override fun saveAndFlush(link: Link): Link = save(link)
