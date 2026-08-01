@@ -12,6 +12,7 @@ import org.jooq.impl.DSL
 import org.springframework.stereotype.Repository
 import java.time.Instant
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @Repository
@@ -20,7 +21,7 @@ class AttachmentRepositoryCustomImpl(
 ) : AttachmentRepository {
     override fun save(attachment: Attachment): Attachment {
         val id = attachment.id ?: UuidCreator.getTimeOrderedEpoch().also { attachment.id = it }
-        val now = Instant.now().atOffset(ZoneOffset.UTC)
+        val now = Instant.now().truncatedTo(ChronoUnit.MICROS).atOffset(ZoneOffset.UTC)
         dsl.insertInto(ATTACHMENTS)
             .set(ATTACHMENTS.ID, id)
             .set(ATTACHMENTS.REFERENCE_ID, attachment.referenceId)
@@ -35,8 +36,12 @@ class AttachmentRepositoryCustomImpl(
             .onConflict(ATTACHMENTS.ID)
             .doUpdate()
             .set(ATTACHMENTS.REFERENCE_ID, attachment.referenceId)
+            .set(ATTACHMENTS.REFERENCE_TYPE, enumValue("attachment_reference_type", attachment.referenceType.name))
             .set(ATTACHMENTS.STATUS, enumValue("attachment_status", attachment.status.name))
             .set(ATTACHMENTS.OBJECT_KEY, attachment.objectKey)
+            .set(ATTACHMENTS.ORIGINAL_FILE_NAME, attachment.originalFileName)
+            .set(ATTACHMENTS.CONTENT_TYPE, attachment.contentType)
+            .set(ATTACHMENTS.FILE_SIZE, attachment.fileSize)
             .set(ATTACHMENTS.UPDATED_AT_UTC, now)
             .execute()
         attachment.updatedAt = now.toInstant()

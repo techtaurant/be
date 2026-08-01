@@ -26,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import java.time.Instant
 import java.util.Optional
 import java.util.UUID
 
@@ -83,7 +84,7 @@ class PostWriteServiceAttachmentTest {
             }
         }
         every { postRepository.delete(any()) } just runs
-        every { postRepository.updateThumbnailImage(any(), any()) } just runs
+        every { postRepository.updateThumbnailImage(any(), any()) } returns Instant.now()
     }
 
     @Nested
@@ -121,6 +122,7 @@ class PostWriteServiceAttachmentTest {
             // given
             val attachmentId = UUID.randomUUID()
             val thumbnailAttachmentId = UUID.randomUUID()
+            val thumbnailUpdatedAt = Instant.parse("2026-08-01T00:00:00Z")
             var savedPost: Post? = null
             val request =
                 CreatePostRequest(
@@ -138,6 +140,7 @@ class PostWriteServiceAttachmentTest {
                     savedPost = this
                 }
             }
+            every { postRepository.updateThumbnailImage(any(), any()) } returns thumbnailUpdatedAt
             // when
             val response = postWriteService.createPost(author.id!!, request)
 
@@ -150,6 +153,7 @@ class PostWriteServiceAttachmentTest {
                 )
             }
             assertThat(savedPost?.thumbnailImage).isEqualTo(thumbnailAttachmentId)
+            assertThat(response.updatedAt).isEqualTo(thumbnailUpdatedAt)
         }
 
         @Test

@@ -44,7 +44,7 @@ interface PostRepositoryCustom {
     fun updateThumbnailImage(
         postId: UUID,
         thumbnailAttachmentId: UUID?,
-    )
+    ): Instant
 
     fun incrementViewCount(postId: UUID)
 

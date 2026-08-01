@@ -4,6 +4,8 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 
 class CorsPropertiesTest {
     private val corsConfiguration =
@@ -120,5 +122,67 @@ class CorsPropertiesTest {
 
         // then
         assertThat(patterns).containsExactly(subdomainWildcardPattern)
+    }
+
+    @ParameterizedTest(name = "[{index}] {0}")
+    @ValueSource(
+        strings = [
+            "https://[*]",
+            "https://[*]:[*]",
+            "https://[*:*]",
+            "https://[1*]",
+            "https://[::*]",
+            "https://*techtaurant.com",
+            "https://techtaurant.*",
+            "https://techtaurant.com*",
+            "https://foo.*",
+            "https://user@techtaurant.com",
+            "https://techtaurant.com/path",
+            "https://techtaurant.com?redirect=evil.example",
+            "https://techtaurant.com#fragment",
+        ],
+    )
+    @DisplayName("origin이 아닌 문법과 선두 단일 DNS label 외 wildcard를 거부한다")
+    fun `reject invalid origin pattern grammar`(invalidPattern: String) {
+        // when & then
+        assertThatThrownBy { CorsProperties(allowedOriginPatterns = invalidPattern) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining(invalidPattern)
+    }
+
+    @ParameterizedTest(name = "[{index}] {0}")
+    @ValueSource(
+        strings = [
+            "https://techtaurant.com",
+            "http://localhost:3000",
+            "https://[2001:db8::1]",
+            "https://[2001:db8::1]:8443",
+        ],
+    )
+    @DisplayName("wildcard 없는 http와 https origin은 허용한다")
+    fun `allow exact http and https origin patterns`(exactOrigin: String) {
+        // given
+        val configuration = CorsProperties(allowedOriginPatterns = exactOrigin).createCorsConfiguration()
+
+        // when
+        val matchedOrigin = configuration.checkOrigin(exactOrigin)
+
+        // then
+        assertThat(matchedOrigin).isEqualTo(exactOrigin)
+    }
+
+    @Test
+    @DisplayName("선두 단일 DNS label wildcard는 고정 포트에서도 허용한다")
+    fun `allow leading dns label wildcard with fixed port`() {
+        // given
+        val pattern = "https://*.techtaurant.com:8443"
+        val origin = "https://preview.techtaurant.com:8443"
+        val configuration = CorsProperties(allowedOriginPatterns = pattern).createCorsConfiguration()
+
+        // when
+        val matchedOrigin = configuration.checkOrigin(origin)
+
+        // then
+        assertThat(matchedOrigin).isEqualTo(origin)
     }
 }

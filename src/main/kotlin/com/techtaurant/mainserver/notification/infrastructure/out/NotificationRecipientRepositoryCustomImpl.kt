@@ -16,6 +16,7 @@ import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Repository
 import java.time.Instant
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.Optional
 import java.util.UUID
 
@@ -25,11 +26,13 @@ class NotificationRecipientRepositoryCustomImpl(
 ) : NotificationRecipientRepository {
     override fun save(recipient: NotificationRecipient): NotificationRecipient {
         val id = requireNotNull(recipient.id)
+        val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
         dsl.update(NOTIFICATION_RECIPIENTS)
             .set(NOTIFICATION_RECIPIENTS.READ_AT_UTC, recipient.readAt?.atOffset(ZoneOffset.UTC))
-            .set(NOTIFICATION_RECIPIENTS.UPDATED_AT_UTC, Instant.now().atOffset(ZoneOffset.UTC))
+            .set(NOTIFICATION_RECIPIENTS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC))
             .where(NOTIFICATION_RECIPIENTS.ID.eq(id))
             .execute()
+        recipient.updatedAt = now
         return recipient
     }
 

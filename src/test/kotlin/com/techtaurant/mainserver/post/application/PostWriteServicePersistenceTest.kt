@@ -82,6 +82,7 @@ class PostWriteServicePersistenceTest : IntegrationTest() {
         // Then
         val reloadedPost = postRepository.findById(response.id).orElseThrow()
         assertThat(reloadedPost.thumbnailImage).isEqualTo(thumbnailAttachmentId)
+        assertThat(response.updatedAt).isEqualTo(reloadedPost.updatedAt)
     }
 
     @Test
