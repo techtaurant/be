@@ -112,8 +112,8 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
         val parentComment = createComment(author, "부모 댓글", replyCount = 1)
         val replyComment = createComment(author, "대댓글", parent = parentComment)
         val statDate = DateUtils.toUtcDate(replyComment.createdAt)
-        post.commentCount = 2
-        postRepository.save(post)
+        // 게시물 댓글수는 원자적 증감 SQL이 소유하므로 엔티티 대입이 아니라 increment로 시딩한다.
+        postRepository.incrementCommentCount(post.id!!)
 
         // when
         given()
@@ -141,8 +141,8 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
         val parentComment = createComment(author, "부모 댓글", replyCount = 0)
         val replyComment = createComment(author, "대댓글", parent = parentComment)
         val statDate = DateUtils.toUtcDate(replyComment.createdAt)
-        post.commentCount = 0
-        postRepository.save(post)
+        // 삭제 대상 대댓글보다 게시물 댓글수가 적은 드리프트 상황을 원자적 감소로 만든다.
+        postRepository.decrementCommentCount(post.id!!)
 
         // when
         given()
@@ -176,7 +176,7 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
             .delete("/api/comments/${comment.id}")
             .then()
             .statusCode(HttpStatus.FORBIDDEN.value())
-            .body("status", org.hamcrest.Matchers.equalTo(4004))
+            .body("status", org.hamcrest.Matchers.equalTo(7004))
             .body("message", org.hamcrest.Matchers.equalTo("댓글 작성자만 수행할 수 있습니다"))
 
         // then
@@ -205,7 +205,7 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
             .delete("/api/comments/${comment.id}")
             .then()
             .statusCode(HttpStatus.GONE.value())
-            .body("status", org.hamcrest.Matchers.equalTo(4005))
+            .body("status", org.hamcrest.Matchers.equalTo(7005))
             .body("message", org.hamcrest.Matchers.equalTo("이미 삭제된 댓글입니다"))
     }
 
@@ -222,7 +222,7 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
             .delete("/api/comments/$nonExistentCommentId")
             .then()
             .statusCode(HttpStatus.NOT_FOUND.value())
-            .body("status", org.hamcrest.Matchers.equalTo(4001))
+            .body("status", org.hamcrest.Matchers.equalTo(7001))
             .body("message", org.hamcrest.Matchers.equalTo("댓글을 찾을 수 없습니다"))
     }
 

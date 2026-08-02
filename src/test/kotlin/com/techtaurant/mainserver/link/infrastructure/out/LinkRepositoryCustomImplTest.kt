@@ -253,6 +253,27 @@ class LinkRepositoryCustomImplTest : IntegrationTest() {
         assertThat(byTag.map { it.linkId }).containsExactly(companySpringLink.id)
     }
 
+    @Test
+    @DisplayName("save는 조회 이후 원자적으로 증가한 조회수/추천수를 덮어쓰지 않는다")
+    fun save_doesNotOverwriteAtomicallyIncrementedCounters() {
+        // given
+        val linkId = createLink().id!!
+        val staleLink = linkRepository.findById(linkId).orElseThrow()
+
+        linkRepository.incrementViewCount(linkId)
+        linkRepository.incrementLikeCount(linkId)
+
+        // when
+        staleLink.title = "크롤로 갱신된 제목"
+        linkRepository.save(staleLink)
+
+        // then
+        val reloadedLink = linkRepository.findById(linkId).orElseThrow()
+        assertThat(reloadedLink.title).isEqualTo("크롤로 갱신된 제목")
+        assertThat(reloadedLink.viewCount).isEqualTo(1L)
+        assertThat(reloadedLink.likeCount).isEqualTo(1L)
+    }
+
     private fun createLink(
         createdAtDaysAgo: Long = 0,
         createdAt: Instant = Instant.now().minus(createdAtDaysAgo, ChronoUnit.DAYS),

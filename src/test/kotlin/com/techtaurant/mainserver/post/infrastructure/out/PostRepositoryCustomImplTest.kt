@@ -7,6 +7,7 @@ import com.techtaurant.mainserver.post.entity.Post
 import com.techtaurant.mainserver.post.entity.PostDailyStats
 import com.techtaurant.mainserver.post.entity.PostPeriod
 import com.techtaurant.mainserver.post.entity.PostSortType
+import com.techtaurant.mainserver.post.entity.Tag
 import com.techtaurant.mainserver.post.enums.PostStatusEnum
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.user.entity.User
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -45,6 +47,12 @@ class PostRepositoryCustomImplTest : IntegrationTest() {
 
     @Autowired
     private lateinit var categoryRepository: CategoryRepository
+
+    @Autowired
+    private lateinit var tagRepository: TagRepository
+
+    @Autowired
+    private lateinit var jdbcTemplate: JdbcTemplate
 
     private lateinit var userA: User
     private lateinit var userB: User
@@ -93,6 +101,9 @@ class PostRepositoryCustomImplTest : IntegrationTest() {
         author: User,
         status: PostStatusEnum = PostStatusEnum.PUBLISHED,
         postCategory: Category? = null,
+        viewCount: Long = 0,
+        likeCount: Long = 0,
+        commentCount: Long = 0,
     ): Post =
         postRepository.save(
             Post(
@@ -101,6 +112,9 @@ class PostRepositoryCustomImplTest : IntegrationTest() {
                 author = author,
                 status = status,
                 category = postCategory,
+                viewCount = viewCount,
+                likeCount = likeCount,
+                commentCount = commentCount,
             ),
         )
 
@@ -132,6 +146,89 @@ class PostRepositoryCustomImplTest : IntegrationTest() {
         )
 
     private fun statDateDaysAgo(daysAgo: Long): LocalDate = LocalDate.now(ZoneOffset.UTC).minusDays(daysAgo)
+
+    @Nested
+    @DisplayName("save 카운터 보존")
+    inner class SaveCounterPreservation {
+        @Test
+        @DisplayName("save는 조회 이후 원자적으로 증가한 조회수/추천수/댓글수를 덮어쓰지 않는다")
+        fun save_doesNotOverwriteAtomicallyIncrementedCounters() {
+            // given
+            val postId = createPost(userA).id!!
+            val stalePost = postRepository.findById(postId).orElseThrow()
+
+            postRepository.incrementViewCount(postId)
+            postRepository.incrementLikeCount(postId)
+            postRepository.incrementCommentCount(postId)
+
+            // when
+            stalePost.title = "수정된 제목"
+            postRepository.save(stalePost)
+
+            // then
+            val reloadedPost = postRepository.findById(postId).orElseThrow()
+            assertThat(reloadedPost.title).isEqualTo("수정된 제목")
+            assertThat(reloadedPost.viewCount).isEqualTo(1L)
+            assertThat(reloadedPost.likeCount).isEqualTo(1L)
+            assertThat(reloadedPost.commentCount).isEqualTo(1L)
+        }
+    }
+
+    @Nested
+    @DisplayName("save 태그 동기화")
+    inner class SaveTagSynchronization {
+        @Test
+        @DisplayName("태그가 그대로면 post_tags 행을 다시 쓰지 않는다")
+        fun save_withUnchangedTags_doesNotRewritePostTagRows() {
+            // given
+            val post = createPost(userA).apply { replaceTags(setOf(createTag("kotlin"), createTag("spring"))) }
+            postRepository.save(post)
+            val tagRowLocationsBeforeSave = fetchPostTagRowLocations(post.id!!)
+
+            // when
+            post.title = "수정된 제목"
+            postRepository.save(post)
+
+            // then
+            assertThat(fetchPostTagRowLocations(post.id!!)).isEqualTo(tagRowLocationsBeforeSave)
+        }
+
+        @Test
+        @DisplayName("태그가 바뀌면 삭제/추가된 태그만 반영한다")
+        fun save_withChangedTags_appliesOnlyDelta() {
+            // given
+            val keptTag = createTag("kotlin")
+            val removedTag = createTag("spring")
+            val addedTag = createTag("jooq")
+            val post = createPost(userA).apply { replaceTags(setOf(keptTag, removedTag)) }
+            postRepository.save(post)
+            val keptTagRowLocation = fetchPostTagRowLocation(post.id!!, keptTag.id!!)
+
+            // when
+            post.replaceTags(setOf(keptTag, addedTag))
+            postRepository.save(post)
+
+            // then
+            val reloadedPost = postRepository.findById(post.id!!).orElseThrow()
+            assertThat(reloadedPost.tags).extracting("id").containsExactlyInAnyOrder(keptTag.id, addedTag.id)
+            assertThat(fetchPostTagRowLocation(post.id!!, keptTag.id!!)).isEqualTo(keptTagRowLocation)
+        }
+    }
+
+    private fun createTag(name: String): Tag = tagRepository.save(Tag(name))
+
+    /**
+     * post_tags 행의 물리적 위치(ctid)를 태그별로 조회한다.
+     * 행을 삭제 후 재삽입하면 ctid가 달라지므로, 저장이 태그 행을 그대로 두었는지 판별할 수 있다.
+     */
+    private fun fetchPostTagRowLocations(postId: UUID): Map<UUID, String> =
+        jdbcTemplate.queryForList("SELECT tag_id, ctid::text AS row_location FROM post_tags WHERE post_id = ?", postId)
+            .associate { row -> row["tag_id"] as UUID to row["row_location"] as String }
+
+    private fun fetchPostTagRowLocation(
+        postId: UUID,
+        tagId: UUID,
+    ): String = requireNotNull(fetchPostTagRowLocations(postId)[tagId])
 
     @Nested
     @DisplayName("authorId 필터링")
@@ -369,14 +466,11 @@ class PostRepositoryCustomImplTest : IntegrationTest() {
         @DisplayName("조회순 전체 랭킹도 post 누적값이 아니라 일별 집계 전체 합계로 정렬한다")
         fun findPostsWithConditions_viewAllStatsRanking_usesDailyStatsTotalSum() {
             // given
-            val postWithMoreDailyStats = movePostCreatedAt(createPost(userA), daysAgo = 500)
-            postWithMoreDailyStats.viewCount = 1
+            val postWithMoreDailyStats = movePostCreatedAt(createPost(userA, viewCount = 1), daysAgo = 500)
             createDailyStats(postWithMoreDailyStats, daysAgo = 100, viewCount = 7)
 
-            val postWithFewerDailyStats = movePostCreatedAt(createPost(userA), daysAgo = 400)
-            postWithFewerDailyStats.viewCount = 100
+            val postWithFewerDailyStats = movePostCreatedAt(createPost(userA, viewCount = 100), daysAgo = 400)
             createDailyStats(postWithFewerDailyStats, daysAgo = 1, viewCount = 3)
-            postRepository.saveAllAndFlush(listOf(postWithMoreDailyStats, postWithFewerDailyStats))
 
             // when
             val result =
@@ -398,12 +492,10 @@ class PostRepositoryCustomImplTest : IntegrationTest() {
         @DisplayName("조회순 기간 랭킹은 기간 내 일별 조회 집계 합계로 정렬한다")
         fun findPostsWithConditions_viewPeriodRanking_usesRecentDailyStatsSum() {
             // given
-            val oldPostWithMoreViews = movePostCreatedAt(createPost(userA), daysAgo = 500)
-            oldPostWithMoreViews.viewCount = 1
+            val oldPostWithMoreViews = movePostCreatedAt(createPost(userA, viewCount = 1), daysAgo = 500)
             createDailyStats(oldPostWithMoreViews, daysAgo = 0, viewCount = 7)
 
-            val oldPostWithFewerViews = movePostCreatedAt(createPost(userA), daysAgo = 400)
-            oldPostWithFewerViews.viewCount = 100
+            val oldPostWithFewerViews = movePostCreatedAt(createPost(userA, viewCount = 100), daysAgo = 400)
             createDailyStats(oldPostWithFewerViews, daysAgo = 1, viewCount = 3)
 
             // when
@@ -426,12 +518,10 @@ class PostRepositoryCustomImplTest : IntegrationTest() {
         @DisplayName("추천순 기간 랭킹은 기간 내 일별 추천 집계 합계로 정렬한다")
         fun findPostsWithConditions_likePeriodRanking_usesRecentDailyStatsSum() {
             // given
-            val oldPostWithMoreLikes = movePostCreatedAt(createPost(userA), daysAgo = 500)
-            oldPostWithMoreLikes.likeCount = 1
+            val oldPostWithMoreLikes = movePostCreatedAt(createPost(userA, likeCount = 1), daysAgo = 500)
             createDailyStats(oldPostWithMoreLikes, daysAgo = 0, likeCount = 4)
 
-            val oldPostWithFewerLikes = movePostCreatedAt(createPost(userA), daysAgo = 400)
-            oldPostWithFewerLikes.likeCount = 100
+            val oldPostWithFewerLikes = movePostCreatedAt(createPost(userA, likeCount = 100), daysAgo = 400)
             createDailyStats(oldPostWithFewerLikes, daysAgo = 1, likeCount = 2)
 
             // when
@@ -454,18 +544,14 @@ class PostRepositoryCustomImplTest : IntegrationTest() {
         @DisplayName("기간 랭킹 커서는 전체 누적값이 아니라 기간 내 일별 집계 합계로 다음 페이지를 조회한다")
         fun findPostsWithConditions_periodRankingCursor_usesRecentDailyStatsSortValue() {
             // given
-            val firstPageLastPost = movePostCreatedAt(createPost(userA), daysAgo = 500)
-            firstPageLastPost.commentCount = 1_000
+            val firstPageLastPost = movePostCreatedAt(createPost(userA, commentCount = 1_000), daysAgo = 500)
             createDailyStats(firstPageLastPost, daysAgo = 0, commentCount = 10)
 
-            val secondPageFirstPost = movePostCreatedAt(createPost(userA), daysAgo = 400)
-            secondPageFirstPost.commentCount = 999
+            val secondPageFirstPost = movePostCreatedAt(createPost(userA, commentCount = 999), daysAgo = 400)
             createDailyStats(secondPageFirstPost, daysAgo = 0, commentCount = 5)
 
-            val secondPageSecondPost = movePostCreatedAt(createPost(userA), daysAgo = 300)
-            secondPageSecondPost.commentCount = 998
+            val secondPageSecondPost = movePostCreatedAt(createPost(userA, commentCount = 998), daysAgo = 300)
             createDailyStats(secondPageSecondPost, daysAgo = 0, commentCount = 1)
-            postRepository.saveAllAndFlush(listOf(firstPageLastPost, secondPageFirstPost, secondPageSecondPost))
 
             val cursor =
                 PostCursor(

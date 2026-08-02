@@ -1,15 +1,19 @@
 package com.techtaurant.mainserver.post.infrastructure.out
 
 import com.techtaurant.mainserver.post.entity.Post
-import org.springframework.data.jpa.repository.JpaRepository
-import org.springframework.data.jpa.repository.Modifying
-import org.springframework.data.jpa.repository.Query
-import org.springframework.data.repository.query.Param
+import org.springframework.data.repository.Repository
 import java.time.Instant
+import java.util.Optional
 import java.util.UUID
 
-interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
-    fun findAllByAuthorId(authorId: UUID): List<Post>
+interface PostRepository : Repository<Post, UUID>, PostRepositoryCustom {
+    override fun findById(id: UUID): Optional<Post>
+
+    override fun findAllById(ids: Iterable<UUID>): List<Post>
+
+    override fun existsById(id: UUID): Boolean
+
+    override fun findAllByAuthorId(authorId: UUID): List<Post>
 
     /**
      * 게시물 상세 조회
@@ -19,16 +23,7 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      * @param postId 게시물 ID
      * @return 게시물 엔티티 (없으면 null)
      */
-    @Query(
-        """
-        SELECT p FROM Post p
-        JOIN FETCH p.author
-        LEFT JOIN FETCH p.tags
-        LEFT JOIN FETCH p.category
-        WHERE p.id = :postId
-    """,
-    )
-    fun findPostDetailById(postId: UUID): Post?
+    override fun findPostDetailById(postId: UUID): Post?
 
     /**
      * 커서 기반 DRAFT 게시물 목록 조회
@@ -41,23 +36,11 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      * @param limit 조회 개수
      * @return DRAFT 게시물 리스트
      */
-    @Query(
-        """
-        SELECT p FROM Post p
-        WHERE p.author.id = :authorId
-        AND p.status = 'DRAFT'
-        AND (
-            p.updatedAt < :cursorUpdatedAt
-            OR (p.updatedAt = :cursorUpdatedAt AND p.id < :cursorId)
-        )
-        ORDER BY p.updatedAt DESC, p.id DESC
-    """,
-    )
-    fun findDraftsByAuthorWithCursor(
-        @Param("authorId") authorId: UUID,
-        @Param("cursorUpdatedAt") cursorUpdatedAt: Instant,
-        @Param("cursorId") cursorId: UUID,
-        @Param("limit") limit: Int,
+    override fun findDraftsByAuthorWithCursor(
+        authorId: UUID,
+        cursorUpdatedAt: Instant,
+        cursorId: UUID,
+        limit: Int,
     ): List<Post>
 
     /**
@@ -67,17 +50,9 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      * @param limit 조회 개수
      * @return DRAFT 게시물 리스트
      */
-    @Query(
-        """
-        SELECT p FROM Post p
-        WHERE p.author.id = :authorId
-        AND p.status = 'DRAFT'
-        ORDER BY p.updatedAt DESC, p.id DESC
-    """,
-    )
-    fun findDraftsByAuthorFirstPage(
-        @Param("authorId") authorId: UUID,
-        @Param("limit") limit: Int,
+    override fun findDraftsByAuthorFirstPage(
+        authorId: UUID,
+        limit: Int,
     ): List<Post>
 
     /**
@@ -87,17 +62,15 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      * @param postId 게시물 ID
      * @return 게시물 엔티티 (없으면 null)
      */
-    @Query(
-        """
-        SELECT p FROM Post p
-        LEFT JOIN FETCH p.author
-        LEFT JOIN FETCH p.category
-        WHERE p.id = :postId
-    """,
-    )
-    fun findPostByIdWithAuthor(
-        @Param("postId") postId: UUID,
-    ): Post?
+    override fun findPostByIdWithAuthor(postId: UUID): Post?
+
+    /**
+     * 게시물 수정 트랜잭션 동안 같은 게시물의 동시 수정을 직렬화합니다.
+     *
+     * @param postId 게시물 ID
+     * @return 작성자 정보를 포함한 게시물, 없으면 null
+     */
+    override fun findPostByIdWithAuthorForUpdate(postId: UUID): Post?
 
     /**
      * 공개 가능한 게시물 목록을 ID 목록으로 조회합니다.
@@ -105,19 +78,7 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      * @param postIds 게시물 ID 목록
      * @return PUBLISHED 상태의 게시물 목록
      */
-    @Query(
-        """
-        SELECT DISTINCT p FROM Post p
-        JOIN FETCH p.author
-        LEFT JOIN FETCH p.tags
-        LEFT JOIN FETCH p.category
-        WHERE p.id IN :postIds
-        AND p.status = 'PUBLISHED'
-    """,
-    )
-    fun findPublishedPostsByIdIn(
-        @Param("postIds") postIds: List<UUID>,
-    ): List<Post>
+    override fun findPublishedPostsByIdIn(postIds: List<UUID>): List<Post>
 
     /**
      * 게시물의 조회수를 원자적으로 1 증가시킵니다.
@@ -131,11 +92,7 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      *
      * @param postId 조회수를 증가시킬 게시물 ID
      */
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Query("UPDATE Post p SET p.viewCount = p.viewCount + 1 WHERE p.id = :postId")
-    fun incrementViewCount(
-        @Param("postId") postId: UUID,
-    )
+    override fun incrementViewCount(postId: UUID)
 
     /**
      * 게시물의 좋아요수를 원자적으로 1 증가시킵니다.
@@ -149,11 +106,7 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      *
      * @param postId 좋아요수를 증가시킬 게시물 ID
      */
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Query("UPDATE Post p SET p.likeCount = p.likeCount + 1 WHERE p.id = :postId")
-    fun incrementLikeCount(
-        @Param("postId") postId: UUID,
-    )
+    override fun incrementLikeCount(postId: UUID)
 
     /**
      * 게시물의 좋아요수를 원자적으로 1 감소시킵니다.
@@ -167,11 +120,7 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      *
      * @param postId 좋아요수를 감소시킬 게시물 ID
      */
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Query("UPDATE Post p SET p.likeCount = p.likeCount - 1 WHERE p.id = :postId")
-    fun decrementLikeCount(
-        @Param("postId") postId: UUID,
-    )
+    override fun decrementLikeCount(postId: UUID)
 
     /**
      * 게시물의 댓글수를 원자적으로 1 증가시킵니다.
@@ -186,22 +135,14 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      *
      * @param postId 댓글수를 증가시킬 게시물 ID
      */
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Query("UPDATE Post p SET p.commentCount = p.commentCount + 1 WHERE p.id = :postId")
-    fun incrementCommentCount(
-        @Param("postId") postId: UUID,
-    )
+    override fun incrementCommentCount(postId: UUID)
 
     /**
      * 게시물의 댓글수를 원자적으로 1 감소시킵니다.
      *
      * @param postId 댓글수를 감소시킬 게시물 ID
      */
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Query("UPDATE Post p SET p.commentCount = CASE WHEN p.commentCount > 0 THEN p.commentCount - 1 ELSE 0 END WHERE p.id = :postId")
-    fun decrementCommentCount(
-        @Param("postId") postId: UUID,
-    )
+    override fun decrementCommentCount(postId: UUID)
 
     /**
      * 특정 사용자의 2주 이상 경과한 DRAFT 게시물 목록을 조회합니다.
@@ -210,17 +151,8 @@ interface PostRepository : JpaRepository<Post, UUID>, PostRepositoryCustom {
      * @param before 기준 날짜 (이 날짜 이전에 수정된 DRAFT 반환)
      * @return 만료된 DRAFT 게시물 리스트
      */
-    @Query(
-        """
-        SELECT p FROM Post p
-        JOIN FETCH p.author
-        WHERE p.author.id = :authorId
-        AND p.status = 'DRAFT'
-        AND p.updatedAt < :before
-    """,
-    )
-    fun findStaleDraftsByAuthor(
-        @Param("authorId") authorId: UUID,
-        @Param("before") before: Instant,
+    override fun findStaleDraftsByAuthor(
+        authorId: UUID,
+        before: Instant,
     ): List<Post>
 }

@@ -200,7 +200,7 @@ class PostControllerTest : IntegrationTest() {
 
             // Then: 최근 7일 이내의 게시물만 로드되어야 함
             val content = response.data!!.content
-            assertEquals(3, content.size, "최근 7일 내 게시물은 2개여야 함")
+            assertEquals(2, content.size, "최근 7일 내 게시물은 2개여야 함")
         }
 
         @Test
@@ -221,7 +221,7 @@ class PostControllerTest : IntegrationTest() {
 
             // Then: 최근 30일 이내의 게시물만 로드되어야 함
             val content = response.data!!.content
-            assertEquals(3, content.size, "최근 30일 내 게시물은 2개여야 함")
+            assertEquals(2, content.size, "최근 30일 내 게시물은 2개여야 함")
         }
 
         @Test

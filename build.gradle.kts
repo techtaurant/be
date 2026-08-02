@@ -1,10 +1,11 @@
+import org.jooq.meta.jaxb.ForcedType
+
 plugins {
     kotlin("jvm") version "1.9.25"
     kotlin("plugin.spring") version "1.9.25"
-    kotlin("kapt") version "1.9.25"
     id("org.springframework.boot") version "3.5.7"
     id("io.spring.dependency-management") version "1.1.7"
-    kotlin("plugin.jpa") version "1.9.25"
+    id("org.jooq.jooq-codegen-gradle") version "3.19.27"
     id("com.diffplug.spotless") version "6.25.0"
     jacoco
 }
@@ -27,16 +28,20 @@ repositories {
 
 dependencies {
     implementation(enforcedPlatform("io.opentelemetry.instrumentation:opentelemetry-instrumentation-bom:2.26.1"))
-    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.springframework.data:spring-data-commons")
+    implementation("org.springframework.boot:spring-boot-starter-jooq")
+    implementation("org.jooq:jooq-kotlin")
     implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+    implementation("com.google.guava:guava:33.6.0-jre")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     // Database
     runtimeOnly("org.postgresql:postgresql")
+    jooqCodegen("org.postgresql:postgresql")
     implementation("com.github.gavlyukovskiy:p6spy-spring-boot-starter:1.9.0")
 
     // Environment Variables
@@ -76,9 +81,6 @@ dependencies {
     // UUID V7
     implementation("com.github.f4b6a3:uuid-creator:6.0.0")
 
-    // JPA Metamodel (타입 안전 Criteria Query)
-    kapt("org.hibernate.orm:hibernate-jpamodelgen")
-
     // Caffeine Cache
     implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
@@ -100,15 +102,56 @@ dependencies {
 }
 
 kotlin {
+    sourceSets.named("main") {
+        kotlin.srcDir("src/main/generated")
+    }
+
     compilerOptions {
         freeCompilerArgs.addAll("-Xjsr305=strict")
     }
 }
 
-allOpen {
-    annotation("jakarta.persistence.Entity")
-    annotation("jakarta.persistence.MappedSuperclass")
-    annotation("jakarta.persistence.Embeddable")
+val jooqCodegenUrl = providers.gradleProperty("jooqCodegenUrl").orElse("jdbc:postgresql://localhost:5432/techtaurant")
+val jooqCodegenUser = providers.gradleProperty("jooqCodegenUser").orElse("root")
+val jooqCodegenPassword = providers.gradleProperty("jooqCodegenPassword").orElse("1234")
+
+jooq {
+    configuration {
+        jdbc {
+            driver = "org.postgresql.Driver"
+            url = jooqCodegenUrl.get()
+            user = jooqCodegenUser.get()
+            password = jooqCodegenPassword.get()
+        }
+        generator {
+            name = "org.jooq.codegen.KotlinGenerator"
+            database {
+                name = "org.jooq.meta.postgres.PostgresDatabase"
+                inputSchema = "public"
+                includes =
+                    "attachments|categories|comment_like_log|comments|link_crawl_batches|link_crawl_failed_jobs|" +
+                    "link_crawl_runs|link_daily_stats|link_like_log|link_read_log|link_tags|link_view_log|links|" +
+                    "notification_arguments|notification_recipients|notifications|post_daily_stats|post_like_log|" +
+                    "post_read_log|post_tags|post_view_log|posts|tags|user_bans|user_follows|user_links|user_tokens|users"
+                forcedTypes =
+                    listOf(
+                        ForcedType()
+                            .withName("VARCHAR")
+                            .withIncludeTypes(
+                                "attachment_reference_type|attachment_status|notification_target_type|notification_type",
+                            ),
+                    )
+            }
+            generate {
+                isImplicitJoinPathsToOne = false
+                isImplicitJoinPathsToMany = false
+            }
+            target {
+                packageName = "com.techtaurant.mainserver.jooq"
+                directory = "src/main/generated"
+            }
+        }
+    }
 }
 
 // JaCoCo Configuration
@@ -145,6 +188,7 @@ tasks.named<JacocoReport>("jacocoTestReport") {
                         "**/config/**",
                         "**/entity/**",
                         "**/dto/**",
+                        "**/jooq/**",
                         "**/Application.class",
                         "**/ApplicationKt.class",
                     )
@@ -159,6 +203,10 @@ tasks.named<JacocoReport>("jacocoTestReport") {
 // Configure JaCoCo Coverage Verification Task
 tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
     dependsOn("jacocoTestReport")
+
+    // 리포트와 같은 대상을 측정해야 두 태스크의 커버리지 수치가 갈라지지 않는다.
+    // 검증에만 src/main/generated의 jOOQ 생성 코드가 포함되어 기준을 왜곡하고 있었다.
+    classDirectories.setFrom(tasks.named<JacocoReport>("jacocoTestReport").map { it.classDirectories })
 
     violationRules {
         rule {
@@ -189,6 +237,7 @@ tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
 spotless {
     kotlin {
         target("src/**/*.kt")
+        targetExclude("src/main/generated/**/*.kt")
         ktlint("1.2.1")
         trimTrailingWhitespace()
         endWithNewline()

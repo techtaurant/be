@@ -105,6 +105,7 @@ class NotificationReadService(
         updatedRecipients.forEach { recipient ->
             recipient.markAsRead(readAt)
         }
+        notificationRecipientRepository.saveAll(updatedRecipients)
 
         return buildNotificationListItems(updatedRecipients)
     }

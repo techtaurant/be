@@ -15,6 +15,7 @@ import io.mockk.runs
 import io.mockk.verifyOrder
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import java.time.Instant
 import java.util.Optional
 import java.util.UUID
 import kotlin.test.assertEquals
@@ -36,32 +37,19 @@ class LinkCrawlBatchAdminServiceTest {
     fun createBatchValidatesCrawlableBatch() {
         val companyUser = createCompanyUser()
         val batchId = UUID.randomUUID()
+        lateinit var savedBatch: LinkCrawlBatch
         every { userRepository.findById(companyUser.id!!) } returns Optional.of(companyUser)
         every { linkBatchRunService.validateCrawlable(any()) } just runs
         every { linkBatchRunService.run(batchId, any()) } returns mockk()
         every { linkCrawlBatchRepository.save(any()) } answers {
-            firstArg<LinkCrawlBatch>().apply { id = batchId }
+            firstArg<LinkCrawlBatch>().apply { id = batchId }.also { savedBatch = it }
         }
+        every { linkCrawlBatchRepository.findById(batchId) } answers { Optional.of(savedBatch) }
 
         val response =
             linkCrawlBatchAdminService.createBatch(
                 companyUserId = companyUser.id!!,
-                request =
-                    CreateLinkCrawlBatchRequest(
-                        name = "토스 링크 수집",
-                        baseUrl = "https://example.com",
-                        pageUriTemplate = "/articles?page={page}",
-                        itemSelector = ".article-card",
-                        articleLinkSelector = "a.article-link",
-                        titleSelector = ".title",
-                        summarySelector = ".summary",
-                        createdAtSelectors = listOf(".created-date"),
-                        tagNames = listOf("engineering"),
-                        cronExpression = "0 0 * * * *",
-                        startPage = 1,
-                        endPage = 2,
-                        active = true,
-                    ),
+                request = createRequest(),
             )
 
         assertEquals(batchId, response.id)
@@ -72,6 +60,52 @@ class LinkCrawlBatchAdminServiceTest {
             linkCrawlBatchRepository.save(any())
             linkBatchRunService.run(batchId, LinkCrawlRunTriggerType.CREATED)
         }
+    }
+
+    @Test
+    @DisplayName("최초 수집 실행이 갱신한 lastTriggeredAt을 응답에 반영한다")
+    fun createBatchReturnsBatchStateUpdatedByInitialRun() {
+        val companyUser = createCompanyUser()
+        val batchId = UUID.randomUUID()
+        val initialRunTriggeredAt = Instant.parse("2026-08-01T00:00:00Z")
+        val batchAfterInitialRun =
+            createBatch().apply {
+                id = batchId
+                lastTriggeredAt = initialRunTriggeredAt
+            }
+        every { userRepository.findById(companyUser.id!!) } returns Optional.of(companyUser)
+        every { linkBatchRunService.validateCrawlable(any()) } just runs
+        every { linkBatchRunService.run(batchId, any()) } returns mockk()
+        every { linkCrawlBatchRepository.save(any()) } answers {
+            firstArg<LinkCrawlBatch>().apply { id = batchId }
+        }
+        every { linkCrawlBatchRepository.findById(batchId) } returns Optional.of(batchAfterInitialRun)
+
+        val response =
+            linkCrawlBatchAdminService.createBatch(
+                companyUserId = companyUser.id!!,
+                request = createRequest(),
+            )
+
+        assertEquals(initialRunTriggeredAt, response.lastTriggeredAt)
+    }
+
+    private fun createRequest(): CreateLinkCrawlBatchRequest {
+        return CreateLinkCrawlBatchRequest(
+            name = "토스 링크 수집",
+            baseUrl = "https://example.com",
+            pageUriTemplate = "/articles?page={page}",
+            itemSelector = ".article-card",
+            articleLinkSelector = "a.article-link",
+            titleSelector = ".title",
+            summarySelector = ".summary",
+            createdAtSelectors = listOf(".created-date"),
+            tagNames = listOf("engineering"),
+            cronExpression = "0 0 * * * *",
+            startPage = 1,
+            endPage = 2,
+            active = true,
+        )
     }
 
     private fun createBatch(): LinkCrawlBatch {

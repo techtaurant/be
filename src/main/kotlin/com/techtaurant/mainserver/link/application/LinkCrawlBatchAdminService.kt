@@ -4,6 +4,7 @@ import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.link.dto.CreateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.link.dto.LinkCrawlBatchListItemResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlBatchResponse
+import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
 import com.techtaurant.mainserver.link.enums.LinkCrawlRunTriggerType
 import com.techtaurant.mainserver.link.enums.LinkStatus
 import com.techtaurant.mainserver.link.infrastructure.out.LinkCrawlBatchRepository
@@ -32,10 +33,10 @@ class LinkCrawlBatchAdminService(
 
         val batch = CreateLinkCrawlBatchRequest.toEntity(request, companyUser)
         linkBatchRunService.validateCrawlable(batch)
-        val savedBatch = linkCrawlBatchRepository.save(batch)
-        linkBatchRunService.run(savedBatch.id!!, LinkCrawlRunTriggerType.CREATED)
+        val batchId = linkCrawlBatchRepository.save(batch).id!!
+        linkBatchRunService.run(batchId, LinkCrawlRunTriggerType.CREATED)
 
-        return LinkCrawlBatchResponse.from(savedBatch)
+        return LinkCrawlBatchResponse.from(findBatchOrThrow(batchId))
     }
 
     @Transactional(readOnly = true)
@@ -45,6 +46,12 @@ class LinkCrawlBatchAdminService(
             .sortedBy { it.name }
             .map(LinkCrawlBatchListItemResponse::from)
     }
+
+    /** 최초 수집 실행이 갱신한 lastTriggeredAt을 응답에 반영하기 위해 실행 이후 배치를 다시 읽는다. */
+    private fun findBatchOrThrow(batchId: UUID): LinkCrawlBatch =
+        linkCrawlBatchRepository.findById(batchId).orElseThrow {
+            ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_FOUND)
+        }
 
     private fun getCompanyUser(companyUserId: UUID): User {
         val user =

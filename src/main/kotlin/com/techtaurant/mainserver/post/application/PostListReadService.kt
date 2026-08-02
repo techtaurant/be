@@ -121,6 +121,7 @@ class PostListReadService(
         authorId: UUID? = null,
         categoryId: UUID? = null,
         tagIds: List<UUID>? = null,
+        keyword: String? = null,
     ): CursorPageResponse<PostContentListItemResponse> {
         val postPage =
             getPostPage(
@@ -132,6 +133,7 @@ class PostListReadService(
                 authorId = authorId,
                 categoryId = categoryId,
                 tagIds = tagIds,
+                keyword = keyword,
             )
 
         return CursorPageResponse(
@@ -151,6 +153,7 @@ class PostListReadService(
         authorId: UUID?,
         categoryId: UUID?,
         tagIds: List<UUID>?,
+        keyword: String? = null,
     ): CursorPageResponse<Post> {
         val postCursor = cursor?.let { PostCursor.decode(it) }
         val normalizedTagIds = normalizeTagIds(tagIds)
@@ -172,6 +175,7 @@ class PostListReadService(
                 visibleToUserId = visibilityScope.visibleToUserId,
                 tagIds = normalizedTagIds,
                 viewerId = visibilityScope.viewerId,
+                keyword = keyword,
             )
         val hasNext = sortedPosts.size > size
         val contentWithSortValues = sortedPosts.take(size)

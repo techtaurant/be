@@ -32,6 +32,42 @@ class FlywayMigrationValidationTest : IntegrationTest() {
     }
 
     @Test
+    @DisplayName("게시물 검색 마이그레이션은 tsvector 자산을 제거하고 유효한 pg_bigm 인덱스를 생성한다")
+    fun postBigmSearchIndexMigrationsCreateValidIndexes() {
+        val appliedVersions =
+            jdbcTemplate.queryForList(
+                "SELECT version FROM flyway_schema_history WHERE version IN ('45', '46')",
+                String::class.java,
+            )
+        val validIndexNames =
+            jdbcTemplate.queryForList(
+                """
+                SELECT indexrelid::regclass::text
+                FROM pg_index
+                WHERE indexrelid IN (
+                    to_regclass('idx_posts_title_lower_bigm'),
+                    to_regclass('idx_posts_content_lower_bigm')
+                )
+                  AND indisvalid
+                """.trimIndent(),
+                String::class.java,
+            )
+        val tsvectorColumnCount =
+            jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM information_schema.columns WHERE table_name = 'posts' AND column_name = 'content_tsvector'",
+                Int::class.java,
+            )
+
+        assertThat(appliedVersions).containsExactlyInAnyOrder("45", "46")
+        assertThat(tsvectorColumnCount).isZero()
+        assertThat(validIndexNames)
+            .containsExactlyInAnyOrder(
+                "idx_posts_title_lower_bigm",
+                "idx_posts_content_lower_bigm",
+            )
+    }
+
+    @Test
     @DisplayName("절대 시각 호환 컬럼은 timestamp with time zone 타입으로 생성된다")
     fun absoluteInstantCompatibilityColumnsUseTimestamptz() {
         val expectedColumns =
@@ -60,6 +96,30 @@ class FlywayMigrationValidationTest : IntegrationTest() {
         assertThat(columnTypes.values).allSatisfy { dataType ->
             assertThat(dataType).isEqualTo("timestamp with time zone")
         }
+    }
+
+    @Test
+    @DisplayName("일별 통계 버킷 키는 timestamp가 아니라 date 타입으로 생성된다")
+    fun dailyStatsBucketColumnsUseDate() {
+        val columnTypes =
+            jdbcTemplate.query(
+                """
+                SELECT table_name, data_type
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name IN ('post_daily_stats', 'link_daily_stats')
+                  AND column_name = 'stat_date'
+                """.trimIndent(),
+                { rs, _ -> rs.getString("table_name") to rs.getString("data_type") },
+            ).toMap()
+
+        assertThat(columnTypes)
+            .containsExactlyInAnyOrderEntriesOf(
+                mapOf(
+                    "post_daily_stats" to "date",
+                    "link_daily_stats" to "date",
+                ),
+            )
     }
 
     @Test

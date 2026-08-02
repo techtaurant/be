@@ -18,6 +18,8 @@ class OAuth2RedirectResolver(
     private val corsProperties: CorsProperties,
 ) {
     private val logger = LoggerFactory.getLogger(OAuth2RedirectResolver::class.java)
+    private val allowedOriginPatterns = corsProperties.parsedAllowedOriginPatterns
+    private val corsConfiguration = corsProperties.createCorsConfiguration()
 
     companion object {
         const val DEFAULT_SUCCESS_REDIRECT_URI = "/oauth/callback"
@@ -46,26 +48,19 @@ class OAuth2RedirectResolver(
     ): String {
         val origin = getOriginCookie(request)
         val redirectUri = cookieHelper.getCookie(request, redirectUriCookieName)
-        val allowedOrigins =
-            corsProperties.allowedOrigins
-                .split(",")
-                .map { it.trim().trimEnd('/') }
-                .filter { it.isNotEmpty() }
-
         logger.info(
-            "resolve: originCookie={}, allowedOrigins={}, redirectUriCookieName={}, redirectUriPresent={}",
+            "resolve: originCookie={}, allowedOriginPatterns={}, redirectUriCookieName={}, redirectUriPresent={}",
             origin,
-            allowedOrigins,
+            allowedOriginPatterns,
             redirectUriCookieName,
             !redirectUri.isNullOrBlank(),
         )
 
-        val validOrigin = resolveValidOrigin(origin, allowedOrigins)
+        val validOrigin = resolveValidOrigin(origin)
         val redirectUrl =
             resolveRedirectUrl(
                 redirectUri = redirectUri,
                 validOrigin = validOrigin,
-                allowedOrigins = allowedOrigins,
             ) ?: buildRedirectUrl(validOrigin, fallbackRedirectUri)
 
         logger.info("resolve: redirectUrl={}", redirectUrl)
@@ -79,33 +74,37 @@ class OAuth2RedirectResolver(
         )?.trim()?.trimEnd('/')
     }
 
-    private fun resolveValidOrigin(
-        origin: String?,
-        allowedOrigins: List<String>,
-    ): String {
-        if (origin != null && origin in allowedOrigins) {
+    private fun resolveValidOrigin(origin: String?): String {
+        if (origin != null && corsConfiguration.checkOrigin(origin) != null) {
             return origin
         }
 
         logger.warn(
-            "resolve: origin not in allowedOrigins, falling back. origin={}, allowedOrigins={}",
+            "resolve: origin not in allowedOriginPatterns, falling back. origin={}, allowedOriginPatterns={}",
             origin,
-            allowedOrigins,
+            allowedOriginPatterns,
         )
-        return allowedOrigins.firstOrNull() ?: DEFAULT_ORIGIN
+        return resolveFallbackOrigin()
     }
+
+    private fun resolveFallbackOrigin(): String =
+        allowedOriginPatterns.firstNotNullOfOrNull { pattern ->
+            runCatching {
+                val normalizedPattern = pattern.trimEnd('/')
+                URI(normalizedPattern).toOrigin()?.takeIf { it == normalizedPattern }
+            }.getOrNull()
+        } ?: DEFAULT_ORIGIN
 
     private fun resolveRedirectUrl(
         redirectUri: String?,
         validOrigin: String,
-        allowedOrigins: List<String>,
     ): String? {
         val targetUri = redirectUri?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         if (isInternalPath(targetUri)) {
             return buildRedirectUrl(validOrigin, targetUri)
         }
 
-        return resolveAllowedAbsoluteUrl(targetUri, allowedOrigins)
+        return resolveAllowedAbsoluteUrl(targetUri)
     }
 
     private fun isInternalPath(redirectUri: String): Boolean {
@@ -119,20 +118,17 @@ class OAuth2RedirectResolver(
         return "${origin.trimEnd('/')}$path"
     }
 
-    private fun resolveAllowedAbsoluteUrl(
-        redirectUri: String,
-        allowedOrigins: List<String>,
-    ): String? {
+    private fun resolveAllowedAbsoluteUrl(redirectUri: String): String? {
         return try {
             val uri = URI(redirectUri)
             val origin = uri.toOrigin()
-            if (origin != null && origin in allowedOrigins) {
+            if (origin != null && corsConfiguration.checkOrigin(origin) != null) {
                 redirectUri
             } else {
                 logger.warn(
-                    "resolve: redirectUri origin not allowed. redirectOrigin={}, allowedOrigins={}",
+                    "resolve: redirectUri origin not allowed. redirectOrigin={}, allowedOriginPatterns={}",
                     origin,
-                    allowedOrigins,
+                    allowedOriginPatterns,
                 )
                 null
             }

@@ -2,7 +2,6 @@ package com.techtaurant.mainserver.post.entity
 
 import com.techtaurant.mainserver.common.base.EntityBase
 import com.techtaurant.mainserver.user.entity.User
-import jakarta.persistence.*
 import java.util.UUID
 
 /**
@@ -13,18 +12,7 @@ import java.util.UUID
  * @property postId 읽음 표시한 게시물 ID
  * @property user 읽음 표시한 사용자
  */
-@Entity
-@Table(
-    name = "post_read_log",
-    uniqueConstraints = [UniqueConstraint(columnNames = ["post_id", "user_id"])],
-    indexes = [
-        Index(name = "idx_post_read_log_user_post", columnList = "user_id,post_id"),
-    ],
-)
 class PostReadLog(
-    @Column(name = "post_id", nullable = false)
     var postId: UUID,
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
     var user: User,
 ) : EntityBase()

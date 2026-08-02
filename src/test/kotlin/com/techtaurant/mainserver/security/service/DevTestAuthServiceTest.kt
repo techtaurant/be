@@ -124,6 +124,7 @@ class DevTestAuthServiceTest {
             }
 
         every { userRepository.findByIdentifierAndProvider(identifier, OAuthProvider.DEV_LOCAL) } returns existingUser
+        every { userRepository.save(existingUser) } returns existingUser
         every { jwtTokenProvider.createAccessToken(userId, UserRole.ADMIN) } returns "access-token"
         every { jwtTokenProvider.createRefreshToken(userId) } returns "refresh-token"
 
@@ -133,5 +134,7 @@ class DevTestAuthServiceTest {
         assertEquals("access-token", result.accessToken)
         assertEquals("refresh-token", result.refreshToken)
         verify(exactly = 0) { userUniqueNameService.saveNewUser(any()) }
+        // jOOQ save는 dirty checking이 없어 명시 저장이 없으면 권한 변경이 유실된다
+        verify { userRepository.save(existingUser) }
     }
 }

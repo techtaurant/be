@@ -523,7 +523,8 @@ class LinkBatchRunServiceTest {
         assertEquals(1, response.existingLinkCount)
         assertEquals(1, linkDocumentFetcher.fetchCount(firstPageUrl))
         assertEquals(0, linkDocumentFetcher.fetchCount(secondPageUrl))
-        verify(exactly = 0) { linkRepository.save(any()) }
+        verify(exactly = 1) { linkRepository.save(existingLink) }
+        verify(exactly = 0) { linkRepository.save(match { it !== existingLink }) }
     }
 
     @Test

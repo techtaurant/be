@@ -158,7 +158,7 @@ class PostLikeControllerTest : IntegrationTest() {
 
         // Then: 에러 응답 확인
         assertNotNull(response)
-        assertEquals(3001, response.status, "POST_NOT_FOUND 에러 코드 (3001)가 반환되어야 함")
+        assertEquals(2001, response.status, "POST_NOT_FOUND 에러 코드 (2001)가 반환되어야 함")
         assertNotNull(response.message)
     }
 

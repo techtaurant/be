@@ -23,7 +23,8 @@ class OAuth2RedirectResolverTest {
                 cookieHelper = cookieHelper,
                 corsProperties =
                     CorsProperties(
-                        allowedOrigins = "https://techtaurant.com,http://localhost:3000",
+                        allowedOriginPatterns =
+                            "https://techtaurant.com,https://*.techtaurant.com,http://localhost:3000",
                     ),
             )
         request = MockHttpServletRequest()
@@ -80,6 +81,54 @@ class OAuth2RedirectResolverTest {
     }
 
     @Test
+    @DisplayName("origin 쿠키가 허용된 서브도메인 패턴과 일치하면 내부 path와 결합한다")
+    fun `resolve redirect with origin matching allowed pattern`() {
+        // given
+        every {
+            cookieHelper.getCookie(
+                request,
+                HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_ORIGIN_COOKIE,
+            )
+        } returns "https://preview.techtaurant.com"
+        every {
+            cookieHelper.getCookie(
+                request,
+                HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_SUCCESS_REDIRECT_URI_COOKIE,
+            )
+        } returns "/ko/oauth/callback"
+
+        // when
+        val redirectUrl = resolver.resolveSuccessRedirectUrl(request)
+
+        // then
+        assertThat(redirectUrl).isEqualTo("https://preview.techtaurant.com/ko/oauth/callback")
+    }
+
+    @Test
+    @DisplayName("redirect-uri absolute URL이 허용된 서브도메인 패턴과 일치하면 그대로 사용한다")
+    fun `resolve absolute redirect matching allowed pattern`() {
+        // given
+        every {
+            cookieHelper.getCookie(
+                request,
+                HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_ORIGIN_COOKIE,
+            )
+        } returns "https://techtaurant.com"
+        every {
+            cookieHelper.getCookie(
+                request,
+                HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_FAILURE_REDIRECT_URI_COOKIE,
+            )
+        } returns "https://preview.techtaurant.com/ko/oauth/error"
+
+        // when
+        val redirectUrl = resolver.resolveFailureRedirectUrl(request)
+
+        // then
+        assertThat(redirectUrl).isEqualTo("https://preview.techtaurant.com/ko/oauth/error")
+    }
+
+    @Test
     @DisplayName("redirect-uri absolute URL의 origin이 허용되지 않으면 기본 실패 경로로 fallback한다")
     fun `fallback failure redirect when absolute url origin is not allowed`() {
         // given
@@ -128,6 +177,39 @@ class OAuth2RedirectResolverTest {
     }
 
     @Test
+    @DisplayName("첫 허용 패턴이 wildcard이면 첫 구체 origin으로 fallback한다")
+    fun `fallback to first concrete origin when wildcard pattern is first`() {
+        // given
+        resolver =
+            OAuth2RedirectResolver(
+                cookieHelper = cookieHelper,
+                corsProperties =
+                    CorsProperties(
+                        allowedOriginPatterns =
+                            "https://*.techtaurant.com,https://techtaurant.com",
+                    ),
+            )
+        every {
+            cookieHelper.getCookie(
+                request,
+                HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_ORIGIN_COOKIE,
+            )
+        } returns "https://evil.example"
+        every {
+            cookieHelper.getCookie(
+                request,
+                HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_SUCCESS_REDIRECT_URI_COOKIE,
+            )
+        } returns "/en/oauth/callback"
+
+        // when
+        val redirectUrl = resolver.resolveSuccessRedirectUrl(request)
+
+        // then
+        assertThat(redirectUrl).isEqualTo("https://techtaurant.com/en/oauth/callback")
+    }
+
+    @Test
     @DisplayName("성공 redirect-uri가 없으면 기본 성공 경로로 fallback한다")
     fun `fallback success redirect when redirect uri is missing`() {
         // given
@@ -149,5 +231,112 @@ class OAuth2RedirectResolverTest {
 
         // then
         assertThat(redirectUrl).isEqualTo("https://techtaurant.com/oauth/callback")
+    }
+
+    @Test
+    @DisplayName("origin이 wildcard 허용 패턴과 일치하면 실제 origin으로 redirect한다")
+    fun `resolve actual origin matching wildcard pattern`() {
+        // given
+        resolver = resolverWithAllowedOrigins("https://*.techtaurant.com")
+        every {
+            cookieHelper.getCookie(
+                request,
+                HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_ORIGIN_COOKIE,
+            )
+        } returns "https://dev.techtaurant.com"
+        every {
+            cookieHelper.getCookie(
+                request,
+                HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_SUCCESS_REDIRECT_URI_COOKIE,
+            )
+        } returns null
+
+        // when
+        val redirectUrl = resolver.resolveSuccessRedirectUrl(request)
+
+        // then
+        assertThat(redirectUrl).isEqualTo("https://dev.techtaurant.com/oauth/callback")
+    }
+
+    @Test
+    @DisplayName("허용되지 않은 origin은 wildcard가 아닌 안전한 기본 origin으로 fallback한다")
+    fun `fallback safely without using wildcard as origin`() {
+        // given
+        resolver = resolverWithAllowedOrigins("https://*.techtaurant.com")
+        every {
+            cookieHelper.getCookie(
+                request,
+                HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_ORIGIN_COOKIE,
+            )
+        } returns "https://evil.example"
+        every {
+            cookieHelper.getCookie(
+                request,
+                HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_SUCCESS_REDIRECT_URI_COOKIE,
+            )
+        } returns null
+
+        // when
+        val redirectUrl = resolver.resolveSuccessRedirectUrl(request)
+
+        // then
+        assertThat(redirectUrl).isEqualTo("http://localhost:3000/oauth/callback")
+    }
+
+    @Test
+    @DisplayName("내부 path는 wildcard와 일치한 실제 origin과 결합한다")
+    fun `resolve internal path with actual origin matching wildcard pattern`() {
+        // given
+        resolver = resolverWithAllowedOrigins("https://*.techtaurant.com")
+        every {
+            cookieHelper.getCookie(
+                request,
+                HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_ORIGIN_COOKIE,
+            )
+        } returns "https://dev.techtaurant.com"
+        every {
+            cookieHelper.getCookie(
+                request,
+                HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_SUCCESS_REDIRECT_URI_COOKIE,
+            )
+        } returns "/posts"
+
+        // when
+        val redirectUrl = resolver.resolveSuccessRedirectUrl(request)
+
+        // then
+        assertThat(redirectUrl).isEqualTo("https://dev.techtaurant.com/posts")
+    }
+
+    @Test
+    @DisplayName("absolute redirect URL의 origin이 wildcard 패턴과 일치하면 그대로 사용한다")
+    fun `resolve absolute redirect url matching wildcard pattern`() {
+        // given
+        resolver = resolverWithAllowedOrigins("https://*.techtaurant.com")
+        every {
+            cookieHelper.getCookie(
+                request,
+                HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_ORIGIN_COOKIE,
+            )
+        } returns "https://dev.techtaurant.com"
+        every {
+            cookieHelper.getCookie(
+                request,
+                HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_FAILURE_REDIRECT_URI_COOKIE,
+            )
+        } returns "https://dev.techtaurant.com/oauth/error"
+
+        // when
+        val redirectUrl = resolver.resolveFailureRedirectUrl(request)
+
+        // then
+        assertThat(redirectUrl).isEqualTo("https://dev.techtaurant.com/oauth/error")
+    }
+
+    private fun resolverWithAllowedOrigins(allowedOrigins: String): OAuth2RedirectResolver {
+        return OAuth2RedirectResolver(
+            cookieHelper = cookieHelper,
+            corsProperties = CorsProperties(allowedOriginPatterns = allowedOrigins),
+        )
     }
 }

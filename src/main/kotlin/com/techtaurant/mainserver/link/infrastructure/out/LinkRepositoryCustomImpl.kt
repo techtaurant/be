@@ -1,45 +1,169 @@
 package com.techtaurant.mainserver.link.infrastructure.out
 
-import com.techtaurant.mainserver.common.base.EntityBase_
+import com.github.f4b6a3.uuid.UuidCreator
+import com.techtaurant.mainserver.jooq.tables.LinkDailyStats.Companion.LINK_DAILY_STATS
+import com.techtaurant.mainserver.jooq.tables.LinkTags.Companion.LINK_TAGS
+import com.techtaurant.mainserver.jooq.tables.Links.Companion.LINKS
+import com.techtaurant.mainserver.jooq.tables.Tags.Companion.TAGS
+import com.techtaurant.mainserver.jooq.tables.UserLinks.Companion.USER_LINKS
+import com.techtaurant.mainserver.jooq.tables.records.LinksRecord
+import com.techtaurant.mainserver.jooq.tables.records.TagsRecord
 import com.techtaurant.mainserver.link.dto.LinkCursorV1
 import com.techtaurant.mainserver.link.entity.Link
-import com.techtaurant.mainserver.link.entity.LinkDailyStats
-import com.techtaurant.mainserver.link.entity.LinkDailyStats_
-import com.techtaurant.mainserver.link.entity.Link_
-import com.techtaurant.mainserver.link.entity.UserLink
-import com.techtaurant.mainserver.link.entity.UserLink_
 import com.techtaurant.mainserver.link.enums.LinkPeriod
 import com.techtaurant.mainserver.link.enums.LinkSortType
-import com.techtaurant.mainserver.post.entity.Tag_
-import jakarta.persistence.EntityManager
-import jakarta.persistence.PersistenceContext
-import jakarta.persistence.Tuple
-import jakarta.persistence.criteria.CommonAbstractCriteria
-import jakarta.persistence.criteria.CriteriaBuilder
-import jakarta.persistence.criteria.Expression
-import jakarta.persistence.criteria.JoinType
-import jakarta.persistence.criteria.Order
-import jakarta.persistence.criteria.Path
-import jakarta.persistence.criteria.Predicate
-import jakarta.persistence.criteria.Root
+import com.techtaurant.mainserver.post.entity.Tag
+import org.jooq.Condition
+import org.jooq.DSLContext
+import org.jooq.Field
+import org.jooq.impl.DSL
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Repository
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
+import java.util.Optional
 import java.util.UUID
 
-/**
- * 공개 링크 동적 정렬/페이지네이션 구현체 (v1)
- *
- * JPA Criteria API와 Metamodel을 사용해 정렬 타입별 키셋 커서 페이지네이션을 지원합니다.
- * - PUBLISHED: 링크 생성일 기간 필터 및 생성일 기준 정렬
- * - LIKE/SAVE: LinkDailyStats를 기간 윈도우로 집계한 합 기준 정렬
- */
+/** 공개 링크의 키셋 페이지를 jOOQ DSL로 조회한다. */
 @Repository
-class LinkRepositoryCustomImpl : LinkRepositoryCustom {
-    @PersistenceContext
-    private lateinit var entityManager: EntityManager
+class LinkRepositoryCustomImpl(
+    private val dsl: DSLContext,
+) : LinkRepository {
+    override fun save(link: Link): Link {
+        val id = link.id ?: UuidCreator.getTimeOrderedEpoch().also { link.id = it }
+        val now = Instant.now()
+        if (dsl.fetchExists(LINKS, LINKS.ID.eq(id))) {
+            // 조회수/좋아요는 increment/decrement SQL이 원자적으로 소유하므로,
+            // 크롤 갱신이 조회 시점 값을 그대로 덮어써 동시 증감을 유실시키지 않도록 UPDATE 대상에서 제외한다.
+            dsl.update(LINKS).set(LINKS.TITLE, link.title).set(LINKS.URL, link.url).set(LINKS.SUMMARY, link.summary)
+                .set(LINKS.CREATED_AT_UTC, link.createdAt.atOffset(ZoneOffset.UTC))
+                .set(LINKS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC)).where(LINKS.ID.eq(id)).execute()
+            syncLinkTags(id, link.tags.map { requireNotNull(it.id) }.toSet())
+        } else {
+            dsl.insertInto(LINKS).set(LINKS.ID, id).set(LINKS.TITLE, link.title).set(LINKS.URL, link.url).set(LINKS.SUMMARY, link.summary)
+                .set(
+                    LINKS.VIEW_COUNT,
+                    link.viewCount,
+                ).set(
+                    LINKS.LIKE_COUNT,
+                    link.likeCount,
+                ).set(
+                    LINKS.CREATED_AT_UTC,
+                    link.createdAt.atOffset(ZoneOffset.UTC),
+                ).set(LINKS.UPDATED_AT_UTC, now.atOffset(ZoneOffset.UTC)).execute()
+            insertLinkTags(id, link.tags.map { requireNotNull(it.id) })
+        }
+        link.updatedAt = now
+        return link
+    }
+
+    /**
+     * 저장하려는 태그 집합과 현재 link_tags 행을 비교해 실제 변경분만 반영한다.
+     * 크롤 갱신은 태그를 바꾸지 않으므로, 전체 삭제/재삽입을 두면 실행마다 기존 링크의 태그 행이
+     * 그대로 재작성되고 같은 링크를 동시에 갱신하는 배치끼리 잠금 경합이 생긴다.
+     */
+    private fun syncLinkTags(
+        linkId: UUID,
+        tagIds: Set<UUID>,
+    ) {
+        val currentTagIds =
+            dsl.select(LINK_TAGS.TAG_ID)
+                .from(LINK_TAGS)
+                .where(LINK_TAGS.LINK_ID.eq(linkId))
+                .fetch(LINK_TAGS.TAG_ID)
+                .filterNotNull()
+                .toSet()
+        val removedTagIds = currentTagIds - tagIds
+        val addedTagIds = tagIds - currentTagIds
+
+        if (removedTagIds.isNotEmpty()) {
+            dsl.deleteFrom(LINK_TAGS).where(LINK_TAGS.LINK_ID.eq(linkId).and(LINK_TAGS.TAG_ID.`in`(removedTagIds))).execute()
+        }
+        insertLinkTags(linkId, addedTagIds)
+    }
+
+    private fun insertLinkTags(
+        linkId: UUID,
+        tagIds: Collection<UUID>,
+    ) {
+        tagIds.forEach { tagId ->
+            dsl.insertInto(LINK_TAGS).set(LINK_TAGS.LINK_ID, linkId).set(LINK_TAGS.TAG_ID, tagId).execute()
+        }
+    }
+
+    override fun saveAndFlush(link: Link): Link = save(link)
+
+    override fun delete(link: Link) {
+        link.id?.let { id ->
+            dsl.deleteFrom(LINK_TAGS).where(LINK_TAGS.LINK_ID.eq(id)).execute()
+            dsl.deleteFrom(LINKS).where(LINKS.ID.eq(id)).execute()
+        }
+    }
+
+    override fun deleteAll() {
+        dsl.deleteFrom(LINKS).execute()
+    }
+
+    override fun deleteAllInBatch() {
+        dsl.deleteFrom(LINKS).execute()
+    }
+
+    override fun findAll(): List<Link> = fetchLinks(DSL.trueCondition())
+
+    override fun incrementViewCount(linkId: UUID) {
+        dsl.update(LINKS).set(LINKS.VIEW_COUNT, LINKS.VIEW_COUNT.plus(1L)).where(LINKS.ID.eq(linkId)).execute()
+    }
+
+    override fun incrementLikeCount(linkId: UUID) {
+        dsl.update(LINKS).set(LINKS.LIKE_COUNT, LINKS.LIKE_COUNT.plus(1L)).where(LINKS.ID.eq(linkId)).execute()
+    }
+
+    override fun decrementLikeCount(linkId: UUID) {
+        dsl.update(LINKS).set(LINKS.LIKE_COUNT, LINKS.LIKE_COUNT.minus(1L)).where(LINKS.ID.eq(linkId)).execute()
+    }
+
+    override fun findById(id: UUID): Optional<Link> = Optional.ofNullable(findByIdWithTags(id))
+
+    override fun existsById(id: UUID): Boolean = dsl.fetchExists(LINKS, LINKS.ID.eq(id))
+
+    override fun findByUrl(url: String): Link? = fetchLinks(LINKS.URL.eq(url)).firstOrNull()
+
+    override fun findByIdWithTags(linkId: UUID): Link? = fetchLinks(LINKS.ID.eq(linkId)).firstOrNull()
+
+    override fun findAllWithTags(): List<Link> = fetchLinks(DSL.trueCondition())
+
+    override fun findAllByConnectedUserIdWithTags(companyUserId: UUID): List<Link> =
+        fetchLinks(
+            DSL.exists(
+                dsl.selectOne().from(USER_LINKS).where(USER_LINKS.LINK_ID.eq(LINKS.ID).and(USER_LINKS.USER_ID.eq(companyUserId))),
+            ),
+        )
+
+    override fun findFirstPageIds(
+        sourceCompanyUserId: UUID?,
+        tag: String?,
+        pageable: Pageable,
+    ): List<UUID> = fetchLinkIds(baseCondition(sourceCompanyUserId, tag), pageable.pageSize)
+
+    override fun findNextPageIds(
+        sourceCompanyUserId: UUID?,
+        tag: String?,
+        cursorCreatedAt: Instant,
+        cursorId: UUID,
+        pageable: Pageable,
+    ): List<UUID> =
+        fetchLinkIds(
+            baseCondition(sourceCompanyUserId, tag).and(
+                LINKS.CREATED_AT_UTC.lt(cursorCreatedAt.atOffset(ZoneOffset.UTC))
+                    .or(LINKS.CREATED_AT_UTC.eq(cursorCreatedAt.atOffset(ZoneOffset.UTC)).and(LINKS.ID.lt(cursorId))),
+            ),
+            pageable.pageSize,
+        )
+
+    override fun findAllByIdInWithTags(linkIds: List<UUID>): List<Link> =
+        if (linkIds.isEmpty()) emptyList() else fetchLinks(LINKS.ID.`in`(linkIds))
 
     override fun findPublicLinkIds(
         cursor: LinkCursorV1?,
@@ -49,42 +173,36 @@ class LinkRepositoryCustomImpl : LinkRepositoryCustom {
         sourceCompanyUserId: UUID?,
         tag: String?,
     ): List<RankedLinkId> =
-        when (sortType) {
-            LinkSortType.PUBLISHED ->
-                findCreatedAtRankedIds(cursor, limit, period, sourceCompanyUserId, tag)
-            LinkSortType.LIKE, LinkSortType.SAVE ->
-                findStatsRankedIds(cursor, limit, sortType, period, sourceCompanyUserId, tag)
+        run {
+            when (sortType) {
+                LinkSortType.PUBLISHED -> findPublishedLinks(cursor, limit, period, sourceCompanyUserId, tag)
+                LinkSortType.LIKE, LinkSortType.SAVE -> findStatRankedLinks(cursor, limit, sortType, period, sourceCompanyUserId, tag)
+            }
         }
 
-    private fun findCreatedAtRankedIds(
+    private fun findPublishedLinks(
         cursor: LinkCursorV1?,
         limit: Int,
         period: LinkPeriod,
         sourceCompanyUserId: UUID?,
         tag: String?,
     ): List<RankedLinkId> {
-        val cb = entityManager.criteriaBuilder
-        val cq = cb.createQuery(UUID::class.java)
-        val root = cq.from(Link::class.java)
-        val predicates = mutableListOf<Predicate>()
-
-        addBaseConditions(cb, cq, root, sourceCompanyUserId, tag, predicates)
-        addCreatedAtPeriodCondition(cb, root, period, predicates)
-        cursor?.let { predicates.add(buildCreatedAtCursorCondition(cb, root, it)) }
-
-        cq.select(root.get(EntityBase_.id))
-        if (predicates.isNotEmpty()) {
-            cq.where(*predicates.toTypedArray())
+        val conditions = mutableListOf(baseCondition(sourceCompanyUserId, tag))
+        period.days?.let {
+                days ->
+            conditions += LINKS.CREATED_AT_UTC.ge(Instant.now().minus(days.toLong(), ChronoUnit.DAYS).atOffset(ZoneOffset.UTC))
         }
-        cq.orderBy(createdAtSortOrders(cb, root))
+        cursor?.let { conditions += createdAtCursorCondition(it) }
 
-        return entityManager.createQuery(cq)
-            .setMaxResults(limit)
-            .resultList
-            .map { RankedLinkId(linkId = it, sortValue = 0L) }
+        return dsl.select(LINKS.ID)
+            .from(LINKS)
+            .where(conditions)
+            .orderBy(LINKS.CREATED_AT_UTC.desc(), LINKS.ID.desc())
+            .limit(limit)
+            .fetch { record -> RankedLinkId(linkId = requireNotNull(record[LINKS.ID]), sortValue = 0L) }
     }
 
-    private fun findStatsRankedIds(
+    private fun findStatRankedLinks(
         cursor: LinkCursorV1?,
         limit: Int,
         sortType: LinkSortType,
@@ -92,199 +210,133 @@ class LinkRepositoryCustomImpl : LinkRepositoryCustom {
         sourceCompanyUserId: UUID?,
         tag: String?,
     ): List<RankedLinkId> {
-        val cb = entityManager.criteriaBuilder
-        val cq = cb.createTupleQuery()
-        val root = cq.from(Link::class.java)
-        val statsRoot = cq.from(LinkDailyStats::class.java)
-        val idPath = root.get<UUID>(EntityBase_.id)
-        val createdAtPath = root.get<Instant>(EntityBase_.createdAt)
-        val sortExpression = dailyStatsSumExpression(cb, statsRoot, sortType)
-        val predicates = mutableListOf<Predicate>()
+        val sortValue = dailyStatSum(sortType)
+        val conditions = mutableListOf(baseCondition(sourceCompanyUserId, tag))
+        period.days?.let { days -> conditions += LINK_DAILY_STATS.STAT_DATE.ge(statsCutoffDate(days)) }
+        val cursorCondition = cursor?.let { statsCursorCondition(it, sortValue) }
 
-        addBaseConditions(cb, cq, root, sourceCompanyUserId, tag, predicates)
-        addStatsJoinCondition(cb, root, statsRoot, period, predicates)
-
-        cq.multiselect(idPath, sortExpression)
-        cq.where(*predicates.toTypedArray())
-        cq.groupBy(idPath, createdAtPath)
-        cursor?.let { cq.having(buildCountCursorCondition(cb, root, it, sortExpression)) }
-        cq.orderBy(countSortOrders(cb, root, sortExpression))
-
-        return entityManager.createQuery(cq)
-            .setMaxResults(limit)
-            .resultList
-            .map { it.toRankedLinkId() }
+        return dsl.select(LINKS.ID, sortValue)
+            .from(LINKS)
+            .join(LINK_DAILY_STATS).on(LINK_DAILY_STATS.LINK_ID.eq(LINKS.ID))
+            .where(conditions)
+            .groupBy(LINKS.ID, LINKS.CREATED_AT_UTC)
+            .having(cursorCondition ?: DSL.trueCondition())
+            .orderBy(sortValue.desc(), LINKS.CREATED_AT_UTC.desc(), LINKS.ID.desc())
+            .limit(limit)
+            .fetch { record ->
+                RankedLinkId(
+                    linkId = requireNotNull(record[LINKS.ID]),
+                    sortValue = requireNotNull(record[sortValue]),
+                )
+            }
     }
 
-    private fun Tuple.toRankedLinkId(): RankedLinkId =
-        RankedLinkId(
-            linkId = get(0) as UUID,
-            sortValue = (get(1) as Number).toLong(),
-        )
-
-    private fun addBaseConditions(
-        cb: CriteriaBuilder,
-        query: CommonAbstractCriteria,
-        root: Root<Link>,
+    private fun baseCondition(
         sourceCompanyUserId: UUID?,
         tag: String?,
-        predicates: MutableList<Predicate>,
-    ) {
-        sourceCompanyUserId?.let { addSourceCompanyUserIdCondition(cb, query, root, it, predicates) }
-        tag?.let { addTagCondition(cb, query, root, it, predicates) }
-    }
-
-    private fun addSourceCompanyUserIdCondition(
-        cb: CriteriaBuilder,
-        query: CommonAbstractCriteria,
-        root: Root<Link>,
-        sourceCompanyUserId: UUID,
-        predicates: MutableList<Predicate>,
-    ) {
-        val subquery = query.subquery(Long::class.java)
-        val userLinkRoot = subquery.from(UserLink::class.java)
-
-        subquery.select(cb.literal(1L))
-        subquery.where(
-            cb.equal(userLinkRoot.get(UserLink_.link).get(EntityBase_.id), root.get(EntityBase_.id)),
-            cb.equal(userLinkRoot.get(UserLink_.user).get(EntityBase_.id), sourceCompanyUserId),
-        )
-        predicates.add(cb.exists(subquery))
-    }
-
-    private fun addTagCondition(
-        cb: CriteriaBuilder,
-        query: CommonAbstractCriteria,
-        root: Root<Link>,
-        tag: String,
-        predicates: MutableList<Predicate>,
-    ) {
-        val subquery = query.subquery(Long::class.java)
-        val tagLinkRoot = subquery.from(Link::class.java)
-        val tagJoin = tagLinkRoot.join(Link_.tags, JoinType.INNER)
-
-        subquery.select(cb.literal(1L))
-        subquery.where(
-            cb.equal(tagLinkRoot.get(EntityBase_.id), root.get(EntityBase_.id)),
-            cb.equal(tagJoin.get(Tag_.name), tag),
-        )
-        predicates.add(cb.exists(subquery))
-    }
-
-    private fun addCreatedAtPeriodCondition(
-        cb: CriteriaBuilder,
-        root: Root<Link>,
-        period: LinkPeriod,
-        predicates: MutableList<Predicate>,
-    ) {
-        period.days?.let { days ->
-            val cutoffInstant = Instant.now().minus(days.toLong(), ChronoUnit.DAYS)
-            predicates.add(
-                cb.greaterThanOrEqualTo(root.get(EntityBase_.createdAt), cutoffInstant),
-            )
+    ): Condition {
+        val conditions = mutableListOf<Condition>()
+        sourceCompanyUserId?.let { userId ->
+            conditions +=
+                DSL.exists(
+                    dsl.selectOne()
+                        .from(USER_LINKS)
+                        .where(USER_LINKS.LINK_ID.eq(LINKS.ID).and(USER_LINKS.USER_ID.eq(userId))),
+                )
         }
-    }
-
-    private fun addStatsJoinCondition(
-        cb: CriteriaBuilder,
-        root: Root<Link>,
-        statsRoot: Root<LinkDailyStats>,
-        period: LinkPeriod,
-        predicates: MutableList<Predicate>,
-    ) {
-        predicates.add(cb.equal(statsRoot.get(LinkDailyStats_.link).get(EntityBase_.id), root.get(EntityBase_.id)))
-        period.days?.let { days ->
-            predicates.add(cb.greaterThanOrEqualTo(statsRoot.get(LinkDailyStats_.statDate), statsCutoffDate(days)))
+        tag?.let { tagName ->
+            conditions +=
+                DSL.exists(
+                    dsl.selectOne()
+                        .from(LINK_TAGS)
+                        .join(TAGS).on(LINK_TAGS.TAG_ID.eq(TAGS.ID))
+                        .where(LINK_TAGS.LINK_ID.eq(LINKS.ID).and(TAGS.NAME.eq(tagName))),
+                )
         }
+
+        return conditions.fold(DSL.trueCondition(), Condition::and)
     }
 
-    /**
-     * 링크 생성일 정렬 순서: createdAt DESC, 동일 시 id DESC
-     */
-    private fun createdAtSortOrders(
-        cb: CriteriaBuilder,
-        root: Root<Link>,
-    ): List<Order> =
-        listOf(
-            cb.desc(root.get(EntityBase_.createdAt)),
-            cb.desc(root.get(EntityBase_.id)),
-        )
+    private fun createdAtCursorCondition(cursor: LinkCursorV1): Condition {
+        val cursorInstant = cursor.sortInstant.atOffset(ZoneOffset.UTC)
+        return LINKS.CREATED_AT_UTC.lt(cursorInstant)
+            .or(LINKS.CREATED_AT_UTC.eq(cursorInstant).and(LINKS.ID.lt(cursor.id)))
+    }
 
-    /**
-     * 링크 생성일 정렬 커서 조건: (createdAt < cursor) OR (createdAt = cursor AND id < cursorId)
-     */
-    private fun buildCreatedAtCursorCondition(
-        cb: CriteriaBuilder,
-        root: Root<Link>,
+    private fun statsCursorCondition(
         cursor: LinkCursorV1,
-    ): Predicate {
-        val createdAtPath = root.get<Instant>(EntityBase_.createdAt)
-        val idPath = root.get(EntityBase_.id)
+        sortValue: Field<Long>,
+    ): Condition {
+        val cursorInstant = cursor.sortInstant.atOffset(ZoneOffset.UTC)
+        val sameSortValue = sortValue.eq(cursor.sortValue)
 
-        val createdAtLess = cb.lessThan(createdAtPath, cursor.sortInstant)
-        val createdAtEqualIdLess =
-            cb.and(
-                cb.equal(createdAtPath, cursor.sortInstant),
-                cb.lessThan(idPath, cursor.id),
-            )
-        return cb.or(createdAtLess, createdAtEqualIdLess)
+        return sortValue.lt(cursor.sortValue)
+            .or(sameSortValue.and(LINKS.CREATED_AT_UTC.lt(cursorInstant)))
+            .or(sameSortValue.and(LINKS.CREATED_AT_UTC.eq(cursorInstant)).and(LINKS.ID.lt(cursor.id)))
     }
 
-    /**
-     * count 기반 정렬 커서 조건 (좋아요/저장 기간 집계 합)
-     *
-     * 집계 합이 동일한 링크 구분을 위해 createdAt, id를 보조 키로 사용합니다.
-     * 조건: (합 < cursor) OR (합 = cursor AND createdAt < cursor) OR (합 = cursor AND createdAt = cursor AND id < cursorId)
-     */
-    private fun buildCountCursorCondition(
-        cb: CriteriaBuilder,
-        root: Root<Link>,
-        cursor: LinkCursorV1,
-        sortExpression: Expression<Long>,
-    ): Predicate {
-        val createdAtPath = root.get<Instant>(EntityBase_.createdAt)
-        val idPath = root.get<UUID>(EntityBase_.id)
-        val countLess = cb.lessThan(sortExpression, cursor.sortValue)
-        val countEqualCreatedAtLess =
-            cb.and(
-                cb.equal(sortExpression, cursor.sortValue),
-                cb.lessThan(createdAtPath, cursor.sortInstant),
-            )
-        val countEqualCreatedAtEqualIdLess =
-            cb.and(
-                cb.equal(sortExpression, cursor.sortValue),
-                cb.equal(createdAtPath, cursor.sortInstant),
-                cb.lessThan(idPath, cursor.id),
-            )
-        return cb.or(countLess, countEqualCreatedAtLess, countEqualCreatedAtEqualIdLess)
+    private fun dailyStatSum(sortType: LinkSortType): Field<Long> {
+        val countField =
+            when (sortType) {
+                LinkSortType.LIKE -> LINK_DAILY_STATS.LIKE_COUNT
+                LinkSortType.SAVE -> LINK_DAILY_STATS.SAVE_COUNT
+                LinkSortType.PUBLISHED -> error("PUBLISHED 정렬에는 일별 집계가 없습니다")
+            }
+
+        return DSL.coalesce(DSL.sum(countField).cast(Long::class.java), 0L)
     }
-
-    private fun countSortOrders(
-        cb: CriteriaBuilder,
-        root: Root<Link>,
-        sortExpression: Expression<Long>,
-    ): List<Order> =
-        listOf(
-            cb.desc(sortExpression),
-            cb.desc(root.get(EntityBase_.createdAt)),
-            cb.desc(root.get(EntityBase_.id)),
-        )
-
-    private fun dailyStatsSumExpression(
-        cb: CriteriaBuilder,
-        statsRoot: Root<LinkDailyStats>,
-        sortType: LinkSortType,
-    ): Expression<Long> = cb.coalesce(cb.sum(dailyStatsCountExpression(statsRoot, sortType)), 0L)
-
-    private fun dailyStatsCountExpression(
-        statsRoot: Root<LinkDailyStats>,
-        sortType: LinkSortType,
-    ): Path<Long> =
-        when (sortType) {
-            LinkSortType.LIKE -> statsRoot.get(LinkDailyStats_.likeCount)
-            LinkSortType.SAVE -> statsRoot.get(LinkDailyStats_.saveCount)
-            LinkSortType.PUBLISHED -> throw IllegalStateException("PUBLISHED는 일별 집계 정렬을 사용하지 않습니다")
-        }
 
     private fun statsCutoffDate(days: Int): LocalDate = LocalDate.now(ZoneOffset.UTC).minusDays(days.toLong())
+
+    private fun fetchLinkIds(
+        condition: Condition,
+        limit: Int,
+    ): List<UUID> =
+        dsl.select(LINKS.ID)
+            .from(LINKS)
+            .where(condition)
+            .orderBy(LINKS.CREATED_AT_UTC.desc(), LINKS.ID.desc())
+            .limit(limit)
+            .fetch(LINKS.ID)
+            .filterNotNull()
+
+    private fun fetchLinks(condition: Condition): List<Link> {
+        val rows =
+            dsl.select(LINKS.asterisk(), TAGS.asterisk())
+                .from(LINKS)
+                .leftJoin(LINK_TAGS).on(LINK_TAGS.LINK_ID.eq(LINKS.ID))
+                .leftJoin(TAGS).on(LINK_TAGS.TAG_ID.eq(TAGS.ID))
+                .where(condition)
+                .fetch()
+
+        return rows.groupBy { requireNotNull(it[LINKS.ID]) }.map { (_, linkRows) -> toLink(linkRows) }
+    }
+
+    private fun toLink(rows: List<org.jooq.Record>): Link {
+        val linkRecord = rows.first().into(LINKS)
+        val tags = rows.mapNotNull { row -> row.into(TAGS).takeIf { it.id != null }?.toTag() }.toMutableSet()
+
+        return linkRecord.toLink(tags)
+    }
+
+    private fun LinksRecord.toLink(tags: MutableSet<Tag>): Link =
+        Link(
+            title = requireNotNull(title),
+            url = requireNotNull(url),
+            summary = requireNotNull(summary),
+            tags = tags,
+            viewCount = requireNotNull(viewCount),
+            likeCount = requireNotNull(likeCount),
+            createdAt = requireNotNull(createdAtUtc).toInstant(),
+        ).apply {
+            id = requireNotNull(this@toLink.id)
+            updatedAt = requireNotNull(updatedAtUtc).toInstant()
+        }
+
+    private fun TagsRecord.toTag(): Tag =
+        Tag(requireNotNull(name)).apply {
+            id = requireNotNull(this@toTag.id)
+            createdAt = requireNotNull(createdAtUtc).toInstant()
+            updatedAt = requireNotNull(updatedAtUtc).toInstant()
+        }
 }

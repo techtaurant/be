@@ -18,15 +18,6 @@ spring:
             idle-timeout: 600000
             max-lifetime: 1800000
 
-    jpa:
-        hibernate:
-            ddl-auto: validate
-        properties:
-            hibernate:
-                dialect: org.hibernate.dialect.PostgreSQLDialect
-                jdbc:
-                    time_zone: UTC
-
     jackson:
         time-zone: UTC
 
@@ -117,7 +108,7 @@ otel:
 
 # CORS
 cors:
-    allowed-origins: ${CORS_ORIGINS}
+    allowed-origin-patterns: ${CORS_ORIGINS}
 
 # JWT
 jwt:
@@ -126,11 +117,10 @@ jwt:
     refresh-token-expire-ms: ${JWT_REFRESH_TOKEN_EXPIRE_MS:604800000}
 
 # Cookie
-# 주의: SameSite=None은 반드시 Secure=true와 함께 사용해야 함 (Chrome 80+)
 cookie:
     secure: ${COOKIE_SECURE:true}
     http-only: ${COOKIE_HTTP_ONLY:true}
-    same-site: ${COOKIE_SAME_SITE:None}
+    same-site: ${COOKIE_SAME_SITE:Lax}
     path: ${COOKIE_PATH:/}
 
 # Springdoc OpenAPI

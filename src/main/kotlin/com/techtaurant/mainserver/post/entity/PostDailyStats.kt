@@ -1,7 +1,6 @@
 package com.techtaurant.mainserver.post.entity
 
 import com.techtaurant.mainserver.common.base.EntityBase
-import jakarta.persistence.*
 import java.time.LocalDate
 
 /**
@@ -13,21 +12,10 @@ import java.time.LocalDate
  * @property likeCount 해당 일자 좋아요 증감
  * @property commentCount 해당 일자 댓글 증감
  */
-@Entity
-@Table(
-    name = "post_daily_stats",
-    uniqueConstraints = [UniqueConstraint(columnNames = ["post_id", "stat_date"])],
-)
 class PostDailyStats(
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "post_id", nullable = false)
     var post: Post,
-    @Column(name = "stat_date", nullable = false)
     var statDate: LocalDate,
-    @Column(name = "view_count", nullable = false)
     var viewCount: Long = 0,
-    @Column(name = "like_count", nullable = false)
     var likeCount: Long = 0,
-    @Column(name = "comment_count", nullable = false)
     var commentCount: Long = 0,
 ) : EntityBase()

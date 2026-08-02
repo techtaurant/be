@@ -20,8 +20,8 @@ Google 인증 성공 시 프론트엔드 URL로 리다이렉트되며, HttpOnly 
 
 | 쿠키명 | 설명 | 만료 시간 | 속성 |
 |--------|------|-----------|------|
-| `accessToken` | API 인증용 토큰 | 1시간 | HttpOnly, Secure, SameSite=Lax |
-| `refreshToken` | 토큰 갱신용 | 7일 | HttpOnly, Secure, SameSite=Lax |
+| `accessToken` | API 인증용 토큰 | 1시간 | HttpOnly, Secure, SameSite=Lax, Path=/ |
+| `refreshToken` | 토큰 갱신용 | 7일 | HttpOnly, Secure, SameSite=Lax, Path=/open-api/auth/refresh |
 
 **프론트엔드 처리 예시** (`/oauth/callback` 페이지):
 
@@ -123,6 +123,22 @@ Authorization: Bearer {accessToken}
 ---
 
 ## 에러 코드
+
+### PostStatus / TagStatus
+
+게시물 도메인은 2000번대 커스텀 코드를 사용한다. (기존 3000번대는 `JwtStatus`와 겹쳐 2000번대로 이전)
+
+| HTTP Status | Custom Code | 설명 |
+|-------------|-------------|------|
+| 404 | 2001 | 게시물을 찾을 수 없습니다 |
+| 400 | 2002 | 카테고리 깊이는 최대 5단계까지 가능합니다 |
+| 400 | 2005 | 유효하지 않은 정렬 타입입니다 |
+| 403 | 2006 | 다른 사용자의 게시물을 수정할 수 없습니다 |
+| 400 | 2008 | 제목은 필수입니다 |
+| 400 | 2009 | 본문은 필수입니다 |
+| 400 | 2010 | 태그는 최대 10개까지 설정할 수 있습니다 |
+
+**위치**: `post/enums/PostStatus.kt`, `post/enums/TagStatus.kt`
 
 ### OAuthStatus
 

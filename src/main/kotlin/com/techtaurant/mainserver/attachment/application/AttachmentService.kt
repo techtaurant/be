@@ -113,6 +113,7 @@ class AttachmentService(
      * @param referenceId 연관 도메인 PK (게시물 ID 등)
      * @param referenceType 연관 도메인 타입
      * @param attachmentIds 확정할 Attachment ID 목록
+     * @throws ApiException 첨부 없음(NOT_FOUND), 대상 타입 불일치·다른 대상에 확정된 첨부·업로드 미완료(BAD_REQUEST)
      */
     @Transactional
     fun confirmAttachmentsByIds(
@@ -123,27 +124,53 @@ class AttachmentService(
         if (attachmentIds.isEmpty()) return
 
         val distinctAttachmentIds = attachmentIds.distinct()
-        val attachmentsById = attachmentRepository.findAllById(distinctAttachmentIds).associateBy { it.id!! }
+        val attachmentsById = attachmentRepository.findAllByIdForUpdate(distinctAttachmentIds).associateBy { it.id!! }
 
         if (attachmentsById.size != distinctAttachmentIds.size) {
             throw ApiException(DefaultStatus.NOT_FOUND, "첨부파일을 찾을 수 없습니다")
         }
 
-        val tmpAttachments =
-            distinctAttachmentIds.mapNotNull(attachmentsById::get)
-                .filter { attachment ->
-                    attachment.status == AttachmentStatus.TMP && attachment.referenceType == referenceType
-                }
+        val requestedAttachments = distinctAttachmentIds.mapNotNull(attachmentsById::get)
+
+        // 발급 시 지정한 도메인 타입과 다른 타입으로 확정을 요청하면 아래 TMP 필터에서 조용히 제외된다.
+        // 그대로 성공을 반환하면 호출부가 미확정 ID를 썸네일 FK로 저장하는데, 읽기 경로는 해당 타입의
+        // CONFIRMED 첨부만 조회하므로 썸네일이 조용히 대체되고 업로드된 파일은 tmp/에 남는다.
+        val attachmentsWithMismatchedReferenceType = requestedAttachments.filter { it.referenceType != referenceType }
+
+        if (attachmentsWithMismatchedReferenceType.isNotEmpty()) {
+            throw ApiException(DefaultStatus.BAD_REQUEST, "요청한 대상 타입과 다른 첨부파일은 사용할 수 없습니다")
+        }
+
+        // 이미 확정된 첨부는 아래 TMP 필터에서 제외되어 이 리소스로 재바인딩되지 않는다.
+        // 다른 리소스의 확정 첨부를 그대로 받으면 FK 제약은 통과하지만, 읽기 경로가 해당 리소스의
+        // 첨부만 조회하므로 썸네일이 조용히 기본 이미지로 대체된다. 따라서 여기서 거부한다.
+        val attachmentsOwnedByOtherReference =
+            requestedAttachments.filter { attachment ->
+                attachment.status == AttachmentStatus.CONFIRMED &&
+                    attachment.referenceId != null &&
+                    attachment.referenceId != referenceId
+            }
+
+        if (attachmentsOwnedByOtherReference.isNotEmpty()) {
+            throw ApiException(DefaultStatus.BAD_REQUEST, "다른 대상에 연결된 첨부파일은 사용할 수 없습니다")
+        }
+
+        val tmpAttachments = requestedAttachments.filter { it.status == AttachmentStatus.TMP }
 
         if (tmpAttachments.isEmpty()) return
 
+        // 업로드가 끝나지 않은 첨부를 건너뛰고 성공을 반환하면 호출부가 그 ID를 썸네일 FK로 저장한다.
+        // FK 제약은 통과하지만 읽기 경로가 CONFIRMED 첨부만 조회하므로 썸네일이 조용히 대체되고,
+        // 수정 경로에서는 직전까지 정상이던 첨부가 orphan으로 삭제된다. 그래서 요청 자체를 거부한다.
+        val attachmentsWithoutUploadedObject = tmpAttachments.filterNot { s3StorageService.exists(it.objectKey) }
+
+        if (attachmentsWithoutUploadedObject.isNotEmpty()) {
+            log.warn("S3 objects not found for confirmation: {}", attachmentsWithoutUploadedObject.map { it.objectKey })
+            throw ApiException(DefaultStatus.BAD_REQUEST, "업로드가 완료되지 않은 첨부파일은 사용할 수 없습니다")
+        }
+
         tmpAttachments.forEach { attachment ->
             val tmpObjectKey = attachment.objectKey
-            if (!s3StorageService.exists(tmpObjectKey)) {
-                log.warn("S3 object not found for confirmation: $tmpObjectKey. Skipping.")
-                return@forEach
-            }
-
             val uniqueId = UUID.randomUUID()
             val fileName = tmpObjectKey.substringAfterLast("/")
             val newObjectKey = buildConfirmedObjectKey(referenceType, referenceId, uniqueId, fileName)

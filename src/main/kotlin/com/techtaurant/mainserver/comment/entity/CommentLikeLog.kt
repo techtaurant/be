@@ -2,7 +2,6 @@ package com.techtaurant.mainserver.comment.entity
 
 import com.techtaurant.mainserver.common.base.EntityBase
 import com.techtaurant.mainserver.user.entity.User
-import jakarta.persistence.*
 
 /**
  * 댓글 좋아요 이벤트 로그 엔티티
@@ -13,22 +12,8 @@ import jakarta.persistence.*
  * @property user 좋아요한 사용자
  * @property isLiked TRUE: 좋아요, FALSE: 좋아요 취소
  */
-@Entity
-@Table(
-    name = "comment_like_log",
-    uniqueConstraints = [UniqueConstraint(columnNames = ["comment_id", "user_id"])],
-    indexes = [
-        Index(name = "idx_comment_like_log_comment_created_utc", columnList = "comment_id,created_at_utc"),
-        Index(name = "idx_comment_like_log_created_utc", columnList = "created_at_utc"),
-    ],
-)
 class CommentLikeLog(
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "comment_id", nullable = false)
     var comment: Comment,
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
     var user: User,
-    @Column(name = "is_liked", nullable = false)
     var isLiked: Boolean = true,
 ) : EntityBase()
