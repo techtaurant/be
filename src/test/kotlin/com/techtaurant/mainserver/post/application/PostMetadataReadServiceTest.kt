@@ -26,6 +26,7 @@ class PostMetadataReadServiceTest {
         PostMetadataReadService(
             postRepository = postRepository,
             attachmentService = attachmentService,
+            postThumbnailResolver = PostThumbnailResolver(),
             defaultThumbnailUrl = "/static/images/post-thumbnail.png",
             baseUrl = "http://localhost:8080",
         )

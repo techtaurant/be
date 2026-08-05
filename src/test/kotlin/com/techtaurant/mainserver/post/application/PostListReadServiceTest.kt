@@ -43,6 +43,7 @@ class PostListReadServiceTest {
         PostMetadataReadService(
             postRepository = postRepository,
             attachmentService = attachmentService,
+            postThumbnailResolver = PostThumbnailResolver(),
             defaultThumbnailUrl = defaultThumbnailUrl,
             baseUrl = baseUrl,
         )
@@ -287,8 +288,8 @@ class PostListReadServiceTest {
         }
 
         @Test
-        @DisplayName("첨부파일 썸네일은 presigned URL로 반환한다")
-        fun getPosts_withThumbnailAttachment_returnsPresignedThumbnailUrl() {
+        @DisplayName("썸네일 지정이 없으면 업로드 순서가 아니라 본문에 먼저 등장한 첨부의 presigned URL을 반환한다")
+        fun getPosts_withoutThumbnailImage_returnsFirstAttachmentReferencedInContent() {
             // given
             val post = createPost(otherUser)
             val firstAttachment =
@@ -303,6 +304,7 @@ class PostListReadServiceTest {
                     objectKey = "posts/${post.id}/uuid-2/later.jpg",
                     createdAt = Instant.ofEpochMilli(2_000L),
                 )
+            post.content = "<img src=\"${laterAttachment.id}\" /><img src=\"${firstAttachment.id}\" />"
             every {
                 postRepository.findPostsWithConditions(
                     cursor = null,
@@ -329,7 +331,7 @@ class PostListReadServiceTest {
             val result = postListReadService.getPosts(cursor = null, size = 20, currentUserId = null)
 
             // then
-            assertThat(result.content.single().thumbnailUrl).isEqualTo("https://cdn.example.com/first.jpg")
+            assertThat(result.content.single().thumbnailUrl).isEqualTo("https://cdn.example.com/later.jpg")
         }
 
         @Test
