@@ -751,16 +751,19 @@ class PostWriteServiceAttachmentTest {
         }
 
         @Test
-        @DisplayName("thumbnailAttachmentId만 지정하면 새 썸네일을 확정하고 기존 본문 첨부는 유지한다")
-        fun updatePost_withOnlyThumbnailAttachmentId_updatesThumbnailWithoutDeletingAttachments() {
+        @DisplayName("thumbnailAttachmentId만 지정하면 새 썸네일을 확정하고 본문 참조 첨부는 유지한 채 이전 썸네일을 정리한다")
+        fun updatePost_withOnlyThumbnailAttachmentId_replacesThumbnailAndKeepsReferencedAttachments() {
             // given
             val postId = UUID.randomUUID()
+            val currentBodyAttachmentId = UUID.randomUUID()
+            val previousThumbnailAttachmentId = UUID.randomUUID()
             val newThumbnailAttachmentId = UUID.randomUUID()
             val post =
                 Post(
                     title = "기존 제목",
-                    content = "기존 본문",
+                    content = "<img src=\"$currentBodyAttachmentId\" />",
                     author = author,
+                    thumbnailImage = previousThumbnailAttachmentId,
                     status = PostStatusEnum.PUBLISHED,
                 ).apply { id = postId }
 
@@ -781,8 +784,50 @@ class PostWriteServiceAttachmentTest {
                     listOf(newThumbnailAttachmentId),
                 )
             }
-            verify(exactly = 0) { attachmentService.deleteOrphanedAttachmentsByIds(any(), any(), any()) }
+            verify {
+                attachmentService.deleteOrphanedAttachmentsByIds(
+                    postId,
+                    AttachmentReferenceType.POST,
+                    listOf(currentBodyAttachmentId, newThumbnailAttachmentId),
+                )
+            }
             assertThat(post.thumbnailImage).isEqualTo(newThumbnailAttachmentId)
+        }
+
+        @Test
+        @DisplayName("썸네일을 본문에 남아 있는 첨부로 교체하면 이전 썸네일만 정리 대상에서 빠진다")
+        fun updatePost_replaceThumbnailWithReferencedAttachment_keepsOnlyReferencedAttachments() {
+            // given
+            val postId = UUID.randomUUID()
+            val currentBodyAttachmentId = UUID.randomUUID()
+            val previousThumbnailAttachmentId = UUID.randomUUID()
+            val post =
+                Post(
+                    title = "기존 제목",
+                    content = "<img src=\"$currentBodyAttachmentId\" />",
+                    author = author,
+                    thumbnailImage = previousThumbnailAttachmentId,
+                    status = PostStatusEnum.PUBLISHED,
+                ).apply { id = postId }
+
+            every { postRepository.findPostByIdWithAuthor(postId) } returns post
+
+            // when
+            postWriteService.updatePost(
+                postId,
+                UpdatePostRequest(thumbnailAttachmentId = currentBodyAttachmentId),
+                author.id!!,
+            )
+
+            // then
+            verify {
+                attachmentService.deleteOrphanedAttachmentsByIds(
+                    postId,
+                    AttachmentReferenceType.POST,
+                    listOf(currentBodyAttachmentId),
+                )
+            }
+            assertThat(post.thumbnailImage).isEqualTo(currentBodyAttachmentId)
         }
 
         @Test

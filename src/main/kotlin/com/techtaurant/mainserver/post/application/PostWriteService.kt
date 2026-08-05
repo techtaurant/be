@@ -129,6 +129,7 @@ class PostWriteService(
      * 요청에 포함된 필드만 업데이트하며, 작성자 권한을 검증합니다.
      * 상태 전환 시 DRAFT를 제외한 상태는 제목과 본문이 필수입니다.
      * DRAFT 상태에서는 생성 경로와 동일하게 첨부 확정과 orphan 정리를 수행하지 않습니다.
+     * 본문, 첨부 목록, 썸네일 중 하나라도 전달되면 본문 참조와 현재 썸네일을 기준으로 orphan 첨부를 정리합니다.
      *
      * @param postId 게시물 ID
      * @param request 게시물 수정 요청
@@ -174,7 +175,12 @@ class PostWriteService(
                 post.thumbnailImage = thumbnailAttachmentId
             }
 
-            if (request.content != null || request.attachmentIds != null) {
+            // 썸네일 교체도 이전 썸네일의 참조를 끊으므로 본문·첨부 목록 변경과 같은 정리 대상으로 본다.
+            // 그렇지 않으면 본문에 없던 이전 썸네일이 확정 상태로 남아 상세 조회의 첨부 URL 목록에 계속 노출된다.
+            val isAttachmentReferenceChanged =
+                request.content != null || request.attachmentIds != null || request.thumbnailAttachmentId != null
+
+            if (isAttachmentReferenceChanged) {
                 val attachmentIdsReferencedInContent = post.referencedAttachmentIds()
 
                 request.attachmentIds?.let { requestedAttachmentIds ->

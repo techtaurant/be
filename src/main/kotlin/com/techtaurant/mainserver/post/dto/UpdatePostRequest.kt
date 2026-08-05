@@ -18,7 +18,7 @@ import java.util.UUID
  * @property categoryPath 카테고리 경로 (선택)
  * @property tags 태그 목록 (선택)
  * @property attachmentIds 새로 확정할 첨부 ID 목록 (유지·삭제 판단은 항상 본문 참조 기준)
- * @property thumbnailAttachmentId 대표 썸네일 첨부 ID (생략 시 유지, 지정된 적 없으면 본문 첫 첨부로 노출)
+ * @property thumbnailAttachmentId 대표 썸네일 첨부 ID (생략 시 유지, 지정된 적 없으면 본문 첫 첨부로 노출, 교체 시 본문에서 참조되지 않는 이전 썸네일은 삭제)
  * @property status 게시물 상태 (선택, DRAFT/PUBLISHED/PRIVATE)
  */
 @Schema(description = "게시물 수정 요청")
@@ -39,7 +39,10 @@ data class UpdatePostRequest(
     )
     val attachmentIds: List<UUID>? = null,
     @field:Schema(
-        description = "대표 썸네일로 사용할 attachment ID (생략 시 기존 썸네일 유지, 지정된 적 없으면 본문 첫 첨부로 노출)",
+        description =
+            "대표 썸네일로 사용할 attachment ID " +
+                "(생략 시 기존 썸네일 유지, 지정된 적 없으면 본문 첫 첨부로 노출, " +
+                "교체 시 본문에서 참조되지 않는 이전 썸네일은 삭제)",
         example = "01234567-89ab-cdef-0123-456789abcdef",
     )
     val thumbnailAttachmentId: UUID? = null,
