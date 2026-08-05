@@ -292,10 +292,11 @@ class PostWriteServiceValidationTest {
         }
 
         @Test
-        @DisplayName("DRAFT로 되돌리면 썸네일을 비우고 첨부 정리를 하지 않는다")
-        fun updatePost_toDraft_clearsThumbnailWithoutAttachmentCleanup() {
+        @DisplayName("DRAFT 상태만 변경하면 생략한 썸네일과 첨부를 유지한다")
+        fun updatePost_toDraft_keepsOmittedThumbnailAndAttachments() {
             // given
-            val post = publishedPost().apply { thumbnailImage = UUID.randomUUID() }
+            val thumbnailAttachmentId = UUID.randomUUID()
+            val post = publishedPost().apply { thumbnailImage = thumbnailAttachmentId }
             every { postRepository.findPostByIdWithAuthor(post.id!!) } returns post
 
             // when
@@ -306,7 +307,9 @@ class PostWriteServiceValidationTest {
             )
 
             // then
-            assertThat(post.thumbnailImage).isNull()
+            assertThat(post.status).isEqualTo(PostStatusEnum.DRAFT)
+            assertThat(post.thumbnailImage).isEqualTo(thumbnailAttachmentId)
+            verify(exactly = 0) { attachmentService.confirmAttachmentsByIds(any(), any(), any()) }
             verify(exactly = 0) { attachmentService.deleteOrphanedAttachmentsByIds(any(), any(), any()) }
         }
 

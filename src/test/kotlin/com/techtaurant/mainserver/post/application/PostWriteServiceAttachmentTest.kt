@@ -279,8 +279,8 @@ class PostWriteServiceAttachmentTest {
         }
 
         @Test
-        @DisplayName("thumbnailAttachmentId가 없어도 기존 thumbnailImage가 본문에 없으면 orphan으로 정리한다")
-        fun updatePost_withoutThumbnailAttachmentId_deletesCurrentThumbnailWhenRemovedFromContent() {
+        @DisplayName("thumbnailAttachmentId가 없으면 기존 thumbnailImage가 본문에서 빠져도 유지한다")
+        fun updatePost_withoutThumbnailAttachmentId_keepsCurrentThumbnailWhenRemovedFromContent() {
             // given
             val postId = UUID.randomUUID()
             val currentThumbnailAttachmentId = UUID.randomUUID()
@@ -307,7 +307,7 @@ class PostWriteServiceAttachmentTest {
             postWriteService.updatePost(postId, request, author.id!!)
 
             // then
-            assertThat(post.thumbnailImage).isEqualTo(remainingAttachmentId)
+            assertThat(post.thumbnailImage).isEqualTo(currentThumbnailAttachmentId)
             verify {
                 attachmentService.confirmAttachmentsByIds(
                     postId,
@@ -319,14 +319,14 @@ class PostWriteServiceAttachmentTest {
                 attachmentService.deleteOrphanedAttachmentsByIds(
                     postId,
                     AttachmentReferenceType.POST,
-                    listOf(remainingAttachmentId),
+                    listOf(remainingAttachmentId, currentThumbnailAttachmentId),
                 )
             }
         }
 
         @Test
-        @DisplayName("수정 시 thumbnailAttachmentId를 별도로 전달하면 본문 첨부와 함께 confirm하고 유지한다")
-        fun updatePost_withSeparateThumbnailAttachment_confirmsAndKeepsThumbnail() {
+        @DisplayName("본문 첨부와 thumbnailAttachmentId를 각각 전달하면 각각 confirm하고 유지한다")
+        fun updatePost_withAttachmentIdsAndThumbnailAttachmentId_confirmsEachField() {
             // given
             val postId = UUID.randomUUID()
             val contentAttachmentId = UUID.randomUUID()
@@ -357,7 +357,14 @@ class PostWriteServiceAttachmentTest {
                 attachmentService.confirmAttachmentsByIds(
                     postId,
                     AttachmentReferenceType.POST,
-                    listOf(contentAttachmentId, thumbnailAttachmentId),
+                    listOf(thumbnailAttachmentId),
+                )
+            }
+            verify {
+                attachmentService.confirmAttachmentsByIds(
+                    postId,
+                    AttachmentReferenceType.POST,
+                    listOf(contentAttachmentId),
                 )
             }
             verify {
@@ -449,8 +456,8 @@ class PostWriteServiceAttachmentTest {
         }
 
         @Test
-        @DisplayName("attachmentIds를 빈 목록으로 명시하면 기존 첨부와 썸네일을 제거한다")
-        fun updatePost_withEmptyAttachmentIds_removesExistingAttachmentsAndThumbnail() {
+        @DisplayName("attachmentIds를 빈 목록으로 명시해도 생략한 썸네일은 유지한다")
+        fun updatePost_withEmptyAttachmentIds_keepsOmittedThumbnail() {
             // given
             val postId = UUID.randomUUID()
             val currentThumbnailAttachmentId = UUID.randomUUID()
@@ -477,10 +484,41 @@ class PostWriteServiceAttachmentTest {
                 attachmentService.deleteOrphanedAttachmentsByIds(
                     postId,
                     AttachmentReferenceType.POST,
-                    emptyList(),
+                    listOf(currentThumbnailAttachmentId),
                 )
             }
-            assertThat(post.thumbnailImage).isNull()
+            assertThat(post.thumbnailImage).isEqualTo(currentThumbnailAttachmentId)
+        }
+
+        @Test
+        @DisplayName("DRAFT 상태만 지정하면 생략한 첨부와 썸네일은 유지한다")
+        fun updatePost_withDraftStatusOnly_keepsOmittedAttachmentsAndThumbnail() {
+            // given
+            val postId = UUID.randomUUID()
+            val currentThumbnailAttachmentId = UUID.randomUUID()
+            val post =
+                Post(
+                    title = "기존 제목",
+                    content = "기존 본문",
+                    author = author,
+                    thumbnailImage = currentThumbnailAttachmentId,
+                    status = PostStatusEnum.PUBLISHED,
+                ).apply { id = postId }
+
+            every { postRepository.findPostByIdWithAuthor(postId) } returns post
+
+            // when
+            postWriteService.updatePost(
+                postId,
+                UpdatePostRequest(status = PostStatusEnum.DRAFT),
+                author.id!!,
+            )
+
+            // then
+            assertThat(post.status).isEqualTo(PostStatusEnum.DRAFT)
+            assertThat(post.thumbnailImage).isEqualTo(currentThumbnailAttachmentId)
+            verify(exactly = 0) { attachmentService.confirmAttachmentsByIds(any(), any(), any()) }
+            verify(exactly = 0) { attachmentService.deleteOrphanedAttachmentsByIds(any(), any(), any()) }
         }
 
         @Test
