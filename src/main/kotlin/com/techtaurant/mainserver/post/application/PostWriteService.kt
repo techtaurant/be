@@ -163,35 +163,44 @@ class PostWriteService(
         }
 
         val newStatus = request.status ?: post.status
-        if (newStatus != PostStatusEnum.DRAFT) {
-            val attachmentIdsIncludedInContent =
-                mergeAttachmentIds(
-                    filterAttachmentIdsIncludedInContent(post.content, request.attachmentIds),
-                    request.thumbnailAttachmentId,
+        when {
+            newStatus == PostStatusEnum.DRAFT -> post.thumbnailImage = null
+            request.attachmentIds != null -> {
+                val attachmentIdsIncludedInContent =
+                    mergeAttachmentIds(
+                        filterAttachmentIdsIncludedInContent(post.content, request.attachmentIds),
+                        request.thumbnailAttachmentId,
+                    )
+                val thumbnailAttachmentId =
+                    resolveThumbnailAttachmentId(
+                        requestThumbnailAttachmentId = request.thumbnailAttachmentId,
+                        currentThumbnailAttachmentId = post.thumbnailImage,
+                        attachmentIdsIncludedInContent = attachmentIdsIncludedInContent,
+                    )
+                val keepAttachmentIds = mergeAttachmentIds(attachmentIdsIncludedInContent, thumbnailAttachmentId)
+
+                attachmentService.confirmAttachmentsByIds(
+                    referenceId = postId,
+                    referenceType = AttachmentReferenceType.POST,
+                    attachmentIds = keepAttachmentIds,
                 )
-            val thumbnailAttachmentId =
-                resolveThumbnailAttachmentId(
-                    requestThumbnailAttachmentId = request.thumbnailAttachmentId,
-                    currentThumbnailAttachmentId = post.thumbnailImage,
-                    attachmentIdsIncludedInContent = attachmentIdsIncludedInContent,
+
+                attachmentService.deleteOrphanedAttachmentsByIds(
+                    referenceId = postId,
+                    referenceType = AttachmentReferenceType.POST,
+                    keepAttachmentIds = keepAttachmentIds,
                 )
-            val keepAttachmentIds = mergeAttachmentIds(attachmentIdsIncludedInContent, thumbnailAttachmentId)
 
-            attachmentService.confirmAttachmentsByIds(
-                referenceId = postId,
-                referenceType = AttachmentReferenceType.POST,
-                attachmentIds = keepAttachmentIds,
-            )
-
-            attachmentService.deleteOrphanedAttachmentsByIds(
-                referenceId = postId,
-                referenceType = AttachmentReferenceType.POST,
-                keepAttachmentIds = keepAttachmentIds,
-            )
-
-            post.thumbnailImage = thumbnailAttachmentId
-        } else {
-            post.thumbnailImage = null
+                post.thumbnailImage = thumbnailAttachmentId
+            }
+            request.thumbnailAttachmentId != null -> {
+                attachmentService.confirmAttachmentsByIds(
+                    referenceId = postId,
+                    referenceType = AttachmentReferenceType.POST,
+                    attachmentIds = listOf(request.thumbnailAttachmentId),
+                )
+                post.thumbnailImage = request.thumbnailAttachmentId
+            }
         }
 
         val savedPost = postRepository.save(post)

@@ -17,6 +17,8 @@ import java.util.UUID
  * @property content 게시물 본문 (선택)
  * @property categoryPath 카테고리 경로 (선택)
  * @property tags 태그 목록 (선택)
+ * @property attachmentIds 게시물 첨부 ID 목록 (생략 시 유지, 빈 목록이면 전체 제거)
+ * @property thumbnailAttachmentId 대표 썸네일 첨부 ID (생략 시 유지)
  * @property status 게시물 상태 (선택, DRAFT/PUBLISHED/PRIVATE)
  */
 @Schema(description = "게시물 수정 요청")
@@ -31,9 +33,15 @@ data class UpdatePostRequest(
     @field:Size(max = TaggedContent.MAX_TAG_COUNT, message = "태그는 최대 10개까지 설정할 수 있습니다")
     @field:ArraySchema(maxItems = TaggedContent.MAX_TAG_COUNT, schema = Schema(description = "태그명", example = "spring"))
     val tags: List<String>? = null,
-    @field:Schema(description = "게시물에 연결할 attachment ID 목록", example = "[\"01234567-89ab-cdef-0123-456789abcdef\"]")
+    @field:Schema(
+        description = "게시물에 연결할 attachment ID 목록 (생략 시 기존 첨부 유지, 빈 목록이면 전체 제거)",
+        example = "[\"01234567-89ab-cdef-0123-456789abcdef\"]",
+    )
     val attachmentIds: List<UUID>? = null,
-    @field:Schema(description = "대표 썸네일로 사용할 attachment ID", example = "01234567-89ab-cdef-0123-456789abcdef")
+    @field:Schema(
+        description = "대표 썸네일로 사용할 attachment ID (생략 시 기존 썸네일 유지)",
+        example = "01234567-89ab-cdef-0123-456789abcdef",
+    )
     val thumbnailAttachmentId: UUID? = null,
     @field:Schema(description = "게시물 상태 (DRAFT/PUBLISHED/PRIVATE)", example = "PUBLISHED")
     val status: PostStatusEnum? = null,
