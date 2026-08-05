@@ -171,15 +171,22 @@ class PostWriteService(
             post.thumbnailImage = thumbnailAttachmentId
         }
 
-        request.attachmentIds?.let { attachmentIds ->
+        if (request.content != null || request.attachmentIds != null) {
+            val attachmentIds =
+                request.attachmentIds
+                    ?: attachmentService
+                        .getConfirmedAttachments(postId, AttachmentReferenceType.POST)
+                        .mapNotNull { it.id }
             val attachmentIdsIncludedInContent =
                 filterAttachmentIdsIncludedInContent(post.content, attachmentIds)
 
-            attachmentService.confirmAttachmentsByIds(
-                referenceId = postId,
-                referenceType = AttachmentReferenceType.POST,
-                attachmentIds = attachmentIdsIncludedInContent,
-            )
+            request.attachmentIds?.let {
+                attachmentService.confirmAttachmentsByIds(
+                    referenceId = postId,
+                    referenceType = AttachmentReferenceType.POST,
+                    attachmentIds = attachmentIdsIncludedInContent,
+                )
+            }
 
             attachmentService.deleteOrphanedAttachmentsByIds(
                 referenceId = postId,

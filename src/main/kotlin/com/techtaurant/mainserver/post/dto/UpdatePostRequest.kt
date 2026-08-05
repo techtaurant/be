@@ -14,10 +14,10 @@ import java.util.UUID
  * 상태 전환 시 DRAFT를 제외한 상태는 제목과 본문이 필수입니다.
  *
  * @property title 게시물 제목 (선택, 최대 200자)
- * @property content 게시물 본문 (선택)
+ * @property content 게시물 본문 (선택, 변경 시 본문에서 참조가 사라진 기존 첨부 제거)
  * @property categoryPath 카테고리 경로 (선택)
  * @property tags 태그 목록 (선택)
- * @property attachmentIds 게시물 본문 첨부 ID 목록 (생략 시 유지, 빈 목록이면 본문 첨부 제거)
+ * @property attachmentIds 새 게시물 본문 첨부 ID 목록 (생략 시 기존 첨부를 변경된 본문 참조 기준으로 정리)
  * @property thumbnailAttachmentId 대표 썸네일 첨부 ID (생략 시 유지)
  * @property status 게시물 상태 (선택, DRAFT/PUBLISHED/PRIVATE)
  */
@@ -26,7 +26,7 @@ data class UpdatePostRequest(
     @field:Size(max = 200, message = "제목은 최대 200자까지 가능합니다")
     @field:Schema(description = "게시물 제목", example = "Spring Boot 시작하기", maxLength = 200)
     val title: String? = null,
-    @field:Schema(description = "게시물 본문", example = "Spring Boot를 사용하면...")
+    @field:Schema(description = "게시물 본문 (변경 시 본문에서 참조가 사라진 기존 첨부 제거)", example = "Spring Boot를 사용하면...")
     val content: String? = null,
     @field:Schema(description = "카테고리 경로 (슬래시로 구분, 최대 5단계)", example = "java/spring/deepdive")
     val categoryPath: String? = null,
@@ -34,7 +34,7 @@ data class UpdatePostRequest(
     @field:ArraySchema(maxItems = TaggedContent.MAX_TAG_COUNT, schema = Schema(description = "태그명", example = "spring"))
     val tags: List<String>? = null,
     @field:Schema(
-        description = "게시물 본문에 연결할 attachment ID 목록 (생략 시 기존 본문 첨부 유지, 빈 목록이면 본문 첨부 제거)",
+        description = "새 게시물 본문에 연결할 attachment ID 목록 (생략 시 기존 첨부를 변경된 본문 참조 기준으로 정리, 빈 목록이면 본문 첨부 제거)",
         example = "[\"01234567-89ab-cdef-0123-456789abcdef\"]",
     )
     val attachmentIds: List<UUID>? = null,

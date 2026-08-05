@@ -1,6 +1,7 @@
 package com.techtaurant.mainserver.post.application
 
 import com.techtaurant.mainserver.attachment.application.AttachmentService
+import com.techtaurant.mainserver.attachment.entity.Attachment
 import com.techtaurant.mainserver.attachment.enums.AttachmentReferenceType
 import com.techtaurant.mainserver.common.lock.DistributedLock
 import com.techtaurant.mainserver.notification.application.NotificationWriteService
@@ -72,6 +73,7 @@ class PostWriteServiceAttachmentTest {
         every { attachmentService.confirmAttachmentsByIds(any(), any(), any()) } just runs
         every { attachmentService.deleteOrphanedAttachmentsByIds(any(), any(), any()) } just runs
         every { attachmentService.deleteAttachmentsByReference(any(), any()) } just runs
+        every { attachmentService.getConfirmedAttachments(any(), any()) } returns emptyList()
         every { postRepository.findPostByIdWithAuthorForUpdate(any()) } answers {
             postRepository.findPostByIdWithAuthor(firstArg())
         }
@@ -422,12 +424,59 @@ class PostWriteServiceAttachmentTest {
         }
 
         @Test
-        @DisplayName("첨부 필드 없이 본문만 바꾸면 기존 첨부와 썸네일을 유지한다")
-        fun updatePost_withoutAttachmentFields_keepsExistingAttachmentsAndThumbnail() {
+        @DisplayName("첨부 필드 없이 본문에서 참조를 제거하면 기존 본문 첨부를 삭제하고 썸네일은 유지한다")
+        fun updatePost_withoutAttachmentFields_removesUnreferencedBodyAttachmentAndKeepsThumbnail() {
             // given
             val postId = UUID.randomUUID()
-            val newAttachmentId = UUID.randomUUID()
+            val currentBodyAttachmentId = UUID.randomUUID()
             val currentThumbnailAttachmentId = UUID.randomUUID()
+            val currentBodyAttachment = mockk<Attachment>()
+            every { currentBodyAttachment.id } returns currentBodyAttachmentId
+            val post =
+                Post(
+                    title = "기존 제목",
+                    content = "<img src=\"$currentBodyAttachmentId\" />",
+                    author = author,
+                    thumbnailImage = currentThumbnailAttachmentId,
+                    status = PostStatusEnum.PUBLISHED,
+                ).apply { id = postId }
+
+            every { postRepository.findPostByIdWithAuthor(postId) } returns post
+            every {
+                attachmentService.getConfirmedAttachments(postId, AttachmentReferenceType.POST)
+            } returns listOf(currentBodyAttachment)
+
+            val request =
+                UpdatePostRequest(
+                    content = "<p>첨부 참조를 제거한 본문</p>",
+                    status = PostStatusEnum.PUBLISHED,
+                )
+
+            // when
+            val response = postWriteService.updatePost(postId, request, author.id!!)
+
+            // then
+            verify(exactly = 0) { attachmentService.confirmAttachmentsByIds(any(), any(), any()) }
+            verify {
+                attachmentService.deleteOrphanedAttachmentsByIds(
+                    postId,
+                    AttachmentReferenceType.POST,
+                    listOf(currentThumbnailAttachmentId),
+                )
+            }
+            assertThat(response.content).doesNotContain(currentBodyAttachmentId.toString())
+            assertThat(post.thumbnailImage).isEqualTo(currentThumbnailAttachmentId)
+        }
+
+        @Test
+        @DisplayName("첨부 필드 없이 본문 참조를 유지하면 기존 본문 첨부와 썸네일을 유지한다")
+        fun updatePost_withoutAttachmentFields_keepsReferencedBodyAttachmentAndThumbnail() {
+            // given
+            val postId = UUID.randomUUID()
+            val currentBodyAttachmentId = UUID.randomUUID()
+            val currentThumbnailAttachmentId = UUID.randomUUID()
+            val currentBodyAttachment = mockk<Attachment>()
+            every { currentBodyAttachment.id } returns currentBodyAttachmentId
             val post =
                 Post(
                     title = "기존 제목",
@@ -438,20 +487,26 @@ class PostWriteServiceAttachmentTest {
                 ).apply { id = postId }
 
             every { postRepository.findPostByIdWithAuthor(postId) } returns post
-
-            val request =
-                UpdatePostRequest(
-                    content = "<img src=\"$newAttachmentId\" />",
-                    status = PostStatusEnum.PUBLISHED,
-                )
+            every {
+                attachmentService.getConfirmedAttachments(postId, AttachmentReferenceType.POST)
+            } returns listOf(currentBodyAttachment)
 
             // when
-            val response = postWriteService.updatePost(postId, request, author.id!!)
+            postWriteService.updatePost(
+                postId,
+                UpdatePostRequest(content = "<img src=\"$currentBodyAttachmentId\" />"),
+                author.id!!,
+            )
 
             // then
             verify(exactly = 0) { attachmentService.confirmAttachmentsByIds(any(), any(), any()) }
-            verify(exactly = 0) { attachmentService.deleteOrphanedAttachmentsByIds(any(), any(), any()) }
-            assertThat(response.content).contains(newAttachmentId.toString())
+            verify {
+                attachmentService.deleteOrphanedAttachmentsByIds(
+                    postId,
+                    AttachmentReferenceType.POST,
+                    listOf(currentBodyAttachmentId, currentThumbnailAttachmentId),
+                )
+            }
             assertThat(post.thumbnailImage).isEqualTo(currentThumbnailAttachmentId)
         }
 
