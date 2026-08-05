@@ -17,6 +17,7 @@ import java.util.UUID
 class PostMetadataReadService(
     private val postRepository: PostRepository,
     private val attachmentService: AttachmentService,
+    private val postThumbnailResolver: PostThumbnailResolver,
     @param:Value("\${app.default-post-thumbnail-url}")
     private val defaultThumbnailUrl: String,
     @param:Value("\${swagger.base-url}")
@@ -83,10 +84,7 @@ class PostMetadataReadService(
         attachments: List<Attachment>,
         presignedUrlByAttachmentId: Map<UUID, String>,
     ): String {
-        val thumbnailAttachment =
-            post.thumbnailImage?.let { thumbnailAttachmentId ->
-                attachments.firstOrNull { it.id == thumbnailAttachmentId }
-            } ?: attachments.minByOrNull { it.createdAt }
+        val thumbnailAttachment = postThumbnailResolver.resolve(post, attachments)
 
         return thumbnailAttachment?.id?.let { presignedUrlByAttachmentId[it] } ?: "$baseUrl$defaultThumbnailUrl"
     }

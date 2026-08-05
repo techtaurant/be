@@ -2,6 +2,7 @@ package com.techtaurant.mainserver.notification.application
 
 import com.techtaurant.mainserver.attachment.application.AttachmentService
 import com.techtaurant.mainserver.attachment.enums.AttachmentReferenceType
+import com.techtaurant.mainserver.post.application.PostThumbnailResolver
 import com.techtaurant.mainserver.post.entity.Post
 import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
 import com.techtaurant.mainserver.user.application.UserProfileImageResolver
@@ -17,6 +18,7 @@ class NotificationPayloadResourceResolver(
     private val postRepository: PostRepository,
     private val attachmentService: AttachmentService,
     private val userProfileImageResolver: UserProfileImageResolver,
+    private val postThumbnailResolver: PostThumbnailResolver,
     @param:Value("\${app.default-post-thumbnail-url}")
     private val defaultPostThumbnailUrl: String,
     @param:Value("\${app.default-user-thumbnail-url:/static/images/user-thumbnail.png}")
@@ -68,12 +70,8 @@ class NotificationPayloadResourceResolver(
             postsById.values.associate { post ->
                 val postId = post.id!!
                 val attachments = attachmentsByPostId[postId].orEmpty()
-                val thumbnailAttachment =
-                    post.thumbnailImage?.let { thumbnailAttachmentId ->
-                        attachments.firstOrNull { it.id == thumbnailAttachmentId }
-                    } ?: attachments.minByOrNull { it.createdAt }
 
-                postId to thumbnailAttachment
+                postId to postThumbnailResolver.resolve(post, attachments)
             }
         val presignedThumbnailUrlByAttachmentId =
             thumbnailAttachmentByPostId.values

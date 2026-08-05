@@ -1,7 +1,6 @@
 package com.techtaurant.mainserver.post.application
 
 import com.techtaurant.mainserver.attachment.application.AttachmentService
-import com.techtaurant.mainserver.attachment.entity.Attachment
 import com.techtaurant.mainserver.attachment.enums.AttachmentReferenceType
 import com.techtaurant.mainserver.common.lock.DistributedLock
 import com.techtaurant.mainserver.notification.application.NotificationWriteService
@@ -73,7 +72,6 @@ class PostWriteServiceAttachmentTest {
         every { attachmentService.confirmAttachmentsByIds(any(), any(), any()) } just runs
         every { attachmentService.deleteOrphanedAttachmentsByIds(any(), any(), any()) } just runs
         every { attachmentService.deleteAttachmentsByReference(any(), any()) } just runs
-        every { attachmentService.getConfirmedAttachments(any(), any()) } returns emptyList()
         every { postRepository.findPostByIdWithAuthorForUpdate(any()) } answers {
             postRepository.findPostByIdWithAuthor(firstArg())
         }
@@ -424,14 +422,133 @@ class PostWriteServiceAttachmentTest {
         }
 
         @Test
+        @DisplayName("attachmentIds에서 빠져도 본문에 참조가 남아 있으면 기존 첨부를 유지한다")
+        fun updatePost_attachmentIdsOmittingReferencedAttachment_keepsItByContent() {
+            // given
+            val postId = UUID.randomUUID()
+            val existingAttachmentId = UUID.randomUUID()
+            val newAttachmentId = UUID.randomUUID()
+            val post =
+                Post(
+                    title = "기존 제목",
+                    content = "<img src=\"$existingAttachmentId\" />",
+                    author = author,
+                    status = PostStatusEnum.PUBLISHED,
+                ).apply { id = postId }
+
+            every { postRepository.findPostByIdWithAuthor(postId) } returns post
+
+            // when: 새로 추가한 첨부만 attachmentIds에 담고 기존 첨부는 본문에만 남긴다
+            postWriteService.updatePost(
+                postId,
+                UpdatePostRequest(
+                    content = "<img src=\"$existingAttachmentId\" /><img src=\"$newAttachmentId\" />",
+                    attachmentIds = listOf(newAttachmentId),
+                ),
+                author.id!!,
+            )
+
+            // then
+            verify {
+                attachmentService.deleteOrphanedAttachmentsByIds(
+                    postId,
+                    AttachmentReferenceType.POST,
+                    listOf(existingAttachmentId, newAttachmentId),
+                )
+            }
+            verify {
+                attachmentService.confirmAttachmentsByIds(
+                    postId,
+                    AttachmentReferenceType.POST,
+                    listOf(newAttachmentId),
+                )
+            }
+        }
+
+        @Test
+        @DisplayName("attachmentIds로 보내도 본문에 참조가 없으면 확정하지 않고 유지 대상에서 제외한다")
+        fun updatePost_attachmentIdsAbsentFromContent_isNeitherConfirmedNorKept() {
+            // given
+            val postId = UUID.randomUUID()
+            val unreferencedAttachmentId = UUID.randomUUID()
+            val post =
+                Post(
+                    title = "기존 제목",
+                    content = "기존 본문",
+                    author = author,
+                    status = PostStatusEnum.PUBLISHED,
+                ).apply { id = postId }
+
+            every { postRepository.findPostByIdWithAuthor(postId) } returns post
+
+            // when
+            postWriteService.updatePost(
+                postId,
+                UpdatePostRequest(
+                    content = "<p>첨부를 넣지 않은 본문</p>",
+                    attachmentIds = listOf(unreferencedAttachmentId),
+                ),
+                author.id!!,
+            )
+
+            // then
+            verify {
+                attachmentService.confirmAttachmentsByIds(
+                    postId,
+                    AttachmentReferenceType.POST,
+                    emptyList(),
+                )
+            }
+            verify {
+                attachmentService.deleteOrphanedAttachmentsByIds(
+                    postId,
+                    AttachmentReferenceType.POST,
+                    emptyList(),
+                )
+            }
+        }
+
+        @Test
+        @DisplayName("본문에만 있고 attachmentIds가 없으면 확정하지 않은 채 유지 대상으로만 둔다")
+        fun updatePost_attachmentOnlyInContent_isKeptWithoutConfirm() {
+            // given
+            val postId = UUID.randomUUID()
+            val unconfirmedAttachmentId = UUID.randomUUID()
+            val post =
+                Post(
+                    title = "기존 제목",
+                    content = "기존 본문",
+                    author = author,
+                    status = PostStatusEnum.PUBLISHED,
+                ).apply { id = postId }
+
+            every { postRepository.findPostByIdWithAuthor(postId) } returns post
+
+            // when
+            postWriteService.updatePost(
+                postId,
+                UpdatePostRequest(content = "<img src=\"$unconfirmedAttachmentId\" />"),
+                author.id!!,
+            )
+
+            // then
+            verify(exactly = 0) { attachmentService.confirmAttachmentsByIds(any(), any(), any()) }
+            verify {
+                attachmentService.deleteOrphanedAttachmentsByIds(
+                    postId,
+                    AttachmentReferenceType.POST,
+                    listOf(unconfirmedAttachmentId),
+                )
+            }
+        }
+
+        @Test
         @DisplayName("첨부 필드 없이 본문에서 참조를 제거하면 기존 본문 첨부를 삭제하고 썸네일은 유지한다")
         fun updatePost_withoutAttachmentFields_removesUnreferencedBodyAttachmentAndKeepsThumbnail() {
             // given
             val postId = UUID.randomUUID()
             val currentBodyAttachmentId = UUID.randomUUID()
             val currentThumbnailAttachmentId = UUID.randomUUID()
-            val currentBodyAttachment = mockk<Attachment>()
-            every { currentBodyAttachment.id } returns currentBodyAttachmentId
             val post =
                 Post(
                     title = "기존 제목",
@@ -442,9 +559,6 @@ class PostWriteServiceAttachmentTest {
                 ).apply { id = postId }
 
             every { postRepository.findPostByIdWithAuthor(postId) } returns post
-            every {
-                attachmentService.getConfirmedAttachments(postId, AttachmentReferenceType.POST)
-            } returns listOf(currentBodyAttachment)
 
             val request =
                 UpdatePostRequest(
@@ -475,8 +589,6 @@ class PostWriteServiceAttachmentTest {
             val postId = UUID.randomUUID()
             val currentBodyAttachmentId = UUID.randomUUID()
             val currentThumbnailAttachmentId = UUID.randomUUID()
-            val currentBodyAttachment = mockk<Attachment>()
-            every { currentBodyAttachment.id } returns currentBodyAttachmentId
             val post =
                 Post(
                     title = "기존 제목",
@@ -487,9 +599,6 @@ class PostWriteServiceAttachmentTest {
                 ).apply { id = postId }
 
             every { postRepository.findPostByIdWithAuthor(postId) } returns post
-            every {
-                attachmentService.getConfirmedAttachments(postId, AttachmentReferenceType.POST)
-            } returns listOf(currentBodyAttachment)
 
             // when
             postWriteService.updatePost(
@@ -572,6 +681,71 @@ class PostWriteServiceAttachmentTest {
             // then
             assertThat(post.status).isEqualTo(PostStatusEnum.DRAFT)
             assertThat(post.thumbnailImage).isEqualTo(currentThumbnailAttachmentId)
+            verify(exactly = 0) { attachmentService.confirmAttachmentsByIds(any(), any(), any()) }
+            verify(exactly = 0) { attachmentService.deleteOrphanedAttachmentsByIds(any(), any(), any()) }
+        }
+
+        @Test
+        @DisplayName("DRAFT로 전환하면서 본문과 첨부를 전달해도 첨부를 확정하거나 정리하지 않는다")
+        fun updatePost_toDraftWithAttachmentFields_skipsAttachmentConfirmAndCleanup() {
+            // given
+            val postId = UUID.randomUUID()
+            val newAttachmentId = UUID.randomUUID()
+            val post =
+                Post(
+                    title = "기존 제목",
+                    content = "기존 본문",
+                    author = author,
+                    status = PostStatusEnum.PUBLISHED,
+                ).apply { id = postId }
+
+            every { postRepository.findPostByIdWithAuthor(postId) } returns post
+
+            // when
+            postWriteService.updatePost(
+                postId,
+                UpdatePostRequest(
+                    content = "<img src=\"$newAttachmentId\" />",
+                    attachmentIds = listOf(newAttachmentId),
+                    thumbnailAttachmentId = newAttachmentId,
+                    status = PostStatusEnum.DRAFT,
+                ),
+                author.id!!,
+            )
+
+            // then
+            assertThat(post.thumbnailImage).isNull()
+            verify(exactly = 0) { attachmentService.confirmAttachmentsByIds(any(), any(), any()) }
+            verify(exactly = 0) { attachmentService.deleteOrphanedAttachmentsByIds(any(), any(), any()) }
+        }
+
+        @Test
+        @DisplayName("이미 DRAFT인 게시물은 첨부를 전달해도 확정하거나 정리하지 않는다")
+        fun updatePost_draftPostWithAttachmentFields_skipsAttachmentConfirmAndCleanup() {
+            // given
+            val postId = UUID.randomUUID()
+            val newAttachmentId = UUID.randomUUID()
+            val post =
+                Post(
+                    title = "기존 제목",
+                    content = "기존 본문",
+                    author = author,
+                    status = PostStatusEnum.DRAFT,
+                ).apply { id = postId }
+
+            every { postRepository.findPostByIdWithAuthor(postId) } returns post
+
+            // when
+            postWriteService.updatePost(
+                postId,
+                UpdatePostRequest(
+                    content = "<img src=\"$newAttachmentId\" />",
+                    attachmentIds = listOf(newAttachmentId),
+                ),
+                author.id!!,
+            )
+
+            // then
             verify(exactly = 0) { attachmentService.confirmAttachmentsByIds(any(), any(), any()) }
             verify(exactly = 0) { attachmentService.deleteOrphanedAttachmentsByIds(any(), any(), any()) }
         }

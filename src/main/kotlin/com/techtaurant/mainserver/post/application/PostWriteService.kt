@@ -98,7 +98,7 @@ class PostWriteService(
                 emptyList()
             } else {
                 mergeAttachmentIds(
-                    filterAttachmentIdsIncludedInContent(post.content, request.attachmentIds),
+                    filterAttachmentIdsIncludedInContent(post.referencedAttachmentIds(), request.attachmentIds),
                     request.thumbnailAttachmentId,
                 )
             }
@@ -113,7 +113,7 @@ class PostWriteService(
                 referenceType = AttachmentReferenceType.POST,
                 attachmentIds = attachmentIds,
             )
-            savedPost.thumbnailImage = request.thumbnailAttachmentId ?: attachmentIds.firstOrNull()
+            savedPost.thumbnailImage = request.thumbnailAttachmentId
             savedPost.updatedAt = postRepository.updateThumbnailImage(savedPost.id!!, savedPost.thumbnailImage)
         }
 
@@ -128,6 +128,7 @@ class PostWriteService(
      * 게시물을 수정합니다.
      * 요청에 포함된 필드만 업데이트하며, 작성자 권한을 검증합니다.
      * 상태 전환 시 DRAFT를 제외한 상태는 제목과 본문이 필수입니다.
+     * DRAFT 상태에서는 생성 경로와 동일하게 첨부 확정과 orphan 정리를 수행하지 않습니다.
      *
      * @param postId 게시물 ID
      * @param request 게시물 수정 요청
@@ -162,37 +163,38 @@ class PostWriteService(
             post.status = newStatus
         }
 
-        request.thumbnailAttachmentId?.let { thumbnailAttachmentId ->
-            attachmentService.confirmAttachmentsByIds(
-                referenceId = postId,
-                referenceType = AttachmentReferenceType.POST,
-                attachmentIds = listOf(thumbnailAttachmentId),
-            )
-            post.thumbnailImage = thumbnailAttachmentId
-        }
-
-        if (request.content != null || request.attachmentIds != null) {
-            val attachmentIds =
-                request.attachmentIds
-                    ?: attachmentService
-                        .getConfirmedAttachments(postId, AttachmentReferenceType.POST)
-                        .mapNotNull { it.id }
-            val attachmentIdsIncludedInContent =
-                filterAttachmentIdsIncludedInContent(post.content, attachmentIds)
-
-            request.attachmentIds?.let {
+        val newStatus = request.status ?: post.status
+        if (newStatus != PostStatusEnum.DRAFT) {
+            request.thumbnailAttachmentId?.let { thumbnailAttachmentId ->
                 attachmentService.confirmAttachmentsByIds(
                     referenceId = postId,
                     referenceType = AttachmentReferenceType.POST,
-                    attachmentIds = attachmentIdsIncludedInContent,
+                    attachmentIds = listOf(thumbnailAttachmentId),
                 )
+                post.thumbnailImage = thumbnailAttachmentId
             }
 
-            attachmentService.deleteOrphanedAttachmentsByIds(
-                referenceId = postId,
-                referenceType = AttachmentReferenceType.POST,
-                keepAttachmentIds = mergeAttachmentIds(attachmentIdsIncludedInContent, post.thumbnailImage),
-            )
+            if (request.content != null || request.attachmentIds != null) {
+                val attachmentIdsReferencedInContent = post.referencedAttachmentIds()
+
+                request.attachmentIds?.let { requestedAttachmentIds ->
+                    attachmentService.confirmAttachmentsByIds(
+                        referenceId = postId,
+                        referenceType = AttachmentReferenceType.POST,
+                        attachmentIds =
+                            filterAttachmentIdsIncludedInContent(
+                                attachmentIdsReferencedInContent,
+                                requestedAttachmentIds,
+                            ),
+                    )
+                }
+
+                attachmentService.deleteOrphanedAttachmentsByIds(
+                    referenceId = postId,
+                    referenceType = AttachmentReferenceType.POST,
+                    keepAttachmentIds = mergeAttachmentIds(attachmentIdsReferencedInContent, post.thumbnailImage),
+                )
+            }
         }
 
         val savedPost = postRepository.save(post)
@@ -246,14 +248,14 @@ class PostWriteService(
     }
 
     private fun filterAttachmentIdsIncludedInContent(
-        content: String,
+        attachmentIdsReferencedInContent: List<UUID>,
         requestedAttachmentIds: List<UUID>?,
     ): List<UUID> =
         requestedAttachmentIds
             .orEmpty()
             .distinct()
             .filter { attachmentId ->
-                content.contains(attachmentId.toString())
+                attachmentId in attachmentIdsReferencedInContent
             }
 
     private fun mergeAttachmentIds(
