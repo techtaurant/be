@@ -15,6 +15,7 @@ import io.mockk.runs
 import io.mockk.slot
 import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatCode
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -622,6 +623,31 @@ class AttachmentServiceTest {
             verify { attachmentRepository.deleteAll(listOf(orphanAttachment)) }
 
             triggerAfterCommit()
+            verify { s3StorageService.deleteObjects(listOf(orphanAttachment.objectKey)) }
+        }
+
+        @Test
+        @DisplayName("커밋 후 S3 삭제가 실패해도 예외를 호출자에게 전파하지 않는다")
+        fun deleteOrphanedAttachmentsByIds_s3DeleteFailsAfterCommit_doesNotPropagateException() {
+            // given
+            val orphanAttachment = makeAttachment("posts/$postId/uuid2/orphan.jpg")
+
+            every {
+                attachmentRepository.findAllByReferenceIdAndReferenceType(postId, AttachmentReferenceType.POST)
+            } returns listOf(orphanAttachment)
+            every { attachmentRepository.deleteAll(any<List<Attachment>>()) } just runs
+            every { s3StorageService.deleteObjects(any()) } throws RuntimeException("S3 unavailable")
+
+            // when
+            attachmentService.deleteOrphanedAttachmentsByIds(
+                postId,
+                AttachmentReferenceType.POST,
+                emptyList(),
+            )
+
+            // then
+            // 전파되면 DB 커밋이 끝난 요청이 실패로 보이고 클라이언트가 반영된 상태에 재시도한다.
+            assertThatCode { triggerAfterCommit() }.doesNotThrowAnyException()
             verify { s3StorageService.deleteObjects(listOf(orphanAttachment.objectKey)) }
         }
     }

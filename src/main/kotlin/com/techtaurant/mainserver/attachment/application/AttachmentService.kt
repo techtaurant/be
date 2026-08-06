@@ -253,7 +253,15 @@ class AttachmentService(
         TransactionSynchronizationManager.registerSynchronization(
             object : TransactionSynchronization {
                 override fun afterCommit() {
-                    s3StorageService.deleteObjects(objectKeys)
+                    log.info("Deleting S3 objects after commit: {}", objectKeys)
+                    try {
+                        s3StorageService.deleteObjects(objectKeys)
+                    } catch (e: Exception) {
+                        // afterCommit 예외는 호출자에게 전파되어 이미 커밋된 요청이 실패로 보이고,
+                        // 클라이언트가 반영이 끝난 상태에 재시도하게 된다. 정리 실패의 결과는
+                        // 참조되지 않는 객체가 남는 것뿐이므로 여기서 가두고 로그로만 남긴다.
+                        log.error("Failed to delete S3 objects after commit: {}", objectKeys, e)
+                    }
                 }
             },
         )
