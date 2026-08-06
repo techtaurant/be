@@ -98,7 +98,7 @@ class PostWriteService(
                 emptyList()
             } else {
                 mergeAttachmentIds(
-                    filterAttachmentIdsIncludedInContent(post.content, request.attachmentIds),
+                    filterAttachmentIdsIncludedInContent(post.referencedAttachmentIds(), request.attachmentIds),
                     request.thumbnailAttachmentId,
                 )
             }
@@ -113,7 +113,7 @@ class PostWriteService(
                 referenceType = AttachmentReferenceType.POST,
                 attachmentIds = attachmentIds,
             )
-            savedPost.thumbnailImage = request.thumbnailAttachmentId ?: attachmentIds.firstOrNull()
+            savedPost.thumbnailImage = request.thumbnailAttachmentId
             savedPost.updatedAt = postRepository.updateThumbnailImage(savedPost.id!!, savedPost.thumbnailImage)
         }
 
@@ -128,6 +128,8 @@ class PostWriteService(
      * 게시물을 수정합니다.
      * 요청에 포함된 필드만 업데이트하며, 작성자 권한을 검증합니다.
      * 상태 전환 시 DRAFT를 제외한 상태는 제목과 본문이 필수입니다.
+     * DRAFT 상태에서는 생성 경로와 동일하게 첨부 확정과 orphan 정리를 수행하지 않습니다.
+     * 본문, 첨부 목록, 썸네일 중 하나라도 전달되면 본문 참조와 현재 썸네일을 기준으로 orphan 첨부를 정리합니다.
      *
      * @param postId 게시물 ID
      * @param request 게시물 수정 요청
@@ -164,34 +166,40 @@ class PostWriteService(
 
         val newStatus = request.status ?: post.status
         if (newStatus != PostStatusEnum.DRAFT) {
-            val attachmentIdsIncludedInContent =
-                mergeAttachmentIds(
-                    filterAttachmentIdsIncludedInContent(post.content, request.attachmentIds),
-                    request.thumbnailAttachmentId,
+            // 썸네일 교체도 이전 썸네일의 참조를 끊으므로 본문·첨부 목록 변경과 같은 정리 대상으로 본다.
+            // 그렇지 않으면 본문에 없던 이전 썸네일이 확정 상태로 남아 상세 조회의 첨부 URL 목록에 계속 노출된다.
+            val isAttachmentReferenceChanged =
+                request.content != null || request.attachmentIds != null || request.thumbnailAttachmentId != null
+
+            if (isAttachmentReferenceChanged) {
+                val attachmentIdsReferencedInContent = post.referencedAttachmentIds()
+
+                // 확정은 S3 복사를 일으키므로 썸네일과 본문 첨부를 한 번에 넘긴다.
+                // 나눠 호출하면 앞선 호출이 S3를 바꾼 뒤 뒤 호출의 검증이 실패할 수 있고,
+                // 그때 롤백된 DB와 이미 변경된 S3가 어긋난다.
+                if (request.attachmentIds != null || request.thumbnailAttachmentId != null) {
+                    attachmentService.confirmAttachmentsByIds(
+                        referenceId = postId,
+                        referenceType = AttachmentReferenceType.POST,
+                        attachmentIds =
+                            mergeAttachmentIds(
+                                filterAttachmentIdsIncludedInContent(
+                                    attachmentIdsReferencedInContent,
+                                    request.attachmentIds,
+                                ),
+                                request.thumbnailAttachmentId,
+                            ),
+                    )
+                }
+
+                request.thumbnailAttachmentId?.let { post.thumbnailImage = it }
+
+                attachmentService.deleteOrphanedAttachmentsByIds(
+                    referenceId = postId,
+                    referenceType = AttachmentReferenceType.POST,
+                    keepAttachmentIds = mergeAttachmentIds(attachmentIdsReferencedInContent, post.thumbnailImage),
                 )
-            val thumbnailAttachmentId =
-                resolveThumbnailAttachmentId(
-                    requestThumbnailAttachmentId = request.thumbnailAttachmentId,
-                    currentThumbnailAttachmentId = post.thumbnailImage,
-                    attachmentIdsIncludedInContent = attachmentIdsIncludedInContent,
-                )
-            val keepAttachmentIds = mergeAttachmentIds(attachmentIdsIncludedInContent, thumbnailAttachmentId)
-
-            attachmentService.confirmAttachmentsByIds(
-                referenceId = postId,
-                referenceType = AttachmentReferenceType.POST,
-                attachmentIds = keepAttachmentIds,
-            )
-
-            attachmentService.deleteOrphanedAttachmentsByIds(
-                referenceId = postId,
-                referenceType = AttachmentReferenceType.POST,
-                keepAttachmentIds = keepAttachmentIds,
-            )
-
-            post.thumbnailImage = thumbnailAttachmentId
-        } else {
-            post.thumbnailImage = null
+            }
         }
 
         val savedPost = postRepository.save(post)
@@ -245,46 +253,20 @@ class PostWriteService(
     }
 
     private fun filterAttachmentIdsIncludedInContent(
-        content: String,
+        attachmentIdsReferencedInContent: List<UUID>,
         requestedAttachmentIds: List<UUID>?,
     ): List<UUID> =
         requestedAttachmentIds
             .orEmpty()
             .distinct()
             .filter { attachmentId ->
-                content.contains(attachmentId.toString())
+                attachmentId in attachmentIdsReferencedInContent
             }
 
     private fun mergeAttachmentIds(
         attachmentIds: List<UUID>,
         thumbnailAttachmentId: UUID?,
     ): List<UUID> = (attachmentIds + listOfNotNull(thumbnailAttachmentId)).distinct()
-
-    /**
-     * 게시물 수정 후 최종 썸네일 attachmentId를 결정합니다.
-     * 요청 썸네일이 있으면 그 값을 우선 사용하고, 없으면 본문에 여전히 포함된 기존 썸네일을 유지합니다.
-     * 둘 다 없으면 본문에 남아 있는 첫 번째 attachment를 썸네일로 사용합니다.
-     *
-     * @param requestThumbnailAttachmentId 수정 요청에서 명시적으로 전달한 썸네일 attachmentId
-     * @param currentThumbnailAttachmentId 게시물에 현재 저장된 썸네일 attachmentId
-     * @param attachmentIdsIncludedInContent 수정 후 본문에 포함된 attachmentId 목록
-     * @return 최종적으로 게시물에 저장할 썸네일 attachmentId, 없으면 null
-     */
-    private fun resolveThumbnailAttachmentId(
-        requestThumbnailAttachmentId: UUID?,
-        currentThumbnailAttachmentId: UUID?,
-        attachmentIdsIncludedInContent: List<UUID>,
-    ): UUID? {
-        if (requestThumbnailAttachmentId != null) {
-            return requestThumbnailAttachmentId
-        }
-
-        if (currentThumbnailAttachmentId in attachmentIdsIncludedInContent) {
-            return currentThumbnailAttachmentId
-        }
-
-        return attachmentIdsIncludedInContent.firstOrNull()
-    }
 
     /**
      * 카테고리 경로를 파싱하여 해당 카테고리를 반환합니다.

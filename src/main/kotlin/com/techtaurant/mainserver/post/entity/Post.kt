@@ -3,6 +3,7 @@ package com.techtaurant.mainserver.post.entity
 import com.techtaurant.mainserver.common.base.EntityBase
 import com.techtaurant.mainserver.post.enums.PostStatusEnum
 import com.techtaurant.mainserver.user.entity.User
+import java.util.UUID
 
 /**
  * 게시물 엔티티
@@ -32,5 +33,22 @@ class Post(
 ) : EntityBase(), TaggedContent {
     init {
         validateTagCount()
+    }
+
+    /**
+     * 본문이 참조하는 첨부 ID를 본문에 등장한 순서대로 반환합니다.
+     * 첨부 유지 판정과 썸네일 fallback이 모두 이 목록을 기준으로 동작하므로,
+     * 본문에서 참조가 사라진 첨부는 요청 목록에 남아 있어도 유지 대상이 아닙니다.
+     */
+    fun referencedAttachmentIds(): List<UUID> =
+        ATTACHMENT_ID_PATTERN
+            .findAll(content)
+            .map { UUID.fromString(it.value) }
+            .distinct()
+            .toList()
+
+    companion object {
+        private val ATTACHMENT_ID_PATTERN =
+            Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
     }
 }
