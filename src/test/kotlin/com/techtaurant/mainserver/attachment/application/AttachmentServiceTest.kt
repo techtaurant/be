@@ -15,12 +15,15 @@ import io.mockk.runs
 import io.mockk.slot
 import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatCode
 import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.UUID
 
 class AttachmentServiceTest {
@@ -36,6 +39,22 @@ class AttachmentServiceTest {
         )
 
     private val postId = UUID.randomUUID()
+
+    // 파괴적 S3 삭제는 커밋 이후로 미뤄지므로, 단위 테스트도 트랜잭션 동기화를 활성화해야 콜백이 등록된다.
+    @BeforeEach
+    fun initTransactionSynchronization() {
+        TransactionSynchronizationManager.initSynchronization()
+    }
+
+    @AfterEach
+    fun clearTransactionSynchronization() {
+        TransactionSynchronizationManager.clearSynchronization()
+    }
+
+    /** 등록된 커밋 후 콜백을 실행해 커밋 시점을 재현한다. */
+    private fun triggerAfterCommit() {
+        TransactionSynchronizationManager.getSynchronizations().forEach { it.afterCommit() }
+    }
 
     private fun makeAttachment(
         objectKey: String,
@@ -130,7 +149,6 @@ class AttachmentServiceTest {
             }
             every { s3StorageService.exists(any()) } returns true
             every { s3StorageService.copyObject(any(), any()) } just runs
-            every { s3StorageService.deleteObject(any()) } just runs
             every { attachmentRepository.saveAll(any<List<Attachment>>()) } answers { firstArg() }
         }
 
@@ -314,8 +332,8 @@ class AttachmentServiceTest {
         }
 
         @Test
-        @DisplayName("TMP 파일을 posts/{referenceId}/ 경로로 복사하고 원본을 삭제한다")
-        fun confirmAttachmentsByIds_tmpAttachment_copiesAndDeletesS3Object() {
+        @DisplayName("TMP 파일을 posts/{referenceId}/ 경로로 복사하고 tmp/ 원본은 남긴다")
+        fun confirmAttachmentsByIds_tmpAttachment_copiesS3ObjectAndKeepsSource() {
             // given
             every { attachmentRepository.findAllById(listOf(tmpAttachment.id!!)) } returns listOf(tmpAttachment)
 
@@ -332,7 +350,8 @@ class AttachmentServiceTest {
             assertThat(newKey).endsWith("photo.jpg")
 
             verify { s3StorageService.copyObject(tmpKey, newKey) }
-            verify { s3StorageService.deleteObject(tmpKey) }
+            // 커밋 전에 원본을 지우면 롤백 시 DB가 가리키는 tmp/ 객체가 사라져 재시도가 막힌다.
+            verify(exactly = 0) { s3StorageService.deleteObjects(any()) }
         }
 
         @Test
@@ -485,12 +504,15 @@ class AttachmentServiceTest {
             attachmentService.deleteAttachmentsByReference(postId, AttachmentReferenceType.POST)
 
             // then
+            verify { attachmentRepository.deleteAllByReferenceIdAndReferenceType(postId, AttachmentReferenceType.POST) }
+            verify(exactly = 0) { s3StorageService.deleteObjects(any()) }
+
+            triggerAfterCommit()
             verify {
                 s3StorageService.deleteObjects(
                     match { it.containsAll(listOf("posts/$postId/uuid1/a.jpg", "posts/$postId/uuid2/b.jpg")) },
                 )
             }
-            verify { attachmentRepository.deleteAllByReferenceIdAndReferenceType(postId, AttachmentReferenceType.POST) }
         }
 
         @Test
@@ -540,8 +562,11 @@ class AttachmentServiceTest {
             )
 
             // then
-            verify { s3StorageService.deleteObjects(listOf(orphanAttachment.objectKey)) }
             verify { attachmentRepository.deleteAll(listOf(orphanAttachment)) }
+            verify(exactly = 0) { s3StorageService.deleteObjects(any()) }
+
+            triggerAfterCommit()
+            verify { s3StorageService.deleteObjects(listOf(orphanAttachment.objectKey)) }
         }
 
         @Test
@@ -595,8 +620,35 @@ class AttachmentServiceTest {
             verify(exactly = 0) {
                 attachmentRepository.findAllByReferenceIdAndReferenceTypeAndIdNotIn(any(), any(), any())
             }
-            verify { s3StorageService.deleteObjects(listOf(orphanAttachment.objectKey)) }
             verify { attachmentRepository.deleteAll(listOf(orphanAttachment)) }
+
+            triggerAfterCommit()
+            verify { s3StorageService.deleteObjects(listOf(orphanAttachment.objectKey)) }
+        }
+
+        @Test
+        @DisplayName("커밋 후 S3 삭제가 실패해도 예외를 호출자에게 전파하지 않는다")
+        fun deleteOrphanedAttachmentsByIds_s3DeleteFailsAfterCommit_doesNotPropagateException() {
+            // given
+            val orphanAttachment = makeAttachment("posts/$postId/uuid2/orphan.jpg")
+
+            every {
+                attachmentRepository.findAllByReferenceIdAndReferenceType(postId, AttachmentReferenceType.POST)
+            } returns listOf(orphanAttachment)
+            every { attachmentRepository.deleteAll(any<List<Attachment>>()) } just runs
+            every { s3StorageService.deleteObjects(any()) } throws RuntimeException("S3 unavailable")
+
+            // when
+            attachmentService.deleteOrphanedAttachmentsByIds(
+                postId,
+                AttachmentReferenceType.POST,
+                emptyList(),
+            )
+
+            // then
+            // 전파되면 DB 커밋이 끝난 요청이 실패로 보이고 클라이언트가 반영된 상태에 재시도한다.
+            assertThatCode { triggerAfterCommit() }.doesNotThrowAnyException()
+            verify { s3StorageService.deleteObjects(listOf(orphanAttachment.objectKey)) }
         }
     }
 

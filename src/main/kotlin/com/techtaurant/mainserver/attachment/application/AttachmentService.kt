@@ -14,12 +14,14 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.UUID
 
 /**
  * 첨부파일 비즈니스 로직 서비스.
  *
- * Presigned URL 발급, TMP → CONFIRMED 전환(S3 파일 이동 포함),
+ * Presigned URL 발급, TMP → CONFIRMED 전환(S3 파일 복사 포함),
  * 첨부파일 삭제를 담당한다.
  */
 @Service
@@ -108,7 +110,9 @@ class AttachmentService(
 
     /**
      * attachmentId에 해당하는 TMP Attachment를 CONFIRMED 상태로 전환합니다.
-     * S3 파일을 tmp/ 경로에서 referenceType에 맞는 확정 경로로 이동합니다.
+     * S3 파일을 tmp/ 경로에서 referenceType에 맞는 확정 경로로 복사하며, tmp/ 원본은 지우지 않습니다.
+     * 원본을 커밋 전에 지우면 이후 단계나 커밋이 실패했을 때 DB는 tmp/ 키로 롤백되는데 그 객체가 없어
+     * 재시도가 불가능해지므로, 원본 정리는 tmp/ 경로의 S3 lifecycle 만료 정책에 맡긴다.
      *
      * @param referenceId 연관 도메인 PK (게시물 ID 등)
      * @param referenceType 연관 도메인 타입
@@ -179,7 +183,6 @@ class AttachmentService(
                 sourceKey = tmpObjectKey,
                 destinationKey = newObjectKey,
             )
-            s3StorageService.deleteObject(tmpObjectKey)
 
             attachment.objectKey = newObjectKey
             attachment.status = AttachmentStatus.CONFIRMED
@@ -204,8 +207,8 @@ class AttachmentService(
         val attachments = attachmentRepository.findAllByReferenceIdAndReferenceType(referenceId, referenceType)
         if (attachments.isEmpty()) return
 
-        s3StorageService.deleteObjects(attachments.map { it.objectKey })
         attachmentRepository.deleteAllByReferenceIdAndReferenceType(referenceId, referenceType)
+        deleteObjectsAfterCommit(attachments.map { it.objectKey })
     }
 
     /**
@@ -234,8 +237,34 @@ class AttachmentService(
             }
         if (orphaned.isEmpty()) return
 
-        s3StorageService.deleteObjects(orphaned.map { it.objectKey })
         attachmentRepository.deleteAll(orphaned)
+        deleteObjectsAfterCommit(orphaned.map { it.objectKey })
+    }
+
+    /**
+     * S3 객체 삭제를 트랜잭션 커밋 이후로 미룹니다.
+     * 커밋 전에 지우면 롤백됐을 때 DB에는 첨부 행이 남고 S3 객체만 사라져,
+     * 정상으로 보이는 presigned URL이 존재하지 않는 객체를 가리키게 된다.
+     * 커밋 뒤로 미루면 실패해도 참조되지 않는 객체만 남으므로 조회 결과가 깨지지 않는다.
+     *
+     * @param objectKeys 삭제할 S3 오브젝트 키 목록
+     */
+    private fun deleteObjectsAfterCommit(objectKeys: List<String>) {
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCommit() {
+                    log.info("Deleting S3 objects after commit: {}", objectKeys)
+                    try {
+                        s3StorageService.deleteObjects(objectKeys)
+                    } catch (e: Exception) {
+                        // afterCommit 예외는 호출자에게 전파되어 이미 커밋된 요청이 실패로 보이고,
+                        // 클라이언트가 반영이 끝난 상태에 재시도하게 된다. 정리 실패의 결과는
+                        // 참조되지 않는 객체가 남는 것뿐이므로 여기서 가두고 로그로만 남긴다.
+                        log.error("Failed to delete S3 objects after commit: {}", objectKeys, e)
+                    }
+                }
+            },
+        )
     }
 
     /**

@@ -166,15 +166,6 @@ class PostWriteService(
 
         val newStatus = request.status ?: post.status
         if (newStatus != PostStatusEnum.DRAFT) {
-            request.thumbnailAttachmentId?.let { thumbnailAttachmentId ->
-                attachmentService.confirmAttachmentsByIds(
-                    referenceId = postId,
-                    referenceType = AttachmentReferenceType.POST,
-                    attachmentIds = listOf(thumbnailAttachmentId),
-                )
-                post.thumbnailImage = thumbnailAttachmentId
-            }
-
             // 썸네일 교체도 이전 썸네일의 참조를 끊으므로 본문·첨부 목록 변경과 같은 정리 대상으로 본다.
             // 그렇지 않으면 본문에 없던 이전 썸네일이 확정 상태로 남아 상세 조회의 첨부 URL 목록에 계속 노출된다.
             val isAttachmentReferenceChanged =
@@ -183,17 +174,25 @@ class PostWriteService(
             if (isAttachmentReferenceChanged) {
                 val attachmentIdsReferencedInContent = post.referencedAttachmentIds()
 
-                request.attachmentIds?.let { requestedAttachmentIds ->
+                // 확정은 S3 복사를 일으키므로 썸네일과 본문 첨부를 한 번에 넘긴다.
+                // 나눠 호출하면 앞선 호출이 S3를 바꾼 뒤 뒤 호출의 검증이 실패할 수 있고,
+                // 그때 롤백된 DB와 이미 변경된 S3가 어긋난다.
+                if (request.attachmentIds != null || request.thumbnailAttachmentId != null) {
                     attachmentService.confirmAttachmentsByIds(
                         referenceId = postId,
                         referenceType = AttachmentReferenceType.POST,
                         attachmentIds =
-                            filterAttachmentIdsIncludedInContent(
-                                attachmentIdsReferencedInContent,
-                                requestedAttachmentIds,
+                            mergeAttachmentIds(
+                                filterAttachmentIdsIncludedInContent(
+                                    attachmentIdsReferencedInContent,
+                                    request.attachmentIds,
+                                ),
+                                request.thumbnailAttachmentId,
                             ),
                     )
                 }
+
+                request.thumbnailAttachmentId?.let { post.thumbnailImage = it }
 
                 attachmentService.deleteOrphanedAttachmentsByIds(
                     referenceId = postId,

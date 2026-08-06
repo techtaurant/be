@@ -325,8 +325,8 @@ class PostWriteServiceAttachmentTest {
         }
 
         @Test
-        @DisplayName("본문 첨부와 thumbnailAttachmentId를 각각 전달하면 각각 confirm하고 유지한다")
-        fun updatePost_withAttachmentIdsAndThumbnailAttachmentId_confirmsEachField() {
+        @DisplayName("본문 첨부와 thumbnailAttachmentId를 함께 전달하면 한 번의 confirm으로 처리하고 유지한다")
+        fun updatePost_withAttachmentIdsAndThumbnailAttachmentId_confirmsInSingleCall() {
             // given
             val postId = UUID.randomUUID()
             val contentAttachmentId = UUID.randomUUID()
@@ -353,18 +353,12 @@ class PostWriteServiceAttachmentTest {
             postWriteService.updatePost(postId, request, author.id!!)
 
             // then
-            verify {
+            // 나눠 호출하면 앞선 호출이 S3를 바꾼 뒤 뒤 호출의 검증이 실패할 수 있으므로 한 번에 넘긴다.
+            verify(exactly = 1) {
                 attachmentService.confirmAttachmentsByIds(
                     postId,
                     AttachmentReferenceType.POST,
-                    listOf(thumbnailAttachmentId),
-                )
-            }
-            verify {
-                attachmentService.confirmAttachmentsByIds(
-                    postId,
-                    AttachmentReferenceType.POST,
-                    listOf(contentAttachmentId),
+                    listOf(contentAttachmentId, thumbnailAttachmentId),
                 )
             }
             verify {
