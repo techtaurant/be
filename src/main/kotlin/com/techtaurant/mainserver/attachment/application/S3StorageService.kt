@@ -5,7 +5,6 @@ import org.springframework.stereotype.Service
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.CopyObjectRequest
 import software.amazon.awssdk.services.s3.model.Delete
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
@@ -19,7 +18,7 @@ import java.time.Duration
 /**
  * S3 파일 I/O 작업 서비스.
  *
- * Presigned URL 생성, 파일 복사, 단건/배치 삭제를 담당한다.
+ * Presigned URL 생성, 파일 복사, 배치 삭제를 담당한다.
  * 비즈니스 로직 없이 AWS S3 API 호출만 수행한다.
  */
 @Service
@@ -126,21 +125,6 @@ class S3StorageService(
                 .build()
 
         s3Client.copyObject(request)
-    }
-
-    /**
-     * S3 오브젝트를 삭제합니다.
-     *
-     * @param objectKey 삭제할 오브젝트 키
-     */
-    fun deleteObject(objectKey: String) {
-        val request =
-            DeleteObjectRequest.builder()
-                .bucket(bucketName)
-                .key(objectKey)
-                .build()
-
-        s3Client.deleteObject(request)
     }
 
     /**
