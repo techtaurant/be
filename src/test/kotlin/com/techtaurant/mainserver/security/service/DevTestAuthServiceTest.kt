@@ -14,6 +14,7 @@ import com.techtaurant.mainserver.user.infrastructure.out.UserRepository
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
@@ -53,6 +54,7 @@ class DevTestAuthServiceTest {
     fun `create dev test user with unique name policy`() {
         val identifier = "dev-user"
         val request = DevTestLoginRequest(identifier = identifier, password = "dev-password", role = UserRole.ADMIN)
+        val httpRequest = mockk<HttpServletRequest>()
         val response = mockk<HttpServletResponse>(relaxed = true)
         val userId = UUID.randomUUID()
         val createdUser =
@@ -72,7 +74,7 @@ class DevTestAuthServiceTest {
         every { jwtTokenProvider.createAccessToken(userId, UserRole.ADMIN) } returns "access-token"
         every { jwtTokenProvider.createRefreshToken(userId) } returns "refresh-token"
 
-        val result = devTestAuthService.execute(request, response)
+        val result = devTestAuthService.execute(request, httpRequest, response)
 
         assertEquals("access-token", result.accessToken)
         assertEquals("refresh-token", result.refreshToken)
@@ -87,6 +89,7 @@ class DevTestAuthServiceTest {
         }
         verify {
             cookieHelper.addCookie(
+                httpRequest,
                 response,
                 JwtConstants.ACCESS_TOKEN_COOKIE,
                 "access-token",
@@ -95,6 +98,7 @@ class DevTestAuthServiceTest {
         }
         verify {
             cookieHelper.addCookie(
+                httpRequest,
                 response,
                 JwtConstants.REFRESH_TOKEN_COOKIE,
                 "refresh-token",
@@ -109,6 +113,7 @@ class DevTestAuthServiceTest {
     fun `update existing dev test user role`() {
         val identifier = "existing-user"
         val request = DevTestLoginRequest(identifier = identifier, password = "dev-password", role = UserRole.ADMIN)
+        val httpRequest = mockk<HttpServletRequest>()
         val response = mockk<HttpServletResponse>(relaxed = true)
         val userId = UUID.randomUUID()
         val existingUser =
@@ -128,7 +133,7 @@ class DevTestAuthServiceTest {
         every { jwtTokenProvider.createAccessToken(userId, UserRole.ADMIN) } returns "access-token"
         every { jwtTokenProvider.createRefreshToken(userId) } returns "refresh-token"
 
-        val result = devTestAuthService.execute(request, response)
+        val result = devTestAuthService.execute(request, httpRequest, response)
 
         assertEquals(UserRole.ADMIN, existingUser.role)
         assertEquals("access-token", result.accessToken)

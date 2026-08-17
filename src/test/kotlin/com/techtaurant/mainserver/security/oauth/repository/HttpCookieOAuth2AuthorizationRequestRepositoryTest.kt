@@ -27,7 +27,7 @@ class HttpCookieOAuth2AuthorizationRequestRepositoryTest {
         val response = MockHttpServletResponse()
         val authorizationRequest = createAuthorizationRequest()
 
-        every { cookieHelper.addCookie(any(), any(), any(), any()) } returns Unit
+        every { cookieHelper.addCookie(any(), any(), any(), any(), any()) } returns Unit
 
         // when
         repository.saveAuthorizationRequest(authorizationRequest, request, response)
@@ -35,6 +35,7 @@ class HttpCookieOAuth2AuthorizationRequestRepositoryTest {
         // then
         verify {
             cookieHelper.addCookie(
+                request,
                 response,
                 HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_SUCCESS_REDIRECT_URI_COOKIE,
                 "/ko/oauth/callback?redirect=%2Fko%2Fpost%2Fwrite",
@@ -43,6 +44,7 @@ class HttpCookieOAuth2AuthorizationRequestRepositoryTest {
         }
         verify {
             cookieHelper.addCookie(
+                request,
                 response,
                 HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_FAILURE_REDIRECT_URI_COOKIE,
                 "/ko/oauth/error",

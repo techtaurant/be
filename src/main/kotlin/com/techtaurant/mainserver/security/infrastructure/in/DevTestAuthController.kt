@@ -7,6 +7,7 @@ import com.techtaurant.mainserver.security.SecurityConstants
 import com.techtaurant.mainserver.security.dto.DevTestLoginRequest
 import com.techtaurant.mainserver.security.dto.DevTestLoginResponse
 import com.techtaurant.mainserver.security.service.DevTestAuthService
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
@@ -35,8 +36,9 @@ class DevTestAuthController(
     @PostMapping("/login")
     override fun login(
         @RequestBody @Valid request: DevTestLoginRequest,
+        httpRequest: HttpServletRequest,
         response: HttpServletResponse,
     ): ApiResponse<DevTestLoginResponse> {
-        return ApiResponse.ok(devTestAuthService.execute(request, response))
+        return ApiResponse.ok(devTestAuthService.execute(request, httpRequest, response))
     }
 }

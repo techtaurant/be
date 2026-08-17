@@ -13,6 +13,7 @@ import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.application.UserUniqueNameService
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.infrastructure.out.UserRepository
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.context.annotation.Profile
@@ -54,6 +55,7 @@ class DevTestAuthService(
     @Transactional
     fun execute(
         request: DevTestLoginRequest,
+        httpRequest: HttpServletRequest,
         response: HttpServletResponse,
     ): DevTestLoginResponse {
         validatePassword(request.password)
@@ -67,12 +69,14 @@ class DevTestAuthService(
         tokenCacheManager.saveRefreshToken(userId.toString(), refreshToken)
 
         cookieHelper.addCookie(
+            httpRequest,
             response,
             JwtConstants.ACCESS_TOKEN_COOKIE,
             accessToken,
             (jwtProperties.accessTokenExpireMs / 1000).toInt(),
         )
         cookieHelper.addCookie(
+            httpRequest,
             response,
             JwtConstants.REFRESH_TOKEN_COOKIE,
             refreshToken,

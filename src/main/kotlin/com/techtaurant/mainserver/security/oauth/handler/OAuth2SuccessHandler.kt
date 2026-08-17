@@ -43,12 +43,14 @@ class OAuth2SuccessHandler(
         tokenCacheManager.saveRefreshToken(userId.toString(), refreshToken)
 
         cookieHelper.addCookie(
+            request,
             response,
             JwtConstants.ACCESS_TOKEN_COOKIE,
             accessToken,
             (jwtProperties.accessTokenExpireMs / 1000).toInt(),
         )
         cookieHelper.addCookie(
+            request,
             response,
             JwtConstants.REFRESH_TOKEN_COOKIE,
             refreshToken,
