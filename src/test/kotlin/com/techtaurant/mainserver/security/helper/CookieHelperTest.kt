@@ -36,7 +36,7 @@ class CookieHelperTest {
         // given
         val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
         val legacyResponse = MockHttpServletResponse()
-        addLegacyRefreshTokenCookie(legacyResponse)
+        addLegacyHostOnlyCookie(legacyResponse, JwtConstants.REFRESH_TOKEN_COOKIE, "legacy-refresh-token", "/")
         storeSetCookies(cookieManager, LOGIN_URI, legacyResponse)
 
         val response = MockHttpServletResponse()
@@ -64,7 +64,7 @@ class CookieHelperTest {
                 .contains("Max-Age=")
                 .contains("Expires=")
         }
-        assertThat(setCookieHeaders.single { it.startsWith("accessToken=") }).contains("Path=/;")
+        assertThat(setCookieHeaders.single { it.startsWith("accessToken=access-token") }).contains("Path=/;")
         assertThat(
             setCookieHeaders.single {
                 it.startsWith("refreshToken=refresh-token")
@@ -130,32 +130,82 @@ class CookieHelperTest {
 
         // then
         val deletionHeaders = logoutResponse.getHeaders(HttpHeaders.SET_COOKIE)
-        assertThat(deletionHeaders.single { it.startsWith("accessToken=") })
-            .contains("Path=/;")
-            .contains("Max-Age=0")
+        assertThat(deletionHeaders).allSatisfy { header ->
+            assertThat(header).contains("Max-Age=0")
+        }
         assertThat(
             deletionHeaders.single {
-                it.startsWith("refreshToken=") &&
-                    it.contains("Path=$REFRESH_TOKEN_PATH;")
+                it.startsWith("accessToken=") && it.contains(DOMAIN_ATTRIBUTE)
             },
-        )
-            .contains("Path=$REFRESH_TOKEN_PATH;")
-            .contains("Max-Age=0")
+        ).contains("Path=/;")
         assertThat(
             deletionHeaders.single {
-                it.startsWith("refreshToken=") &&
-                    it.contains("Path=/;")
+                it.startsWith("refreshToken=") && it.contains(DOMAIN_ATTRIBUTE)
             },
-        ).contains("Max-Age=0")
+        ).contains("Path=$REFRESH_TOKEN_PATH;")
         assertThat(getCookieHeader(cookieManager, GENERAL_API_URI)).isEmpty()
         assertThat(getCookieHeader(cookieManager, REFRESH_API_URI)).isEmpty()
     }
 
-    private fun addLegacyRefreshTokenCookie(response: MockHttpServletResponse) {
+    @Test
+    @DisplayName("인증 쿠키는 techtaurant.com 하위 도메인인 프론트엔드 서버에서도 읽을 수 있다")
+    fun authCookiesAreReadableFromFrontendSubdomain() {
+        // given
+        val response = MockHttpServletResponse()
+        cookieHelper.addCookie(response, JwtConstants.ACCESS_TOKEN_COOKIE, "access-token", 3600)
+        val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
+
+        // when
+        storeSetCookies(cookieManager, LOGIN_URI, response)
+        val frontendCookieHeader = getCookieHeader(cookieManager, FRONTEND_SERVER_URI)
+
+        // then
+        assertThat(response.getHeaders(HttpHeaders.SET_COOKIE).single { it.startsWith("accessToken=access-token") })
+            .contains(DOMAIN_ATTRIBUTE)
+        assertThat(frontendCookieHeader).contains("accessToken=access-token")
+    }
+
+    @Test
+    @DisplayName("Domain 없이 발급됐던 이전 인증 쿠키는 새 쿠키를 내려줄 때 함께 만료된다")
+    fun addCookieExpiresLegacyHostOnlyCookies() {
+        // given
+        val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
+        val legacyResponse = MockHttpServletResponse()
+        addLegacyHostOnlyCookie(legacyResponse, JwtConstants.ACCESS_TOKEN_COOKIE, "legacy-access-token", "/")
+        addLegacyHostOnlyCookie(
+            legacyResponse,
+            JwtConstants.REFRESH_TOKEN_COOKIE,
+            "legacy-refresh-token",
+            REFRESH_TOKEN_PATH,
+        )
+        storeSetCookies(cookieManager, LOGIN_URI, legacyResponse)
+
+        val response = MockHttpServletResponse()
+        cookieHelper.addCookie(response, JwtConstants.ACCESS_TOKEN_COOKIE, "access-token", 3600)
+        cookieHelper.addCookie(response, JwtConstants.REFRESH_TOKEN_COOKIE, "refresh-token", 604800)
+
+        // when
+        storeSetCookies(cookieManager, LOGIN_URI, response)
+
+        // then
+        assertThat(getCookieHeader(cookieManager, GENERAL_API_URI))
+            .contains("accessToken=access-token")
+            .doesNotContain("legacy-access-token")
+        assertThat(getCookieHeader(cookieManager, REFRESH_API_URI))
+            .contains("refreshToken=refresh-token")
+            .doesNotContain("legacy-refresh-token")
+    }
+
+    private fun addLegacyHostOnlyCookie(
+        response: MockHttpServletResponse,
+        name: String,
+        value: String,
+        path: String,
+    ) {
         val legacyCookie =
-            ResponseCookie.from(JwtConstants.REFRESH_TOKEN_COOKIE, "legacy-refresh-token")
+            ResponseCookie.from(name, value)
                 .maxAge(Duration.ofDays(7))
-                .path("/")
+                .path(path)
                 .httpOnly(true)
                 .secure(true)
                 .sameSite("Lax")
@@ -187,7 +237,9 @@ class CookieHelperTest {
 
     companion object {
         private const val REFRESH_TOKEN_PATH = "/open-api/auth/refresh"
+        private const val DOMAIN_ATTRIBUTE = "Domain=.techtaurant.com;"
         private val LOGIN_URI = URI("https://api.techtaurant.com/oauth2/callback/google")
+        private val FRONTEND_SERVER_URI = URI("https://www.techtaurant.com/")
         private val GENERAL_API_URI = URI("https://api.techtaurant.com/api/users/me")
         private val REFRESH_API_URI = URI("https://api.techtaurant.com$REFRESH_TOKEN_PATH")
         private val LOGOUT_API_URI = URI("https://api.techtaurant.com/api/auth/logout")
