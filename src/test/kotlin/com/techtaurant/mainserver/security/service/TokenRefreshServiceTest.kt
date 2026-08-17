@@ -65,7 +65,7 @@ class TokenRefreshServiceTest {
             }
 
         every { cookieHelper.getCookie(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns refreshTokenValue
-        every { cookieHelper.addCookie(any(), any(), any(), any()) } returns Unit
+        every { cookieHelper.addCookie(any(), any(), any(), any(), any()) } returns Unit
         every { jwtTokenProvider.validateAndGetUserId(refreshTokenValue) } returns userId
         every { tokenCacheManager.getRefreshToken(userId.toString()) } returns refreshTokenValue
         every { userRepository.findById(userId) } returns Optional.of(user)
@@ -79,6 +79,7 @@ class TokenRefreshServiceTest {
         // then
         verify {
             cookieHelper.addCookie(
+                request,
                 response,
                 JwtConstants.ACCESS_TOKEN_COOKIE,
                 newAccessToken,
@@ -87,6 +88,7 @@ class TokenRefreshServiceTest {
         }
         verify {
             cookieHelper.addCookie(
+                request,
                 response,
                 JwtConstants.REFRESH_TOKEN_COOKIE,
                 newRefreshToken,

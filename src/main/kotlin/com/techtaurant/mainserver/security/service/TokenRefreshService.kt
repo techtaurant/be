@@ -68,12 +68,14 @@ class TokenRefreshService(
 
         // 8. 쿠키에 새 토큰 설정
         cookieHelper.addCookie(
+            request,
             response,
             JwtConstants.ACCESS_TOKEN_COOKIE,
             newAccessToken,
             (jwtProperties.accessTokenExpireMs / 1000).toInt(),
         )
         cookieHelper.addCookie(
+            request,
             response,
             JwtConstants.REFRESH_TOKEN_COOKIE,
             newRefreshToken,

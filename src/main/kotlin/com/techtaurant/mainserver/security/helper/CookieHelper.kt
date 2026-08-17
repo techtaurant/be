@@ -14,21 +14,23 @@ class CookieHelper(
     private val cookieProperties: CookieProperties,
 ) {
     fun addCookie(
+        request: HttpServletRequest,
         response: HttpServletResponse,
         name: String,
         value: String,
         maxAge: Int,
     ) {
-        expireLegacyCookies(response, name)
-        addCookieHeader(response, name, value, maxAge, resolveCookiePath(name), AUTH_COOKIE_DOMAIN)
+        val domain = resolveCookieDomain(request, name)
+        expireOtherCookieVariants(response, name, domain)
+        addCookieHeader(response, name, value, maxAge, resolveCookiePath(name), domain)
     }
 
     fun deleteCookie(
         response: HttpServletResponse,
         name: String,
     ) {
-        addCookieHeader(response, name, "", 0, resolveCookiePath(name), AUTH_COOKIE_DOMAIN)
-        expireLegacyCookies(response, name)
+        addCookieHeader(response, name, "", 0, resolveCookiePath(name), domain = null)
+        expireOtherCookieVariants(response, name, currentDomain = null)
     }
 
     fun deleteAllAuthCookies(response: HttpServletResponse) {
@@ -65,26 +67,44 @@ class CookieHelper(
     }
 
     /**
-     * 이전 버전이 Domain 없이 발급한 host-only 쿠키는 도메인 쿠키를 지우는 헤더로는 사라지지 않는다.
-     * 같은 이름의 쿠키가 함께 남으면 먼저 만들어진 옛 쿠키가 요청 헤더 앞에 실려 옛 토큰으로 인증이 처리되므로,
-     * 인증 쿠키를 새로 내려주거나 지울 때마다 예전 Path에 남아 있을 수 있는 host-only 쿠키까지 만료시킨다.
+     * 프론트엔드 서버가 자신의 서브도메인에서 읽어야 하는 accessToken에만 부모 도메인을 부여한다.
+     * refreshToken과 OAuth 쿠키는 API 호스트 밖으로 나갈 이유가 없어 host-only로 둔다.
+     * techtaurant.com 하위가 아닌 호스트에서는 브라우저가 부모 도메인 쿠키를 거부하므로 Domain을 생략한다.
      */
-    private fun expireLegacyCookies(
-        response: HttpServletResponse,
+    private fun resolveCookieDomain(
+        request: HttpServletRequest,
         name: String,
-    ) {
-        expireHostOnlyCookie(response, name, resolveCookiePath(name))
-        if (name == JwtConstants.REFRESH_TOKEN_COOKIE && cookieProperties.path != REFRESH_TOKEN_PATH) {
-            expireHostOnlyCookie(response, name, cookieProperties.path)
+    ): String? {
+        if (name != JwtConstants.ACCESS_TOKEN_COOKIE) {
+            return null
         }
+
+        return ACCESS_TOKEN_COOKIE_DOMAIN.takeIf { isAccessTokenCookieDomainHost(request.serverName) }
     }
 
-    private fun expireHostOnlyCookie(
+    private fun isAccessTokenCookieDomainHost(host: String): Boolean {
+        return host == ACCESS_TOKEN_COOKIE_DOMAIN.removePrefix(".") ||
+            host.endsWith(ACCESS_TOKEN_COOKIE_DOMAIN)
+    }
+
+    /**
+     * 브라우저는 이름이 같아도 Domain·Path 조합이 다르면 서로 다른 쿠키로 취급한다.
+     * 두 조합이 함께 남으면 먼저 만들어진 옛 쿠키가 요청 헤더 앞에 실려 옛 토큰으로 인증이 처리되므로,
+     * 지금 사용하지 않는 조합을 함께 만료시켜 한 이름당 하나만 남게 한다.
+     */
+    private fun expireOtherCookieVariants(
         response: HttpServletResponse,
         name: String,
-        path: String,
+        currentDomain: String?,
     ) {
-        addCookieHeader(response, name, "", 0, path, domain = null)
+        if (name == JwtConstants.ACCESS_TOKEN_COOKIE) {
+            val otherDomain = if (currentDomain == null) ACCESS_TOKEN_COOKIE_DOMAIN else null
+            addCookieHeader(response, name, "", 0, resolveCookiePath(name), otherDomain)
+        }
+
+        if (name == JwtConstants.REFRESH_TOKEN_COOKIE && cookieProperties.path != REFRESH_TOKEN_PATH) {
+            addCookieHeader(response, name, "", 0, cookieProperties.path, domain = null)
+        }
     }
 
     private fun resolveCookiePath(name: String): String {
@@ -97,8 +117,6 @@ class CookieHelper(
 
     private companion object {
         const val REFRESH_TOKEN_PATH = "/open-api/auth/refresh"
-
-        // 프론트엔드 서버가 자신의 서브도메인에서 인증 쿠키를 읽을 수 있도록 techtaurant.com 전체를 쿠키 범위로 둔다.
-        const val AUTH_COOKIE_DOMAIN = ".techtaurant.com"
+        const val ACCESS_TOKEN_COOKIE_DOMAIN = ".techtaurant.com"
     }
 }

@@ -8,6 +8,7 @@ import com.techtaurant.mainserver.security.dto.DevTestLoginRequest
 import com.techtaurant.mainserver.security.dto.DevTestLoginResponse
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 
@@ -28,6 +29,7 @@ interface DevTestAuthControllerDocs {
     )
     fun login(
         request: DevTestLoginRequest,
+        httpRequest: HttpServletRequest,
         response: HttpServletResponse,
     ): ApiResponse<DevTestLoginResponse>
 }

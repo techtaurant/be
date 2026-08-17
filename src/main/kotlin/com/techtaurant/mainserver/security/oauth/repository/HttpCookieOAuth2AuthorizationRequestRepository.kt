@@ -61,6 +61,7 @@ class HttpCookieOAuth2AuthorizationRequestRepository(
         }
 
         cookieHelper.addCookie(
+            request,
             response,
             OAUTH2_AUTHORIZATION_REQUEST_COOKIE,
             serialize(authorizationRequest),
@@ -77,6 +78,7 @@ class HttpCookieOAuth2AuthorizationRequestRepository(
         )
         if (origin != null) {
             cookieHelper.addCookie(
+                request,
                 response,
                 OAUTH2_ORIGIN_COOKIE,
                 origin,
@@ -127,6 +129,7 @@ class HttpCookieOAuth2AuthorizationRequestRepository(
         }
 
         cookieHelper.addCookie(
+            request,
             response,
             cookieName,
             redirectUri,
