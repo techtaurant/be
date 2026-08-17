@@ -257,8 +257,83 @@ class CookieHelperTest {
             .doesNotContain("legacy-access-token")
     }
 
+    @Test
+    @DisplayName("dev API 로그인이 prod accessToken을 덮어쓴다 - 부모 도메인이 두 환경을 한 슬롯으로 합친 현재 동작")
+    fun devLoginOverwritesProdAccessTokenSlot() {
+        // given
+        val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
+        val prodResponse = MockHttpServletResponse()
+        cookieHelper.addCookie(
+            apiHostRequest(),
+            prodResponse,
+            JwtConstants.ACCESS_TOKEN_COOKIE,
+            "prod-access-token",
+            3600,
+        )
+        storeSetCookies(cookieManager, LOGIN_URI, prodResponse)
+
+        val devResponse = MockHttpServletResponse()
+        cookieHelper.addCookie(
+            devApiHostRequest(),
+            devResponse,
+            JwtConstants.ACCESS_TOKEN_COOKIE,
+            "dev-access-token",
+            3600,
+        )
+
+        // when
+        storeSetCookies(cookieManager, DEV_LOGIN_URI, devResponse)
+
+        // then
+        assertThat(devResponse.getHeaders(HttpHeaders.SET_COOKIE).single { it.startsWith("accessToken=dev-access-token") })
+            .contains(DOMAIN_ATTRIBUTE)
+        assertThat(getCookieHeader(cookieManager, GENERAL_API_URI))
+            .contains("accessToken=dev-access-token")
+            .doesNotContain("prod-access-token")
+        assertThat(getCookieHeader(cookieManager, DEV_GENERAL_API_URI))
+            .contains("accessToken=dev-access-token")
+    }
+
+    @Test
+    @DisplayName("도메인 쿠키와 host-only 쿠키가 함께 남으면 한 요청에 accessToken 두 개가 실려 어느 토큰이 쓰일지 정해지지 않는다")
+    fun coexistingAccessTokenVariantsMakeRequestHeaderAmbiguous() {
+        // given
+        val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
+        val domainResponse = MockHttpServletResponse()
+        cookieHelper.addCookie(
+            apiHostRequest(),
+            domainResponse,
+            JwtConstants.ACCESS_TOKEN_COOKIE,
+            "domain-access-token",
+            3600,
+        )
+        storeSetCookies(cookieManager, LOGIN_URI, domainResponse)
+
+        val rolledBackResponse = MockHttpServletResponse()
+        addLegacyHostOnlyCookie(
+            rolledBackResponse,
+            JwtConstants.ACCESS_TOKEN_COOKIE,
+            "host-only-access-token",
+            "/",
+        )
+
+        // when
+        storeSetCookies(cookieManager, LOGIN_URI, rolledBackResponse)
+        val cookieHeader = getCookieHeader(cookieManager, GENERAL_API_URI)
+
+        // then
+        assertThat(cookieHeader)
+            .contains("accessToken=domain-access-token")
+            .contains("accessToken=host-only-access-token")
+        assertThat(cookieHeader.split("; ").count { it.startsWith("accessToken=") }).isEqualTo(2)
+    }
+
     private fun apiHostRequest(): MockHttpServletRequest {
         return MockHttpServletRequest().apply { serverName = API_HOST }
+    }
+
+    private fun devApiHostRequest(): MockHttpServletRequest {
+        return MockHttpServletRequest().apply { serverName = DEV_API_HOST }
     }
 
     private fun localhostRequest(): MockHttpServletRequest {
@@ -309,10 +384,14 @@ class CookieHelperTest {
         private const val DOMAIN_ATTRIBUTE = "Domain=.techtaurant.com;"
         private const val OAUTH2_AUTHORIZATION_REQUEST_COOKIE = "oauth2_auth_request"
         private const val API_HOST = "api.techtaurant.com"
+        private const val DEV_API_HOST = "dev-api.techtaurant.com"
+        private const val FRONTEND_HOST = "techtaurant.com"
         private const val LOCAL_HOST = "localhost"
         private val LOGIN_URI = URI("https://$API_HOST/oauth2/callback/google")
-        private val FRONTEND_SERVER_URI = URI("https://www.techtaurant.com/")
-        private val FRONTEND_REFRESH_URI = URI("https://www.techtaurant.com$REFRESH_TOKEN_PATH")
+        private val DEV_LOGIN_URI = URI("https://$DEV_API_HOST/oauth2/callback/google")
+        private val DEV_GENERAL_API_URI = URI("https://$DEV_API_HOST/api/users/me")
+        private val FRONTEND_SERVER_URI = URI("https://$FRONTEND_HOST/")
+        private val FRONTEND_REFRESH_URI = URI("https://$FRONTEND_HOST$REFRESH_TOKEN_PATH")
         private val GENERAL_API_URI = URI("https://$API_HOST/api/users/me")
         private val REFRESH_API_URI = URI("https://$API_HOST$REFRESH_TOKEN_PATH")
         private val LOGOUT_API_URI = URI("https://$API_HOST/api/auth/logout")

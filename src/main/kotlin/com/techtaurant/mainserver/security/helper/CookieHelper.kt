@@ -13,6 +13,9 @@ import java.time.Duration
 class CookieHelper(
     private val cookieProperties: CookieProperties,
 ) {
+    /**
+     * 쿠키를 발급하면서, 지금 쓰지 않는 옛 Domain·Path 조합의 만료 헤더를 함께 내보낸다.
+     */
     fun addCookie(
         request: HttpServletRequest,
         response: HttpServletResponse,
@@ -21,16 +24,20 @@ class CookieHelper(
         maxAge: Int,
     ) {
         val domain = resolveCookieDomain(request, name)
-        expireOtherCookieVariants(response, name, domain)
+        val staleAccessTokenDomain = if (domain == null) ACCESS_TOKEN_COOKIE_DOMAIN else null
+        expireStaleCookieVariants(response, name, staleAccessTokenDomain)
         addCookieHeader(response, name, value, maxAge, resolveCookiePath(name), domain)
     }
 
+    /**
+     * 발급 시점의 호스트를 알 수 없으므로 host-only 조합과 도메인 조합의 만료 헤더를 모두 내보낸다.
+     */
     fun deleteCookie(
         response: HttpServletResponse,
         name: String,
     ) {
         addCookieHeader(response, name, "", 0, resolveCookiePath(name), domain = null)
-        expireOtherCookieVariants(response, name, currentDomain = null)
+        expireStaleCookieVariants(response, name, staleAccessTokenDomain = ACCESS_TOKEN_COOKIE_DOMAIN)
     }
 
     fun deleteAllAuthCookies(response: HttpServletResponse) {
@@ -91,15 +98,20 @@ class CookieHelper(
      * 브라우저는 이름이 같아도 Domain·Path 조합이 다르면 서로 다른 쿠키로 취급한다.
      * 두 조합이 함께 남으면 먼저 만들어진 옛 쿠키가 요청 헤더 앞에 실려 옛 토큰으로 인증이 처리되므로,
      * 지금 사용하지 않는 조합을 함께 만료시켜 한 이름당 하나만 남게 한다.
+     *
+     * staleAccessTokenDomain은 호출 경로와 무관하게 언제나 "만료시킬 accessToken 쿠키의 Domain 값"을 뜻한다.
+     *
+     * addCookie 경로에서 host-only 조합을 만료시키는 것은 Domain 부여 이전에 발급된 쿠키를 걷어내기 위한
+     * 마이그레이션 조치이므로, 배포 후 accessToken TTL이 지나 롤백 가능성이 닫히면 제거할 수 있다.
+     * deleteCookie 경로의 두 조합 만료는 발급 호스트를 알 수 없어 남는 영구 동작이다.
      */
-    private fun expireOtherCookieVariants(
+    private fun expireStaleCookieVariants(
         response: HttpServletResponse,
         name: String,
-        currentDomain: String?,
+        staleAccessTokenDomain: String?,
     ) {
         if (name == JwtConstants.ACCESS_TOKEN_COOKIE) {
-            val otherDomain = if (currentDomain == null) ACCESS_TOKEN_COOKIE_DOMAIN else null
-            addCookieHeader(response, name, "", 0, resolveCookiePath(name), otherDomain)
+            addCookieHeader(response, name, "", 0, resolveCookiePath(name), staleAccessTokenDomain)
         }
 
         if (name == JwtConstants.REFRESH_TOKEN_COOKIE && cookieProperties.path != REFRESH_TOKEN_PATH) {
