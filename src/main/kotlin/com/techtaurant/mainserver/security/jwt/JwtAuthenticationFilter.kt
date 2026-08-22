@@ -1,6 +1,7 @@
 package com.techtaurant.mainserver.security.jwt
 
 import com.techtaurant.mainserver.security.SecurityConstants
+import com.techtaurant.mainserver.security.handler.CustomAuthenticationEntryPoint
 import com.techtaurant.mainserver.security.helper.JwtExceptionMapper
 import com.techtaurant.mainserver.user.enums.UserRole
 import com.techtaurant.mainserver.user.infrastructure.out.UserTokenRepository
@@ -24,6 +25,7 @@ import org.springframework.web.filter.OncePerRequestFilter
 class JwtAuthenticationFilter(
     private val jwtTokenProvider: JwtTokenProvider,
     private val userTokenRepository: UserTokenRepository,
+    private val authenticationEntryPoint: CustomAuthenticationEntryPoint,
 ) : OncePerRequestFilter() {
     override fun doFilterInternal(
         request: HttpServletRequest,
@@ -57,12 +59,29 @@ class JwtAuthenticationFilter(
                 SecurityContextHolder.getContext().authentication = authentication
             } catch (e: ExpiredJwtException) {
                 request.setAttribute(SecurityConstants.ERROR_ATTRIBUTE, JwtStatus.ACCESS_TOKEN_EXPIRED)
+
+                if (requiresExpiredTokenResponse(request)) {
+                    authenticationEntryPoint.writeError(response, JwtStatus.ACCESS_TOKEN_EXPIRED)
+                    return
+                }
             } catch (e: Exception) {
                 request.setAttribute(SecurityConstants.ERROR_ATTRIBUTE, JwtExceptionMapper.mapToJwtStatus(e = e))
             }
         }
 
         filterChain.doFilter(request, response)
+    }
+
+    /**
+     * 인증 없이도 응답하는 경로는 인가 계층이 요청을 통과시켜 토큰이 만료됐다는 사실이 클라이언트까지 전달되지 않습니다.
+     * 재발급으로 되살릴 수 있는 만료만 이 경로에서 직접 401로 알려 클라이언트가 재발급을 시도하게 합니다.
+     * 토큰을 새로 발급하는 경로는 만료된 accessToken을 들고 오는 것이 정상이므로 제외합니다.
+     */
+    private fun requiresExpiredTokenResponse(request: HttpServletRequest): Boolean {
+        val path = request.requestURI
+
+        return path.startsWith("${SecurityConstants.OPEN_API_PREFIX}/") &&
+            TOKEN_ISSUING_PATH_PREFIXES.none { path.startsWith(it) }
     }
 
     private fun resolveToken(request: HttpServletRequest): String? {
@@ -98,5 +117,13 @@ class JwtAuthenticationFilter(
             jwtTokenProvider.hashToken(token),
             claimedRole,
         )
+    }
+
+    private companion object {
+        val TOKEN_ISSUING_PATH_PREFIXES =
+            listOf(
+                "${SecurityConstants.OPEN_API_PREFIX}/auth/",
+                "${SecurityConstants.OPEN_API_PREFIX}/dev/auth/",
+            )
     }
 }
