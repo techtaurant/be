@@ -2,6 +2,7 @@ package com.techtaurant.mainserver.security.helper
 
 import com.techtaurant.mainserver.security.config.CookieProperties
 import com.techtaurant.mainserver.security.jwt.JwtConstants
+import com.techtaurant.mainserver.security.jwt.JwtProperties
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -28,6 +29,11 @@ class CookieHelperTest {
                     sameSite = "Lax",
                     path = "/",
                 ),
+                JwtProperties(
+                    secret = "test-secret",
+                    accessTokenExpireMs = ACCESS_TOKEN_EXPIRE_MS,
+                    refreshTokenExpireMs = REFRESH_TOKEN_EXPIRE_MS,
+                ),
             )
     }
 
@@ -41,8 +47,8 @@ class CookieHelperTest {
         storeSetCookies(cookieManager, LOGIN_URI, legacyResponse)
 
         val response = MockHttpServletResponse()
-        cookieHelper.addCookie(apiHostRequest(), response, JwtConstants.ACCESS_TOKEN_COOKIE, "access-token", 3600)
-        cookieHelper.addCookie(apiHostRequest(), response, JwtConstants.REFRESH_TOKEN_COOKIE, "refresh-token", 604800)
+        cookieHelper.addAuthCookie(apiHostRequest(), response, JwtConstants.ACCESS_TOKEN_COOKIE, "access-token")
+        cookieHelper.addAuthCookie(apiHostRequest(), response, JwtConstants.REFRESH_TOKEN_COOKIE, "refresh-token")
 
         // when
         storeSetCookies(cookieManager, LOGIN_URI, response)
@@ -60,10 +66,7 @@ class CookieHelperTest {
 
         val setCookieHeaders = response.getHeaders(HttpHeaders.SET_COOKIE)
         assertThat(setCookieHeaders).allSatisfy { header ->
-            assertThat(header)
-                .contains("SameSite=Lax")
-                .contains("Max-Age=")
-                .contains("Expires=")
+            assertThat(header).contains("SameSite=Lax")
         }
         assertThat(setCookieHeaders.single { it.startsWith("accessToken=access-token") }).contains("Path=/;")
         assertThat(
@@ -80,41 +83,65 @@ class CookieHelperTest {
     }
 
     @Test
+    @DisplayName("인증 쿠키 두 개는 모두 refreshToken 수명만큼 살아남고 OAuth 쿠키만 자체 만료 시각을 갖는다")
+    fun authCookiesShareRefreshTokenLifetime() {
+        // given
+        val response = MockHttpServletResponse()
+
+        // when
+        cookieHelper.addAuthCookie(apiHostRequest(), response, JwtConstants.ACCESS_TOKEN_COOKIE, "access-token")
+        cookieHelper.addAuthCookie(apiHostRequest(), response, JwtConstants.REFRESH_TOKEN_COOKIE, "refresh-token")
+        cookieHelper.addCookie(apiHostRequest(), response, OAUTH2_AUTHORIZATION_REQUEST_COOKIE, "oauth-state", 180)
+
+        // then
+        val setCookieHeaders = response.getHeaders(HttpHeaders.SET_COOKIE)
+        val authCookieHeaders =
+            setCookieHeaders.filter {
+                it.startsWith("accessToken=access-token") || it.startsWith("refreshToken=refresh-token")
+            }
+        assertThat(authCookieHeaders).hasSize(2)
+        assertThat(authCookieHeaders).allSatisfy { header ->
+            assertThat(header)
+                .contains("Max-Age=$AUTH_COOKIE_MAX_AGE_SECONDS")
+                .contains("Expires=")
+        }
+        assertThat(setCookieHeaders.single { it.startsWith("$OAUTH2_AUTHORIZATION_REQUEST_COOKIE=oauth-state") })
+            .contains("Max-Age=180")
+            .contains("Expires=")
+    }
+
+    @Test
     @DisplayName("재발급 응답은 refreshToken을 동일한 제한 Path에서 갱신한다")
     fun refreshResponseUpdatesRefreshTokenAtRestrictedPath() {
         // given
         val loginResponse = MockHttpServletResponse()
-        cookieHelper.addCookie(
+        cookieHelper.addAuthCookie(
             apiHostRequest(),
             loginResponse,
             JwtConstants.ACCESS_TOKEN_COOKIE,
             "old-access-token",
-            3600,
         )
-        cookieHelper.addCookie(
+        cookieHelper.addAuthCookie(
             apiHostRequest(),
             loginResponse,
             JwtConstants.REFRESH_TOKEN_COOKIE,
             "old-refresh-token",
-            604800,
         )
         val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
         storeSetCookies(cookieManager, LOGIN_URI, loginResponse)
 
         val refreshResponse = MockHttpServletResponse()
-        cookieHelper.addCookie(
+        cookieHelper.addAuthCookie(
             apiHostRequest(),
             refreshResponse,
             JwtConstants.ACCESS_TOKEN_COOKIE,
             "new-access-token",
-            3600,
         )
-        cookieHelper.addCookie(
+        cookieHelper.addAuthCookie(
             apiHostRequest(),
             refreshResponse,
             JwtConstants.REFRESH_TOKEN_COOKIE,
             "new-refresh-token",
-            604800,
         )
 
         // when
@@ -143,13 +170,12 @@ class CookieHelperTest {
     fun deleteAllAuthCookiesUsesOriginalCookiePaths() {
         // given
         val loginResponse = MockHttpServletResponse()
-        cookieHelper.addCookie(apiHostRequest(), loginResponse, JwtConstants.ACCESS_TOKEN_COOKIE, "access-token", 3600)
-        cookieHelper.addCookie(
+        cookieHelper.addAuthCookie(apiHostRequest(), loginResponse, JwtConstants.ACCESS_TOKEN_COOKIE, "access-token")
+        cookieHelper.addAuthCookie(
             apiHostRequest(),
             loginResponse,
             JwtConstants.REFRESH_TOKEN_COOKIE,
             "refresh-token",
-            604800,
         )
         val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
         storeSetCookies(cookieManager, LOGIN_URI, loginResponse)
@@ -183,7 +209,7 @@ class CookieHelperTest {
     fun accessTokenIsReadableFromFrontendSubdomain() {
         // given
         val response = MockHttpServletResponse()
-        cookieHelper.addCookie(apiHostRequest(), response, JwtConstants.ACCESS_TOKEN_COOKIE, "access-token", 3600)
+        cookieHelper.addAuthCookie(apiHostRequest(), response, JwtConstants.ACCESS_TOKEN_COOKIE, "access-token")
         val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
 
         // when
@@ -201,7 +227,7 @@ class CookieHelperTest {
     fun refreshTokenAndOauthCookiesStayHostOnly() {
         // given
         val response = MockHttpServletResponse()
-        cookieHelper.addCookie(apiHostRequest(), response, JwtConstants.REFRESH_TOKEN_COOKIE, "refresh-token", 604800)
+        cookieHelper.addAuthCookie(apiHostRequest(), response, JwtConstants.REFRESH_TOKEN_COOKIE, "refresh-token")
         cookieHelper.addCookie(apiHostRequest(), response, OAUTH2_AUTHORIZATION_REQUEST_COOKIE, "oauth-state", 180)
         val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
 
@@ -223,7 +249,7 @@ class CookieHelperTest {
     fun accessTokenOmitsDomainOnNonTechtaurantHost() {
         // given
         val response = MockHttpServletResponse()
-        cookieHelper.addCookie(localhostRequest(), response, JwtConstants.ACCESS_TOKEN_COOKIE, "access-token", 3600)
+        cookieHelper.addAuthCookie(localhostRequest(), response, JwtConstants.ACCESS_TOKEN_COOKIE, "access-token")
         val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
 
         // when
@@ -246,7 +272,7 @@ class CookieHelperTest {
         storeSetCookies(cookieManager, LOGIN_URI, legacyResponse)
 
         val response = MockHttpServletResponse()
-        cookieHelper.addCookie(apiHostRequest(), response, JwtConstants.ACCESS_TOKEN_COOKIE, "access-token", 3600)
+        cookieHelper.addAuthCookie(apiHostRequest(), response, JwtConstants.ACCESS_TOKEN_COOKIE, "access-token")
 
         // when
         storeSetCookies(cookieManager, LOGIN_URI, response)
@@ -263,22 +289,20 @@ class CookieHelperTest {
         // given
         val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
         val prodResponse = MockHttpServletResponse()
-        cookieHelper.addCookie(
+        cookieHelper.addAuthCookie(
             apiHostRequest(),
             prodResponse,
             JwtConstants.ACCESS_TOKEN_COOKIE,
             "prod-access-token",
-            3600,
         )
         storeSetCookies(cookieManager, LOGIN_URI, prodResponse)
 
         val devResponse = MockHttpServletResponse()
-        cookieHelper.addCookie(
+        cookieHelper.addAuthCookie(
             devApiHostRequest(),
             devResponse,
             JwtConstants.ACCESS_TOKEN_COOKIE,
             "dev-access-token",
-            3600,
         )
 
         // when
@@ -300,12 +324,11 @@ class CookieHelperTest {
         // given
         val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
         val domainResponse = MockHttpServletResponse()
-        cookieHelper.addCookie(
+        cookieHelper.addAuthCookie(
             apiHostRequest(),
             domainResponse,
             JwtConstants.ACCESS_TOKEN_COOKIE,
             "domain-access-token",
-            3600,
         )
         storeSetCookies(cookieManager, LOGIN_URI, domainResponse)
 
@@ -380,6 +403,9 @@ class CookieHelperTest {
     }
 
     companion object {
+        private const val ACCESS_TOKEN_EXPIRE_MS = 3_600_000L
+        private const val REFRESH_TOKEN_EXPIRE_MS = 604_800_000L
+        private const val AUTH_COOKIE_MAX_AGE_SECONDS = 604_800L
         private const val REFRESH_TOKEN_PATH = "/open-api/auth/refresh"
         private const val DOMAIN_ATTRIBUTE = "Domain=.techtaurant.com;"
         private const val OAUTH2_AUTHORIZATION_REQUEST_COOKIE = "oauth2_auth_request"
