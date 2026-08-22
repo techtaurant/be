@@ -8,7 +8,6 @@ import com.techtaurant.mainserver.security.dto.DevTestLoginResponse
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.security.helper.CookieHelper
 import com.techtaurant.mainserver.security.jwt.JwtConstants
-import com.techtaurant.mainserver.security.jwt.JwtProperties
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.application.UserUniqueNameService
 import com.techtaurant.mainserver.user.entity.User
@@ -33,7 +32,6 @@ import org.springframework.transaction.annotation.Transactional
 class DevTestAuthService(
     private val userRepository: UserRepository,
     private val jwtTokenProvider: JwtTokenProvider,
-    private val jwtProperties: JwtProperties,
     private val cookieHelper: CookieHelper,
     private val tokenCacheManager: TokenCachePort,
     private val userUniqueNameService: UserUniqueNameService,
@@ -68,19 +66,17 @@ class DevTestAuthService(
 
         tokenCacheManager.saveRefreshToken(userId.toString(), refreshToken)
 
-        cookieHelper.addCookie(
+        cookieHelper.addAuthCookie(
             httpRequest,
             response,
             JwtConstants.ACCESS_TOKEN_COOKIE,
             accessToken,
-            (jwtProperties.accessTokenExpireMs / 1000).toInt(),
         )
-        cookieHelper.addCookie(
+        cookieHelper.addAuthCookie(
             httpRequest,
             response,
             JwtConstants.REFRESH_TOKEN_COOKIE,
             refreshToken,
-            (jwtProperties.refreshTokenExpireMs / 1000).toInt(),
         )
 
         return DevTestLoginResponse(

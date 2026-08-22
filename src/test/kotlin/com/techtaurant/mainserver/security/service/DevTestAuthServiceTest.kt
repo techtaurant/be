@@ -5,7 +5,6 @@ import com.techtaurant.mainserver.security.dto.DevTestLoginRequest
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.security.helper.CookieHelper
 import com.techtaurant.mainserver.security.jwt.JwtConstants
-import com.techtaurant.mainserver.security.jwt.JwtProperties
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.application.UserUniqueNameService
 import com.techtaurant.mainserver.user.entity.User
@@ -25,12 +24,6 @@ import java.util.UUID
 class DevTestAuthServiceTest {
     private val userRepository: UserRepository = mockk()
     private val jwtTokenProvider: JwtTokenProvider = mockk()
-    private val jwtProperties: JwtProperties =
-        JwtProperties(
-            secret = "test-secret",
-            accessTokenExpireMs = 3600000,
-            refreshTokenExpireMs = 604800000,
-        )
     private val cookieHelper: CookieHelper = mockk(relaxed = true)
     private val tokenCacheManager: TokenCachePort = mockk(relaxed = true)
     private val userUniqueNameService: UserUniqueNameService = mockk()
@@ -42,7 +35,6 @@ class DevTestAuthServiceTest {
             DevTestAuthService(
                 userRepository,
                 jwtTokenProvider,
-                jwtProperties,
                 cookieHelper,
                 tokenCacheManager,
                 userUniqueNameService,
@@ -88,21 +80,19 @@ class DevTestAuthServiceTest {
             )
         }
         verify {
-            cookieHelper.addCookie(
+            cookieHelper.addAuthCookie(
                 httpRequest,
                 response,
                 JwtConstants.ACCESS_TOKEN_COOKIE,
                 "access-token",
-                (jwtProperties.accessTokenExpireMs / 1000).toInt(),
             )
         }
         verify {
-            cookieHelper.addCookie(
+            cookieHelper.addAuthCookie(
                 httpRequest,
                 response,
                 JwtConstants.REFRESH_TOKEN_COOKIE,
                 "refresh-token",
-                (jwtProperties.refreshTokenExpireMs / 1000).toInt(),
             )
         }
         verify { tokenCacheManager.saveRefreshToken(userId.toString(), "refresh-token") }

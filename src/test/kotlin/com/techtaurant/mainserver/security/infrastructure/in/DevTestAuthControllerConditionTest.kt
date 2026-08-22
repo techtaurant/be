@@ -2,7 +2,6 @@ package com.techtaurant.mainserver.security.infrastructure.`in`
 
 import com.techtaurant.mainserver.security.cache.TokenCachePort
 import com.techtaurant.mainserver.security.helper.CookieHelper
-import com.techtaurant.mainserver.security.jwt.JwtProperties
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.security.service.DevTestAuthService
 import com.techtaurant.mainserver.user.application.UserUniqueNameService
@@ -51,15 +50,6 @@ class DevTestAuthControllerConditionTest {
 
         @Bean
         fun jwtTokenProvider(): JwtTokenProvider = mockk(relaxed = true)
-
-        @Bean
-        fun jwtProperties(): JwtProperties {
-            return JwtProperties(
-                secret = "test-secret",
-                accessTokenExpireMs = 3600000,
-                refreshTokenExpireMs = 604800000,
-            )
-        }
 
         @Bean
         fun cookieHelper(): CookieHelper = mockk(relaxed = true)

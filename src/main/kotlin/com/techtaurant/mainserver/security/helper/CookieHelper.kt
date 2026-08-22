@@ -2,6 +2,7 @@ package com.techtaurant.mainserver.security.helper
 
 import com.techtaurant.mainserver.security.config.CookieProperties
 import com.techtaurant.mainserver.security.jwt.JwtConstants
+import com.techtaurant.mainserver.security.jwt.JwtProperties
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.HttpHeaders
@@ -12,10 +13,8 @@ import java.time.Duration
 @Component
 class CookieHelper(
     private val cookieProperties: CookieProperties,
+    private val jwtProperties: JwtProperties,
 ) {
-    /**
-     * 쿠키를 발급하면서, 지금 쓰지 않는 옛 Domain·Path 조합의 만료 헤더를 함께 내보낸다.
-     */
     fun addCookie(
         request: HttpServletRequest,
         response: HttpServletResponse,
@@ -23,10 +22,21 @@ class CookieHelper(
         value: String,
         maxAge: Int,
     ) {
-        val domain = resolveCookieDomain(request, name)
-        val staleAccessTokenDomain = if (domain == null) ACCESS_TOKEN_COOKIE_DOMAIN else null
-        expireStaleCookieVariants(response, name, staleAccessTokenDomain)
-        addCookieHeader(response, name, value, maxAge, resolveCookiePath(name), domain)
+        issueCookie(request, response, name, value, maxAge)
+    }
+
+    /**
+     * 인증 쿠키를 refreshToken 수명만큼 살려 둔다.
+     * 쿠키가 accessToken 만료 시각에 함께 사라지면 만료된 토큰이 서버에 도달하지 않아
+     * 서버가 토큰 만료와 미인증을 구분해 알려줄 수 없고, 클라이언트도 재발급 시점을 알 수 없다.
+     */
+    fun addAuthCookie(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        name: String,
+        value: String,
+    ) {
+        issueCookie(request, response, name, value, authCookieMaxAgeSeconds())
     }
 
     /**
@@ -50,6 +60,22 @@ class CookieHelper(
         name: String,
     ): String? {
         return request.cookies?.firstOrNull { it.name == name }?.value
+    }
+
+    /**
+     * 쿠키를 발급하면서, 지금 쓰지 않는 옛 Domain·Path 조합의 만료 헤더를 함께 내보낸다.
+     */
+    private fun issueCookie(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        name: String,
+        value: String,
+        maxAge: Int,
+    ) {
+        val domain = resolveCookieDomain(request, name)
+        val staleAccessTokenDomain = if (domain == null) ACCESS_TOKEN_COOKIE_DOMAIN else null
+        expireStaleCookieVariants(response, name, staleAccessTokenDomain)
+        addCookieHeader(response, name, value, maxAge, resolveCookiePath(name), domain)
     }
 
     private fun addCookieHeader(
@@ -101,7 +127,7 @@ class CookieHelper(
      *
      * staleAccessTokenDomain은 호출 경로와 무관하게 언제나 "만료시킬 accessToken 쿠키의 Domain 값"을 뜻한다.
      *
-     * addCookie 경로에서 host-only 조합을 만료시키는 것은 Domain 부여 이전에 발급된 쿠키를 걷어내기 위한
+     * 발급 경로에서 host-only 조합을 만료시키는 것은 Domain 부여 이전에 발급된 쿠키를 걷어내기 위한
      * 마이그레이션 조치이므로, 배포 후 accessToken TTL이 지나 롤백 가능성이 닫히면 제거할 수 있다.
      * deleteCookie 경로의 두 조합 만료는 발급 호스트를 알 수 없어 남는 영구 동작이다.
      */
@@ -125,6 +151,10 @@ class CookieHelper(
         } else {
             cookieProperties.path
         }
+    }
+
+    private fun authCookieMaxAgeSeconds(): Int {
+        return Duration.ofMillis(jwtProperties.refreshTokenExpireMs).seconds.toInt()
     }
 
     private companion object {
