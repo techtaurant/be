@@ -16,6 +16,10 @@ description = "main-server"
 
 extra["opentelemetry.version"] = "1.60.1"
 
+springBoot {
+    mainClass.set("com.techtaurant.mainserver.MainServerApplicationKt")
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(17)
@@ -46,6 +50,7 @@ dependencies {
 
     // Environment Variables
     implementation("me.paulschwarz:spring-dotenv:4.0.0")
+    implementation("io.github.cdimascio:dotenv-java:3.0.0")
 
     // Testing
     testImplementation("io.mockk:mockk:1.13.10")
@@ -168,6 +173,15 @@ tasks.withType<Test> {
 // Configure bootRun task for development
 tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
     environment("SPRING_PROFILES_ACTIVE", "dev")
+}
+
+tasks.register<JavaExec>("attachmentCli") {
+    group = "application"
+    description = "DB와 S3의 attachment 정합성을 점검하고 orphan object를 정리합니다."
+    dependsOn("classes")
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.techtaurant.mainserver.attachment.cli.AttachmentCliKt")
+    standardInput = System.`in`
 }
 
 // Configure JaCoCo Test Report Task
