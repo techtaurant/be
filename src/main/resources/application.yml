@@ -146,7 +146,7 @@ swagger:
 aws:
     s3:
         region: ${AWS_REGION:ap-northeast-2}
-        bucket-name: ${AWS_S3_BUCKET_NAME:techtaurant-media}
+        bucket-name: ${AWS_S3_BUCKET_NAME}
         presigned-url-expire-minutes: ${AWS_S3_PRESIGNED_URL_EXPIRE_MINUTES:15}
 
 monitoring:
