@@ -3,7 +3,6 @@ package com.techtaurant.mainserver.post.infrastructure.`in`
 import com.techtaurant.mainserver.common.dto.ApiResponse
 import com.techtaurant.mainserver.common.dto.CursorPageResponse
 import com.techtaurant.mainserver.common.swagger.ApiErrorResponses
-import com.techtaurant.mainserver.common.util.HttpRequestUtils
 import com.techtaurant.mainserver.post.application.PostDetailReadService
 import com.techtaurant.mainserver.post.application.PostListReadService
 import com.techtaurant.mainserver.post.dto.PostDetailResponse
@@ -11,7 +10,6 @@ import com.techtaurant.mainserver.post.dto.PostListItemResponse
 import com.techtaurant.mainserver.post.entity.PostPeriod
 import com.techtaurant.mainserver.post.entity.PostSortType
 import com.techtaurant.mainserver.post.enums.PostStatus
-import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
 import org.springframework.security.core.annotation.AuthenticationPrincipal
@@ -60,18 +58,12 @@ class PostReadOpenApiController(
     @GetMapping("/{postId}")
     override fun getPostDetail(
         @PathVariable postId: UUID,
-        request: HttpServletRequest,
         @AuthenticationPrincipal userId: UUID?,
     ): ApiResponse<PostDetailResponse> {
-        val ipAddress = HttpRequestUtils.extractIpAddress(request)
-        val userAgent = request.getHeader("User-Agent")
-
         return ApiResponse.ok(
             postDetailReadService.getPostDetail(
                 postId = postId,
                 userId = userId,
-                ipAddress = ipAddress,
-                userAgent = userAgent,
             ),
         )
     }
