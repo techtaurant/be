@@ -5,7 +5,6 @@ import com.techtaurant.mainserver.security.cache.TokenCachePort
 import com.techtaurant.mainserver.security.helper.CookieHelper
 import com.techtaurant.mainserver.security.helper.JwtExceptionMapper
 import com.techtaurant.mainserver.security.jwt.JwtConstants
-import com.techtaurant.mainserver.security.jwt.JwtProperties
 import com.techtaurant.mainserver.security.jwt.JwtStatus
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.infrastructure.out.UserRepository
@@ -19,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional
 class TokenRefreshService(
     private val cookieHelper: CookieHelper,
     private val jwtTokenProvider: JwtTokenProvider,
-    private val jwtProperties: JwtProperties,
     private val tokenCacheManager: TokenCachePort,
     private val userRepository: UserRepository,
 ) {
@@ -67,17 +65,17 @@ class TokenRefreshService(
         tokenCacheManager.saveRefreshToken(userId.toString(), newRefreshToken)
 
         // 8. 쿠키에 새 토큰 설정
-        cookieHelper.addCookie(
+        cookieHelper.addAuthCookie(
+            request,
             response,
             JwtConstants.ACCESS_TOKEN_COOKIE,
             newAccessToken,
-            (jwtProperties.accessTokenExpireMs / 1000).toInt(),
         )
-        cookieHelper.addCookie(
+        cookieHelper.addAuthCookie(
+            request,
             response,
             JwtConstants.REFRESH_TOKEN_COOKIE,
             newRefreshToken,
-            (jwtProperties.refreshTokenExpireMs / 1000).toInt(),
         )
     }
 }

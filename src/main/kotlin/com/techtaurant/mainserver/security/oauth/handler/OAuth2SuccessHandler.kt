@@ -4,7 +4,6 @@ import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.security.cache.TokenCachePort
 import com.techtaurant.mainserver.security.helper.CookieHelper
 import com.techtaurant.mainserver.security.jwt.JwtConstants
-import com.techtaurant.mainserver.security.jwt.JwtProperties
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.security.oauth.CustomOAuth2User
 import com.techtaurant.mainserver.security.oauth.repository.HttpCookieOAuth2AuthorizationRequestRepository
@@ -19,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional
 @Component
 class OAuth2SuccessHandler(
     private val jwtTokenProvider: JwtTokenProvider,
-    private val jwtProperties: JwtProperties,
     private val cookieHelper: CookieHelper,
     private val tokenCacheManager: TokenCachePort,
     private val cookieOAuth2AuthorizationRequestRepository: HttpCookieOAuth2AuthorizationRequestRepository,
@@ -42,17 +40,17 @@ class OAuth2SuccessHandler(
         // userId 기반으로 refresh token 저장 (기존 토큰은 자동으로 덮어씌워짐)
         tokenCacheManager.saveRefreshToken(userId.toString(), refreshToken)
 
-        cookieHelper.addCookie(
+        cookieHelper.addAuthCookie(
+            request,
             response,
             JwtConstants.ACCESS_TOKEN_COOKIE,
             accessToken,
-            (jwtProperties.accessTokenExpireMs / 1000).toInt(),
         )
-        cookieHelper.addCookie(
+        cookieHelper.addAuthCookie(
+            request,
             response,
             JwtConstants.REFRESH_TOKEN_COOKIE,
             refreshToken,
-            (jwtProperties.refreshTokenExpireMs / 1000).toInt(),
         )
 
         // OAuth2 인증 완료 후 authorization request 쿠키 정리

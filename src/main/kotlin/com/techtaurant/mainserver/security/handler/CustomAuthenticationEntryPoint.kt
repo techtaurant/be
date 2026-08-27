@@ -29,6 +29,17 @@ class CustomAuthenticationEntryPoint(
             request.getAttribute(SecurityConstants.ERROR_ATTRIBUTE) as? JwtStatus
                 ?: JwtStatus.AUTHENTICATION_REQUIRED
 
+        writeError(response, jwtStatus)
+    }
+
+    /**
+     * 인증 실패 응답을 작성합니다.
+     * 인가 계층이 요청을 통과시켜 이 핸들러까지 오지 않는 경로에서도 같은 응답 형식을 쓰기 위해 분리했습니다.
+     */
+    fun writeError(
+        response: HttpServletResponse,
+        jwtStatus: JwtStatus,
+    ) {
         val errorResponse = ApiResponse.error<Any>(jwtStatus)
 
         response.status = jwtStatus.getHttpStatusCode()
