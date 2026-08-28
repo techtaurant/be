@@ -16,9 +16,7 @@ import com.techtaurant.mainserver.user.application.UserProfileImageResolver
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
 import io.mockk.every
-import io.mockk.just
 import io.mockk.mockk
-import io.mockk.runs
 import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -29,7 +27,6 @@ import java.util.UUID
 
 class PostDetailReadServiceTest {
     private val postRepository: PostRepository = mockk()
-    private val postViewLogService: PostViewLogService = mockk()
     private val postLikeLogRepository: PostLikeLogRepository = mockk()
     private val postReadLogRepository: PostReadLogRepository = mockk()
     private val attachmentService: AttachmentService = mockk()
@@ -38,7 +35,6 @@ class PostDetailReadServiceTest {
     private val postDetailReadService =
         PostDetailReadService(
             postRepository = postRepository,
-            postViewLogService = postViewLogService,
             postLikeLogRepository = postLikeLogRepository,
             postReadLogRepository = postReadLogRepository,
             attachmentService = attachmentService,
@@ -59,7 +55,6 @@ class PostDetailReadServiceTest {
                 profileImageUrl = "https://example.com/profile.jpg",
             ).apply { id = UUID.randomUUID() }
 
-        every { postViewLogService.recordView(any(), any(), any(), any()) } just runs
         every { attachmentService.generatePresignedDownloadUrlMapByReference(any(), any()) } returns emptyMap()
         every {
             attachmentService.getConfirmedAttachmentsByReferenceIds(any(), AttachmentReferenceType.USER)
@@ -111,7 +106,7 @@ class PostDetailReadServiceTest {
             } returns mapOf(attachmentId to "https://cdn.example.com/attachment.png")
 
             // when
-            val result = postDetailReadService.getPostDetail(postId, viewerId, "127.0.0.1", "JUnit")
+            val result = postDetailReadService.getPostDetail(postId, viewerId)
 
             // then
             assertThat(result.likeStatus).isEqualTo(LikeStatus.NONE)
@@ -120,9 +115,6 @@ class PostDetailReadServiceTest {
             val attachmentPresignedUrl = result.attachmentPresignedUrls.single()
             assertThat(attachmentPresignedUrl.attachmentId).isEqualTo(attachmentId)
             assertThat(attachmentPresignedUrl.presignedUrl).isEqualTo("https://cdn.example.com/attachment.png")
-            verify {
-                postViewLogService.recordView(postId, viewerId, "127.0.0.1", "JUnit")
-            }
         }
 
         @Test
@@ -141,7 +133,7 @@ class PostDetailReadServiceTest {
             every { postRepository.findPostDetailByIdForViewer(postId, null) } returns post
 
             // when
-            val result = postDetailReadService.getPostDetail(postId, null, null, null)
+            val result = postDetailReadService.getPostDetail(postId, null)
 
             // then
             assertThat(result.isRead).isFalse()
@@ -168,7 +160,7 @@ class PostDetailReadServiceTest {
             every { postReadLogRepository.existsByPostIdAndUserId(postId, viewerId) } returns false
 
             // when
-            val result = postDetailReadService.getPostDetail(postId, viewerId, null, null)
+            val result = postDetailReadService.getPostDetail(postId, viewerId)
 
             // then
             assertThat(result.likeStatus).isEqualTo(LikeStatus.LIKE)
@@ -198,7 +190,7 @@ class PostDetailReadServiceTest {
                 attachmentService.generatePresignedDownloadUrlMapByAttachments(listOf(profileAttachment))
             } returns mapOf(attachmentId to "https://cdn.example.com/authors/detail-author.png")
 
-            val result = postDetailReadService.getPostDetail(postId, null, null, null)
+            val result = postDetailReadService.getPostDetail(postId, null)
 
             assertThat(result.author.profileImageUrl).isEqualTo("https://cdn.example.com/authors/detail-author.png")
         }
@@ -230,7 +222,6 @@ class PostDetailReadServiceTest {
             assertThat(result.title).isEqualTo("게시물")
             assertThat(result.author.id).isEqualTo(author.id)
             verify(exactly = 0) {
-                postViewLogService.recordView(any(), any(), any(), any())
                 attachmentService.generatePresignedDownloadUrlMapByReference(any(), any())
                 postLikeLogRepository.findByPostIdAndUserId(any(), any())
                 postReadLogRepository.existsByPostIdAndUserId(any(), any())
