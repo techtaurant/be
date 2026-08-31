@@ -121,6 +121,39 @@ class JooqRefreshTokenStoreIntegrationTest : IntegrationTest() {
         assertThat(refreshTokenStore.exists(userId, OTHER_DEVICE_REFRESH_TOKEN)).isTrue()
     }
 
+    @Test
+    @DisplayName("소진은 그 토큰 한 행을 지운 첫 호출에만 성공해, 같은 토큰으로 두 번 회전할 수 없다")
+    fun consumingRefreshTokenSucceedsOnlyOnce() {
+        // Given
+        val userId = createUser()
+        refreshTokenStore.save(userId, REFRESH_TOKEN)
+        refreshTokenStore.save(userId, OTHER_DEVICE_REFRESH_TOKEN)
+
+        // When
+        val firstConsume = refreshTokenStore.consume(userId, REFRESH_TOKEN)
+        val secondConsume = refreshTokenStore.consume(userId, REFRESH_TOKEN)
+
+        // Then
+        assertThat(firstConsume).isTrue()
+        assertThat(secondConsume).isFalse()
+        assertThat(refreshTokenStore.exists(userId, OTHER_DEVICE_REFRESH_TOKEN)).isTrue()
+    }
+
+    @Test
+    @DisplayName("만료 시각이 지난 refresh token은 소진되지 않는다")
+    fun expiredRefreshTokenIsNotConsumed() {
+        // Given
+        val userId = createUser()
+        refreshTokenStore.save(userId, REFRESH_TOKEN)
+        expire(userId, REFRESH_TOKEN)
+
+        // When
+        val consumed = refreshTokenStore.consume(userId, REFRESH_TOKEN)
+
+        // Then
+        assertThat(consumed).isFalse()
+    }
+
     private fun expire(
         userId: UUID,
         refreshToken: String,

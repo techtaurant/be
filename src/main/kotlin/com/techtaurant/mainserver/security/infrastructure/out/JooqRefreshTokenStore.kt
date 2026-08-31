@@ -53,6 +53,22 @@ class JooqRefreshTokenStore(
         )
     }
 
+    override fun consume(
+        userId: UUID,
+        refreshToken: String,
+    ): Boolean {
+        val deletedRowCount =
+            dsl.deleteFrom(USER_REFRESH_TOKENS)
+                .where(
+                    USER_REFRESH_TOKENS.USER_ID.eq(userId)
+                        .and(USER_REFRESH_TOKENS.TOKEN_HASH.eq(jwtTokenProvider.hashToken(refreshToken)))
+                        .and(USER_REFRESH_TOKENS.EXPIRES_AT.gt(Instant.now().atOffset(ZoneOffset.UTC))),
+                )
+                .execute()
+
+        return deletedRowCount > 0
+    }
+
     override fun delete(
         userId: UUID,
         refreshToken: String,

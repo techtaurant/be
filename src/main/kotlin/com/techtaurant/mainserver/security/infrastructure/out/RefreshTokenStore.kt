@@ -26,6 +26,17 @@ interface RefreshTokenStore {
     ): Boolean
 
     /**
+     * 만료되지 않은 그 토큰 한 행을 실제로 지운 호출에만 참을 돌려줍니다.
+     *
+     * 확인과 폐기를 한 문장으로 합쳐, 같은 토큰을 실은 재발급 요청이 동시에 도착해도
+     * 그 행을 지운 하나만 회전을 이어가고 나머지는 거절됩니다.
+     */
+    fun consume(
+        userId: UUID,
+        refreshToken: String,
+    ): Boolean
+
+    /**
      * 재발급으로 소진했거나 로그아웃한 토큰 하나만 폐기해 다른 기기의 세션을 남깁니다.
      */
     fun delete(
