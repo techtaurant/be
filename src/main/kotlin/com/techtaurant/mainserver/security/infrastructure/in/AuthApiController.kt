@@ -5,6 +5,7 @@ import com.techtaurant.mainserver.common.swagger.ApiErrorResponses
 import com.techtaurant.mainserver.security.SecurityConstants
 import com.techtaurant.mainserver.security.aop.AuthRestController
 import com.techtaurant.mainserver.security.service.LogoutService
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.PostMapping
@@ -20,9 +21,10 @@ class AuthApiController(
     @PostMapping("/logout")
     override fun logout(
         @AuthenticationPrincipal authenticatedUserId: UUID,
+        request: HttpServletRequest,
         response: HttpServletResponse,
     ): ApiResponse<Unit> {
-        logoutService.logout(authenticatedUserId, response)
+        logoutService.logout(authenticatedUserId, request, response)
         return ApiResponse.ok(Unit)
     }
 }

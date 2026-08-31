@@ -2,6 +2,7 @@ package com.techtaurant.mainserver.user.infrastructure.`in`
 
 import com.techtaurant.mainserver.base.IntegrationTest
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
@@ -77,7 +78,7 @@ class AdminUserRoleControllerIntegrationTest : IntegrationTest() {
     fun adminCanPromoteUserToAdmin() {
         given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .body("""{"role":"ADMIN"}""")
             .`when`()
             .patch("/admin/users/${targetUser.id}/role")
@@ -95,7 +96,7 @@ class AdminUserRoleControllerIntegrationTest : IntegrationTest() {
     fun userCannotUpdateUserRole() {
         given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $userAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, userAccessToken)
             .body("""{"role":"ADMIN"}""")
             .`when`()
             .patch("/admin/users/${targetUser.id}/role")

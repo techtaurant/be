@@ -5,6 +5,7 @@ import com.techtaurant.mainserver.notification.enums.NotificationType
 import com.techtaurant.mainserver.notification.infrastructure.out.NotificationRecipientRepository
 import com.techtaurant.mainserver.notification.infrastructure.out.NotificationRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.entity.UserFollow
@@ -61,7 +62,7 @@ class UserControllerFollowIntegrationTest : IntegrationTest() {
     @DisplayName("사용자 팔로우가 성공한다")
     fun follow_success() {
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .post("/api/users/${firstTargetUser.id}/follow")
             .then()
@@ -74,7 +75,7 @@ class UserControllerFollowIntegrationTest : IntegrationTest() {
     @DisplayName("사용자 팔로우 시 피팔로우 사용자에게 FOLLOW 알림이 생성된다")
     fun follow_createsNotificationForTargetUser() {
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .post("/api/users/${firstTargetUser.id}/follow")
             .then()
@@ -142,7 +143,7 @@ class UserControllerFollowIntegrationTest : IntegrationTest() {
         userFollowRepository.save(UserFollow(follower = testUser, following = firstTargetUser))
 
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .delete("/api/users/${firstTargetUser.id}/follow")
             .then()

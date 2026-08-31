@@ -15,6 +15,7 @@ import com.techtaurant.mainserver.link.infrastructure.out.UserLinkRepository
 import com.techtaurant.mainserver.post.entity.Post
 import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
@@ -108,7 +109,7 @@ class AdminCompanyControllerIntegrationTest : IntegrationTest() {
     fun adminCanCreateCompanyUser() {
         given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .body(
                 """
                 {
@@ -137,7 +138,7 @@ class AdminCompanyControllerIntegrationTest : IntegrationTest() {
     fun userCannotCreateCompanyUser() {
         given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $userAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, userAccessToken)
             .body(
                 """
                 {
@@ -176,7 +177,7 @@ class AdminCompanyControllerIntegrationTest : IntegrationTest() {
         )
 
         given()
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .`when`()
             .get("/admin/companies")
             .then()
@@ -196,7 +197,7 @@ class AdminCompanyControllerIntegrationTest : IntegrationTest() {
         val token =
             given()
                 .contentType("application/json")
-                .header("Authorization", "Bearer $adminAccessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
                 .body(
                     """
                     {
@@ -245,14 +246,14 @@ class AdminCompanyControllerIntegrationTest : IntegrationTest() {
         assertFalse(firstToken == secondToken)
 
         given()
-            .header("Authorization", "Bearer $firstToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, firstToken)
             .`when`()
             .get("/api/users/me")
             .then()
             .statusCode(HttpStatus.UNAUTHORIZED.value())
 
         given()
-            .header("Authorization", "Bearer $secondToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, secondToken)
             .`when`()
             .get("/api/users/me")
             .then()
@@ -269,7 +270,7 @@ class AdminCompanyControllerIntegrationTest : IntegrationTest() {
 
         // When & Then
         given()
-            .header("Authorization", "Bearer $token")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, token)
             .`when`()
             .get("/api/users/me")
             .then()
@@ -346,7 +347,7 @@ class AdminCompanyControllerIntegrationTest : IntegrationTest() {
 
         // When
         given()
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .`when`()
             .delete("/admin/companies/${companyUser.id}")
             .then()
@@ -387,7 +388,7 @@ class AdminCompanyControllerIntegrationTest : IntegrationTest() {
         // Then
         assertEquals(0, userTokenRepository.count())
         given()
-            .header("Authorization", "Bearer $token")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, token)
             .`when`()
             .get("/api/users/me")
             .then()
@@ -404,7 +405,7 @@ class AdminCompanyControllerIntegrationTest : IntegrationTest() {
 
         // When & Then
         given()
-            .header("Authorization", "Bearer $token")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, token)
             .`when`()
             .get("/api/users/me")
             .then()
@@ -420,7 +421,7 @@ class AdminCompanyControllerIntegrationTest : IntegrationTest() {
         // When & Then
         given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $userAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, userAccessToken)
             .body(
                 """
                 {
@@ -483,7 +484,7 @@ class AdminCompanyControllerIntegrationTest : IntegrationTest() {
     ): String {
         return given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .body(
                 """
                 {
@@ -504,7 +505,7 @@ class AdminCompanyControllerIntegrationTest : IntegrationTest() {
     ) {
         given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .body(
                 """
                 {

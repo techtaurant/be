@@ -9,6 +9,7 @@ import com.techtaurant.mainserver.post.infrastructure.out.PostLikeLogRepository
 import com.techtaurant.mainserver.post.infrastructure.out.PostReadLogRepository
 import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.entity.UserBan
@@ -90,7 +91,7 @@ class PostViewerStateControllerIntegrationTest : IntegrationTest() {
 
         // when & then
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .queryParam("postIds", bannedPost.id, readPost.id)
             .`when`()
             .get("/api/posts/me/states")

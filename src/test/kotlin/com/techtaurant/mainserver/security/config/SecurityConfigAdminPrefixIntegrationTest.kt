@@ -3,6 +3,7 @@ package com.techtaurant.mainserver.security.config
 import com.techtaurant.mainserver.base.IntegrationTest
 import com.techtaurant.mainserver.security.SecurityConstants
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
@@ -73,7 +74,7 @@ class SecurityConfigAdminPrefixIntegrationTest : IntegrationTest() {
     @DisplayName("USER 권한은 일반 사용자 API를 호출할 수 있다")
     fun userCanAccessUserApi() {
         given()
-            .header("Authorization", "Bearer $userAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, userAccessToken)
             .`when`()
             .get("/api/users/me")
             .then()
@@ -85,7 +86,7 @@ class SecurityConfigAdminPrefixIntegrationTest : IntegrationTest() {
     @DisplayName("ADMIN 권한은 일반 사용자 API를 호출할 수 있다")
     fun adminCanAccessUserApi() {
         given()
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .`when`()
             .get("/api/users/me")
             .then()
@@ -97,7 +98,7 @@ class SecurityConfigAdminPrefixIntegrationTest : IntegrationTest() {
     @DisplayName("USER 권한은 admin prefix API에 접근하면 403을 반환한다")
     fun userCannotAccessAdminPrefixApi() {
         given()
-            .header("Authorization", "Bearer $userAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, userAccessToken)
             .`when`()
             .get("${SecurityConstants.ADMIN_API_PREFIX}/test/ping")
             .then()
@@ -108,7 +109,7 @@ class SecurityConfigAdminPrefixIntegrationTest : IntegrationTest() {
     @DisplayName("ADMIN 권한은 admin prefix API 보안 검사를 통과한다")
     fun adminPassesAdminPrefixSecurity() {
         given()
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .`when`()
             .get("${SecurityConstants.ADMIN_API_PREFIX}/test/ping")
             .then()

@@ -11,6 +11,7 @@ import com.techtaurant.mainserver.notification.infrastructure.out.NotificationRe
 import com.techtaurant.mainserver.post.entity.Post
 import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
@@ -90,7 +91,7 @@ class NotificationControllerIntegrationTest : IntegrationTest() {
         val response =
             RestAssured
                 .given()
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .queryParam("size", 10)
                 .`when`()
                 .get("/api/notifications")
@@ -145,7 +146,7 @@ class NotificationControllerIntegrationTest : IntegrationTest() {
         val firstPage =
             RestAssured
                 .given()
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .queryParam("size", 2)
                 .`when`()
                 .get("/api/notifications")
@@ -162,7 +163,7 @@ class NotificationControllerIntegrationTest : IntegrationTest() {
         val secondPage =
             RestAssured
                 .given()
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .queryParam("size", 2)
                 .queryParam("cursor", nextCursor)
                 .`when`()
@@ -209,7 +210,7 @@ class NotificationControllerIntegrationTest : IntegrationTest() {
         val response =
             RestAssured
                 .given()
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .`when`()
                 .get("/api/notifications/unread-count")
                 .then()
@@ -251,7 +252,7 @@ class NotificationControllerIntegrationTest : IntegrationTest() {
             RestAssured
                 .given()
                 .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .body(
                     mapOf(
                         "notificationIds" to

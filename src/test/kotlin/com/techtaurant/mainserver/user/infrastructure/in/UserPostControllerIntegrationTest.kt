@@ -5,6 +5,7 @@ import com.techtaurant.mainserver.post.entity.Post
 import com.techtaurant.mainserver.post.enums.PostStatusEnum
 import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
@@ -67,7 +68,7 @@ class UserPostControllerIntegrationTest : IntegrationTest() {
 
         // when & then
         given()
-            .header("Authorization", "Bearer $authorAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, authorAccessToken)
             .`when`()
             .get("/api/users/me/posts")
             .then()
@@ -98,7 +99,7 @@ class UserPostControllerIntegrationTest : IntegrationTest() {
 
         // when & then
         given()
-            .header("Authorization", "Bearer $authorAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, authorAccessToken)
             .`when`()
             .get("/api/users/me/posts/${privatePost.id}")
             .then()
@@ -123,7 +124,7 @@ class UserPostControllerIntegrationTest : IntegrationTest() {
 
         // when & then
         given()
-            .header("Authorization", "Bearer $authorAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, authorAccessToken)
             .`when`()
             .get("/api/users/me/posts/${otherPost.id}")
             .then()

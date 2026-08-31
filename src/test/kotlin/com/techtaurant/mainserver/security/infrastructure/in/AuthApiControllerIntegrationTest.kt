@@ -1,11 +1,13 @@
 package com.techtaurant.mainserver.security.infrastructure.`in`
 
 import com.techtaurant.mainserver.base.IntegrationTest
-import com.techtaurant.mainserver.security.cache.TokenCachePort
+import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.infrastructure.out.RefreshTokenStore
 import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtProperties
-import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
+import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
+import com.techtaurant.mainserver.user.infrastructure.out.UserRepository
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
 import io.restassured.RestAssured.given
@@ -13,7 +15,6 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import java.time.Instant
 import java.util.Date
@@ -25,17 +26,17 @@ class AuthApiControllerIntegrationTest : IntegrationTest() {
     private lateinit var jwtProperties: JwtProperties
 
     @Autowired
-    private lateinit var jwtTokenProvider: JwtTokenProvider
+    private lateinit var refreshTokenStore: RefreshTokenStore
 
     @Autowired
-    private lateinit var tokenCachePort: TokenCachePort
+    private lateinit var userRepository: UserRepository
 
     @Test
     @DisplayName("만료된 accessToken으로 로그아웃하면 인증에 실패하고 서버 토큰을 유지한다")
     fun expiredAccessTokenCannotLogOut() {
-        val userId = UUID.randomUUID()
+        val userId = createUser()
         val expiredAccessToken = createExpiredAccessToken(userId)
-        tokenCachePort.saveRefreshToken(userId.toString(), "refresh-token")
+        refreshTokenStore.save(userId, "refresh-token")
 
         given()
             .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, expiredAccessToken)
@@ -44,29 +45,23 @@ class AuthApiControllerIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.UNAUTHORIZED.value())
 
-        assertThat(tokenCachePort.getRefreshToken(userId.toString())).isEqualTo("refresh-token")
+        assertThat(refreshTokenStore.exists(userId, "refresh-token")).isTrue()
     }
 
-    @Test
-    @DisplayName("bearer 인증 사용자와 accessToken 쿠키 사용자가 다르면 인증 사용자의 서버 토큰만 폐기한다")
-    fun authenticatedPrincipalTakesPrecedenceOverCookieSubject() {
-        val authenticatedUserId = UUID.randomUUID()
-        val cookieUserId = UUID.randomUUID()
-        val bearerAccessToken = jwtTokenProvider.createAccessToken(authenticatedUserId, UserRole.USER)
-        val cookieAccessToken = jwtTokenProvider.createAccessToken(cookieUserId, UserRole.USER)
-        tokenCachePort.saveRefreshToken(authenticatedUserId.toString(), "authenticated-refresh-token")
-        tokenCachePort.saveRefreshToken(cookieUserId.toString(), "cookie-refresh-token")
+    private fun createUser(): UUID {
+        val user =
+            userRepository.save(
+                User(
+                    name = "인증 사용자 ${UUID.randomUUID()}",
+                    email = "auth-${UUID.randomUUID()}@example.com",
+                    provider = OAuthProvider.SYSTEM,
+                    identifier = "auth-${UUID.randomUUID()}",
+                    role = UserRole.USER,
+                    profileImageUrl = "",
+                ),
+            )
 
-        given()
-            .header(HttpHeaders.AUTHORIZATION, "${JwtConstants.BEARER_PREFIX}$bearerAccessToken")
-            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, cookieAccessToken)
-            .`when`()
-            .post("/api/auth/logout")
-            .then()
-            .statusCode(HttpStatus.OK.value())
-
-        assertThat(tokenCachePort.getRefreshToken(authenticatedUserId.toString())).isNull()
-        assertThat(tokenCachePort.getRefreshToken(cookieUserId.toString())).isEqualTo("cookie-refresh-token")
+        return requireNotNull(user.id)
     }
 
     private fun createExpiredAccessToken(userId: UUID): String {

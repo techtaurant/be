@@ -30,6 +30,7 @@ import com.techtaurant.mainserver.jooq.tables.Tags
 import com.techtaurant.mainserver.jooq.tables.UserBans
 import com.techtaurant.mainserver.jooq.tables.UserFollows
 import com.techtaurant.mainserver.jooq.tables.UserLinks
+import com.techtaurant.mainserver.jooq.tables.UserRefreshTokens
 import com.techtaurant.mainserver.jooq.tables.UserTokens
 import com.techtaurant.mainserver.jooq.tables.Users
 
@@ -164,6 +165,11 @@ val USER_FOLLOWS: UserFollows = UserFollows.USER_FOLLOWS
  * The table <code>public.user_links</code>.
  */
 val USER_LINKS: UserLinks = UserLinks.USER_LINKS
+
+/**
+ * 사용자별 refresh token 저장소
+ */
+val USER_REFRESH_TOKENS: UserRefreshTokens = UserRefreshTokens.USER_REFRESH_TOKENS
 
 /**
  * The table <code>public.user_tokens</code>.

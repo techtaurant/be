@@ -114,12 +114,6 @@ axios.get('/api/data', {
 })
 ```
 
-또는 Authorization 헤더 사용:
-
-```
-Authorization: Bearer {accessToken}
-```
-
 ---
 
 ## 에러 코드

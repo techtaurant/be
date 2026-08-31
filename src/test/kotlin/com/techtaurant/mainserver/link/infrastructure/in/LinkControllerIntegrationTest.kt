@@ -7,6 +7,7 @@ import com.techtaurant.mainserver.link.infrastructure.out.LinkReadLogRepository
 import com.techtaurant.mainserver.link.infrastructure.out.LinkRepository
 import com.techtaurant.mainserver.link.infrastructure.out.UserLinkRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
@@ -88,7 +89,7 @@ class LinkControllerIntegrationTest : IntegrationTest() {
     @DisplayName("사용자는 링크를 저장하고 읽음 상태로 변경할 수 있다")
     fun userCanSaveAndMarkLinkAsRead() {
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .post("/api/links/${firstLink.id}/save")
             .then()
@@ -98,7 +99,7 @@ class LinkControllerIntegrationTest : IntegrationTest() {
 
         given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .body("""{"isRead": true}""")
             .`when`()
             .post("/api/links/${firstLink.id}/read-logs")
@@ -112,7 +113,7 @@ class LinkControllerIntegrationTest : IntegrationTest() {
     @DisplayName("사용자는 링크 저장을 취소하고 읽음 상태를 해제할 수 있다")
     fun userCanUnsaveAndUnreadLink() {
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .post("/api/links/${secondLink.id}/save")
             .then()
@@ -120,7 +121,7 @@ class LinkControllerIntegrationTest : IntegrationTest() {
 
         given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .body("""{"isRead": true}""")
             .`when`()
             .post("/api/links/${secondLink.id}/read-logs")
@@ -128,7 +129,7 @@ class LinkControllerIntegrationTest : IntegrationTest() {
             .statusCode(HttpStatus.OK.value())
 
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .delete("/api/links/${secondLink.id}/save")
             .then()
@@ -138,7 +139,7 @@ class LinkControllerIntegrationTest : IntegrationTest() {
 
         given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .body("""{"isRead": false}""")
             .`when`()
             .post("/api/links/${secondLink.id}/read-logs")
@@ -153,7 +154,7 @@ class LinkControllerIntegrationTest : IntegrationTest() {
     fun userCanRecordLikeAndViewCountForLink() {
         given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .body("""{"likeStatus": "LIKE"}""")
             .`when`()
             .post("/api/links/${firstLink.id}/like")

@@ -1,9 +1,9 @@
 package com.techtaurant.mainserver.security.service
 
 import com.techtaurant.mainserver.common.exception.ApiException
-import com.techtaurant.mainserver.security.cache.TokenCachePort
 import com.techtaurant.mainserver.security.helper.CookieHelper
 import com.techtaurant.mainserver.security.helper.JwtExceptionMapper
+import com.techtaurant.mainserver.security.infrastructure.out.RefreshTokenStore
 import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtStatus
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional
 class TokenRefreshService(
     private val cookieHelper: CookieHelper,
     private val jwtTokenProvider: JwtTokenProvider,
-    private val tokenCacheManager: TokenCachePort,
+    private val refreshTokenStore: RefreshTokenStore,
     private val userRepository: UserRepository,
 ) {
     @Transactional
@@ -34,20 +34,15 @@ class TokenRefreshService(
         // 2. JWT 검증 및 userId 추출 (먼저!)
         val userId =
             try {
-                jwtTokenProvider.validateAndGetUserId(clientRefreshToken)
+                jwtTokenProvider.validateAndGetRefreshTokenUserId(clientRefreshToken)
             } catch (e: ExpiredJwtException) {
                 throw ApiException(JwtStatus.REFRESH_TOKEN_EXPIRED)
             } catch (e: Exception) {
                 throw ApiException(JwtExceptionMapper.mapToJwtStatus(e = e))
             }
 
-        // 3. 캐시에서 userId로 저장된 refresh token 조회
-        val cachedRefreshToken =
-            tokenCacheManager.getRefreshToken(userId.toString())
-                ?: throw ApiException(JwtStatus.INVALID_REFRESH_TOKEN)
-
-        // 4. 클라이언트 토큰과 캐시 토큰 비교 (토큰 재사용 공격 방어)
-        if (clientRefreshToken != cachedRefreshToken) {
+        // 3. 저장된 refresh token과 대조 (토큰 재사용 공격 방어)
+        if (!refreshTokenStore.exists(userId, clientRefreshToken)) {
             throw ApiException(JwtStatus.INVALID_REFRESH_TOKEN)
         }
 
@@ -61,8 +56,9 @@ class TokenRefreshService(
         val newAccessToken = jwtTokenProvider.createAccessToken(userId, user.role)
         val newRefreshToken = jwtTokenProvider.createRefreshToken(userId)
 
-        // 7. 새 refresh token 저장 (기존 토큰은 자동으로 덮어씌워짐)
-        tokenCacheManager.saveRefreshToken(userId.toString(), newRefreshToken)
+        // 7. 사용한 refresh token을 폐기하고 새 토큰을 저장 (다른 기기 세션은 유지)
+        refreshTokenStore.delete(userId, clientRefreshToken)
+        refreshTokenStore.save(userId, newRefreshToken)
 
         // 8. 쿠키에 새 토큰 설정
         cookieHelper.addAuthCookie(
