@@ -37,7 +37,6 @@ class OAuth2SuccessHandler(
         val accessToken = jwtTokenProvider.createAccessToken(userId, user.role)
         val refreshToken = jwtTokenProvider.createRefreshToken(userId)
 
-        // userId 기반으로 refresh token 저장 (기존 토큰은 대체됨)
         refreshTokenStore.save(userId, refreshToken)
 
         cookieHelper.addAuthCookie(

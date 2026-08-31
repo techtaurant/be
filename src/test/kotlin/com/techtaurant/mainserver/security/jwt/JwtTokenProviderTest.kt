@@ -6,7 +6,6 @@ import io.jsonwebtoken.security.Keys
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
 import java.util.Date
 import java.util.UUID
 
@@ -53,38 +52,6 @@ class JwtTokenProviderTest {
         val token = provider.createRefreshToken(userId)
 
         assertThat(provider.validateAndGetRefreshTokenUserId(token)).isEqualTo(userId)
-    }
-
-    @Test
-    @DisplayName("Refresh token을 accessToken 자리에 넣으면 종류가 달라 거부한다")
-    fun validateAndGetClaims_rejectsRefreshToken() {
-        val token = provider.createRefreshToken(UUID.randomUUID())
-
-        assertThrows<IllegalArgumentException> { provider.validateAndGetClaims(token) }
-    }
-
-    @Test
-    @DisplayName("Access token을 refreshToken 자리에 넣으면 종류가 달라 거부한다")
-    fun validateAndGetRefreshTokenUserId_rejectsAccessToken() {
-        val token = provider.createAccessToken(UUID.randomUUID(), UserRole.USER)
-
-        assertThrows<IllegalArgumentException> { provider.validateAndGetRefreshTokenUserId(token) }
-    }
-
-    @Test
-    @DisplayName("종류 표시가 없는 예전 토큰은 서명이 유효해도 거부한다")
-    fun validateAndGetClaims_rejectsTokenWithoutTypeClaim() {
-        val legacyToken =
-            Jwts.builder()
-                .subject(UUID.randomUUID().toString())
-                .claim(JwtConstants.ROLE_CLAIM, UserRole.USER.key)
-                .claim(JwtConstants.PERMANENT_CLAIM, JwtConstants.EXPIRING_ACCESS_TOKEN_IS_PERMANENT)
-                .issuedAt(Date())
-                .expiration(Date(System.currentTimeMillis() + properties.accessTokenExpireMs))
-                .signWith(secretKey)
-                .compact()
-
-        assertThrows<IllegalArgumentException> { provider.validateAndGetClaims(legacyToken) }
     }
 
     @Test

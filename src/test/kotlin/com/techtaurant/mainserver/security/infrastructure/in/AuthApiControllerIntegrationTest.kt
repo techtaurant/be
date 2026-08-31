@@ -5,6 +5,7 @@ import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.security.infrastructure.out.RefreshTokenStore
 import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtProperties
+import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
 import com.techtaurant.mainserver.user.infrastructure.out.UserRepository
@@ -31,6 +32,9 @@ class AuthApiControllerIntegrationTest : IntegrationTest() {
     @Autowired
     private lateinit var userRepository: UserRepository
 
+    @Autowired
+    private lateinit var jwtTokenProvider: JwtTokenProvider
+
     @Test
     @DisplayName("만료된 accessToken으로 로그아웃하면 인증에 실패하고 서버 토큰을 유지한다")
     fun expiredAccessTokenCannotLogOut() {
@@ -46,6 +50,44 @@ class AuthApiControllerIntegrationTest : IntegrationTest() {
             .statusCode(HttpStatus.UNAUTHORIZED.value())
 
         assertThat(refreshTokenStore.exists(userId, "refresh-token")).isTrue()
+    }
+
+    @Test
+    @DisplayName("기기별 로그아웃은 요청에 실려 온 refreshToken의 세션만 폐기하고 다른 기기 세션을 남긴다")
+    fun currentDeviceLogoutRevokesOnlyTheRequestingSession() {
+        val userId = createUser()
+        val thisDeviceRefreshToken = jwtTokenProvider.createRefreshToken(userId)
+        refreshTokenStore.save(userId, thisDeviceRefreshToken)
+        refreshTokenStore.save(userId, OTHER_DEVICE_REFRESH_TOKEN)
+
+        given()
+            .cookie(JwtConstants.REFRESH_TOKEN_COOKIE, thisDeviceRefreshToken)
+            .`when`()
+            .post("/open-api/auth/logout")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+
+        assertThat(refreshTokenStore.exists(userId, thisDeviceRefreshToken)).isFalse()
+        assertThat(refreshTokenStore.exists(userId, OTHER_DEVICE_REFRESH_TOKEN)).isTrue()
+    }
+
+    @Test
+    @DisplayName("refreshToken 쿠키를 받지 못하는 옛 경로는 인증된 사용자의 모든 기기 세션을 폐기한다")
+    fun deprecatedLogoutRevokesEverySessionOfTheUser() {
+        val userId = createUser()
+        val thisDeviceRefreshToken = jwtTokenProvider.createRefreshToken(userId)
+        refreshTokenStore.save(userId, thisDeviceRefreshToken)
+        refreshTokenStore.save(userId, OTHER_DEVICE_REFRESH_TOKEN)
+
+        given()
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, jwtTokenProvider.createAccessToken(userId, UserRole.USER))
+            .`when`()
+            .post("/api/auth/logout")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+
+        assertThat(refreshTokenStore.exists(userId, thisDeviceRefreshToken)).isFalse()
+        assertThat(refreshTokenStore.exists(userId, OTHER_DEVICE_REFRESH_TOKEN)).isFalse()
     }
 
     private fun createUser(): UUID {
@@ -74,5 +116,11 @@ class AuthApiControllerIntegrationTest : IntegrationTest() {
             .expiration(Date.from(now.minusSeconds(1)))
             .signWith(Keys.hmacShaKeyFor(jwtProperties.secret.toByteArray()))
             .compact()
+    }
+
+    private companion object {
+        // createRefreshToken은 jti가 없어 같은 밀리초의 두 호출이 같은 토큰을 내므로,
+        // 다른 기기의 행은 구분되는 값으로 심는다. 저장소는 해시만 대조하므로 JWT일 필요가 없다.
+        const val OTHER_DEVICE_REFRESH_TOKEN = "other-device-refresh-token"
     }
 }

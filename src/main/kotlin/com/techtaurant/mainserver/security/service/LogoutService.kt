@@ -3,6 +3,7 @@ package com.techtaurant.mainserver.security.service
 import com.techtaurant.mainserver.security.helper.CookieHelper
 import com.techtaurant.mainserver.security.infrastructure.out.RefreshTokenStore
 import com.techtaurant.mainserver.security.jwt.JwtConstants
+import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.stereotype.Service
@@ -11,21 +12,47 @@ import java.util.UUID
 /**
  * 로그아웃 서비스
  *
- * 요청을 보낸 기기의 refresh token만 폐기하고 인증 쿠키를 삭제합니다.
- * 다른 기기의 세션은 그대로 두며, 폐기할 토큰이 없어도 쿠키 정리는 그대로 수행해 멱등성을 지킵니다.
+ * 폐기할 토큰이 없어도 쿠키 정리는 그대로 수행해 여러 번 호출해도 결과가 같게 유지합니다.
  */
 @Service
 class LogoutService(
     private val cookieHelper: CookieHelper,
+    private val jwtTokenProvider: JwtTokenProvider,
     private val refreshTokenStore: RefreshTokenStore,
 ) {
-    fun logout(
-        authenticatedUserId: UUID,
+    /**
+     * 요청에 실려 온 refreshToken에 해당하는 세션만 폐기해 다른 기기의 로그인을 남깁니다.
+     * 이름이 같은 쿠키가 여러 개 올 수 있으므로 후보를 모두 훑습니다.
+     */
+    fun logoutCurrentDevice(
         request: HttpServletRequest,
         response: HttpServletResponse,
     ) {
-        cookieHelper.getCookie(request, JwtConstants.REFRESH_TOKEN_COOKIE)
-            ?.let { refreshTokenStore.delete(authenticatedUserId, it) }
+        cookieHelper.getCookies(request, JwtConstants.REFRESH_TOKEN_COOKIE)
+            .forEach { revokeIfServerIssued(it) }
         cookieHelper.deleteAllAuthCookies(response)
+    }
+
+    /**
+     * refreshToken 쿠키가 실리지 않는 옛 경로를 위해 인증된 사용자의 세션을 모두 폐기합니다.
+     * 기기별 세션을 남기지 못하지만, 폐기할 토큰을 요청에서 얻을 수 없는 경로에서는 이것이 유일한 방법입니다.
+     */
+    fun logoutAllDevices(
+        authenticatedUserId: UUID,
+        response: HttpServletResponse,
+    ) {
+        refreshTokenStore.deleteAllByUserId(authenticatedUserId)
+        cookieHelper.deleteAllAuthCookies(response)
+    }
+
+    /**
+     * 이 서버가 발급하지 않은 쿠키 값은 폐기할 세션을 특정할 수 없으므로 건너뜁니다.
+     */
+    private fun revokeIfServerIssued(refreshToken: String) {
+        val userId =
+            runCatching { jwtTokenProvider.validateAndGetRefreshTokenUserId(refreshToken) }
+                .getOrNull() ?: return
+
+        refreshTokenStore.delete(userId, refreshToken)
     }
 }

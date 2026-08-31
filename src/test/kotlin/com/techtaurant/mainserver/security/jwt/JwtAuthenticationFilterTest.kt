@@ -130,6 +130,7 @@ class JwtAuthenticationFilterTest {
         assertThat(filterChain.request).isNotNull()
         assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
         assertThat(SecurityContextHolder.getContext().authentication).isNull()
+        assertThat(response.getHeaders(HttpHeaders.SET_COOKIE)).hasSize(2)
     }
 
     @Test
@@ -169,8 +170,8 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    @DisplayName("쿠키로 온 accessToken이 모두 만료됐으면 남은 Domain 조합까지 함께 지워 다음 요청이 같은 토큰을 다시 싣지 않게 한다")
-    fun expiredAccessTokenCookiesAreClearedInEveryDomainVariant() {
+    @DisplayName("만료된 accessToken 쿠키는 지우지 않아 나란히 진행된 재발급이 내려준 쿠키를 뒤늦게 삭제하지 않는다")
+    fun expiredAccessTokenCookieIsKeptSoConcurrentReissueSurvives() {
         // given
         val request = requestWithAccessTokenCookies(OPTIONAL_AUTH_PATH, EXPIRED_TOKEN)
         val response = MockHttpServletResponse()
@@ -181,21 +182,17 @@ class JwtAuthenticationFilterTest {
         jwtAuthenticationFilter.doFilter(request, response, filterChain)
 
         // then
-        val setCookieHeaders = response.getHeaders(HttpHeaders.SET_COOKIE)
-        assertThat(setCookieHeaders).hasSize(2)
-        assertThat(setCookieHeaders).allMatch { it.startsWith("${JwtConstants.ACCESS_TOKEN_COOKIE}=;") && it.contains("Max-Age=0") }
-        assertThat(setCookieHeaders.filter { it.contains("Domain=$ACCESS_TOKEN_COOKIE_DOMAIN") }).hasSize(1)
-        assertThat(setCookieHeaders).noneMatch { it.contains(JwtConstants.REFRESH_TOKEN_COOKIE) }
+        assertThat(response.getHeaders(HttpHeaders.SET_COOKIE)).isEmpty()
     }
 
     @Test
-    @DisplayName("토큰을 새로 발급하는 경로는 같은 응답에서 쿠키를 내려주므로 만료된 accessToken 쿠키를 지우지 않는다")
-    fun expiredAccessTokenCookieIsKeptOnTokenIssuingPath() {
+    @DisplayName("토큰을 새로 발급하는 경로는 같은 응답에서 쿠키를 내려주므로 되살릴 수 없는 accessToken 쿠키도 지우지 않는다")
+    fun rejectedAccessTokenCookieIsKeptOnTokenIssuingPath() {
         // given
-        val request = requestWithAccessTokenCookies(REFRESH_PATH, EXPIRED_TOKEN)
+        val request = requestWithAccessTokenCookies(REFRESH_PATH, LEGACY_TOKEN)
         val response = MockHttpServletResponse()
         val filterChain = MockFilterChain()
-        givenTokenIsExpired(EXPIRED_TOKEN)
+        givenTokenIsRejected(LEGACY_TOKEN)
 
         // when
         jwtAuthenticationFilter.doFilter(request, response, filterChain)
@@ -206,24 +203,26 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    @DisplayName("더는 인정하지 않는 토큰은 쿠키를 지우고 INVALID_TOKEN으로 알려 재로그인하게 한다")
-    fun rejectedAccessTokenCookieIsClearedAndReported() {
+    @DisplayName("되살릴 수 없는 토큰은 남은 Domain 조합까지 쿠키를 지우고 비로그인 사용자로 통과시킨다")
+    fun rejectedAccessTokenCookieIsClearedAndPassesThroughAsAnonymous() {
         // given
         val request = requestWithAccessTokenCookies(OPTIONAL_AUTH_PATH, LEGACY_TOKEN)
         val response = MockHttpServletResponse()
         val filterChain = MockFilterChain()
-        every {
-            jwtTokenProvider.validateAndGetClaims(LEGACY_TOKEN)
-        } throws IllegalArgumentException("허용되지 않는 토큰 종류입니다")
+        givenTokenIsRejected(LEGACY_TOKEN)
 
         // when
         jwtAuthenticationFilter.doFilter(request, response, filterChain)
 
         // then
-        assertThat(response.status).isEqualTo(HttpServletResponse.SC_UNAUTHORIZED)
-        assertThat(customStatusCodeOf(response)).isEqualTo(JwtStatus.INVALID_TOKEN.getCustomStatusCode())
-        assertThat(response.getHeaders(HttpHeaders.SET_COOKIE)).hasSize(2)
-        assertThat(filterChain.request).isNull()
+        val setCookieHeaders = response.getHeaders(HttpHeaders.SET_COOKIE)
+        assertThat(setCookieHeaders).hasSize(2)
+        assertThat(setCookieHeaders).allMatch { it.startsWith("${JwtConstants.ACCESS_TOKEN_COOKIE}=;") && it.contains("Max-Age=0") }
+        assertThat(setCookieHeaders.filter { it.contains("Domain=$ACCESS_TOKEN_COOKIE_DOMAIN") }).hasSize(1)
+        assertThat(setCookieHeaders).noneMatch { it.contains(JwtConstants.REFRESH_TOKEN_COOKIE) }
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+        assertThat(filterChain.request).isNotNull()
+        assertThat(SecurityContextHolder.getContext().authentication).isNull()
     }
 
     private fun requestWithAccessTokenCookies(
@@ -242,6 +241,12 @@ class JwtAuthenticationFilterTest {
         every {
             jwtTokenProvider.validateAndGetClaims(token)
         } returns JwtClaims(userId, UserRole.USER.key, JwtConstants.EXPIRING_ACCESS_TOKEN_IS_PERMANENT)
+    }
+
+    private fun givenTokenIsRejected(token: String) {
+        every {
+            jwtTokenProvider.validateAndGetClaims(token)
+        } throws IllegalArgumentException("허용되지 않는 토큰입니다")
     }
 
     private fun givenTokenIsExpired(token: String) {

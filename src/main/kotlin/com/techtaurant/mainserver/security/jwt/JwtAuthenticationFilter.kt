@@ -39,15 +39,13 @@ class JwtAuthenticationFilter(
         if (authentication is AccessTokenAuthentication.Rejected) {
             request.setAttribute(SecurityConstants.ERROR_ATTRIBUTE, authentication.status)
 
-            if (endsSession(authentication.status)) {
-                if (!isTokenIssuingPath(request)) {
-                    cookieHelper.deleteCookie(response, JwtConstants.ACCESS_TOKEN_COOKIE)
-                }
+            if (authentication.status in UNRECOVERABLE_TOKEN_STATUSES && !isTokenIssuingPath(request)) {
+                cookieHelper.deleteCookie(response, JwtConstants.ACCESS_TOKEN_COOKIE)
+            }
 
-                if (requiresEndedSessionResponse(request)) {
-                    authenticationEntryPoint.writeError(response, authentication.status)
-                    return
-                }
+            if (requiresEndedSessionResponse(request, authentication.status)) {
+                authenticationEntryPoint.writeError(response, authentication.status)
+                return
             }
         }
 
@@ -94,15 +92,6 @@ class JwtAuthenticationFilter(
         )
     }
 
-    /**
-     * 다시 쓸 수 없는 토큰이라 지금 세션을 끝내야 하는 상태입니다.
-     * 만료는 재발급으로 되살릴 수 있고, 종류 표시가 없는 예전 토큰과 더는 인정하지 않는 토큰은 재로그인이 필요합니다.
-     * 두 경우 모두 남은 쿠키를 지워야 다음 요청이 같은 토큰을 다시 싣지 않습니다.
-     */
-    private fun endsSession(status: JwtStatus): Boolean {
-        return status == JwtStatus.ACCESS_TOKEN_EXPIRED || status == JwtStatus.INVALID_TOKEN
-    }
-
     private fun authenticationOf(claims: JwtClaims): UsernamePasswordAuthenticationToken {
         // principal에는 userId만 담아 인증 이후 조회가 항상 최신 사용자 정보를 보게 합니다.
         return UsernamePasswordAuthenticationToken(
@@ -114,10 +103,17 @@ class JwtAuthenticationFilter(
 
     /**
      * 인증 없이도 응답하는 경로는 인가 계층이 요청을 통과시켜 세션이 끝났다는 사실이 클라이언트까지 전달되지 않습니다.
-     * 그래서 이 경로에서는 직접 401로 알려 클라이언트가 재발급이나 재로그인으로 넘어가게 합니다.
+     * 그중 재발급으로 되살릴 수 있는 만료만 직접 401로 알려 클라이언트가 재발급으로 넘어가게 합니다.
+     * 되살릴 수 없는 실패는 클라이언트가 지금 할 수 있는 일이 없으므로,
+     * 쿠키만 걷어낸 뒤 비로그인 사용자로 통과시켜 공개 콘텐츠를 계속 보여줍니다.
      */
-    private fun requiresEndedSessionResponse(request: HttpServletRequest): Boolean {
-        return request.requestURI.startsWith("${SecurityConstants.OPEN_API_PREFIX}/") && !isTokenIssuingPath(request)
+    private fun requiresEndedSessionResponse(
+        request: HttpServletRequest,
+        status: JwtStatus,
+    ): Boolean {
+        return status == JwtStatus.ACCESS_TOKEN_EXPIRED &&
+            request.requestURI.startsWith("${SecurityConstants.OPEN_API_PREFIX}/") &&
+            !isTokenIssuingPath(request)
     }
 
     /**
@@ -171,6 +167,18 @@ class JwtAuthenticationFilter(
     }
 
     private companion object {
+        /**
+         * 재발급으로 되살릴 수 없어 쿠키에서 걷어내야 하는 상태입니다.
+         * 만료는 여기에 넣지 않습니다 — 재발급이 성공하면 새 쿠키가 덮어쓰는데,
+         * 느린 요청의 응답이 재발급 뒤에 도착하면 방금 받은 쿠키를 지워 재발급이 끝없이 반복됩니다.
+         */
+        val UNRECOVERABLE_TOKEN_STATUSES =
+            setOf(
+                JwtStatus.INVALID_TOKEN,
+                JwtStatus.MALFORMED_TOKEN,
+                JwtStatus.UNSUPPORTED_TOKEN,
+            )
+
         val TOKEN_ISSUING_PATH_PREFIXES =
             listOf(
                 "${SecurityConstants.OPEN_API_PREFIX}/auth/",

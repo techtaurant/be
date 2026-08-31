@@ -38,4 +38,22 @@ interface AuthOpenApiControllerDocs {
         request: HttpServletRequest,
         response: HttpServletResponse,
     ): ApiResponse<Unit>
+
+    @Operation(
+        summary = "로그아웃",
+        description = "요청에 실려 온 Refresh Token의 세션만 폐기하고 인증 쿠키를 삭제합니다. 다른 기기의 로그인은 유지됩니다",
+    )
+    @SwaggerApiResponse(
+        responseCode = "200",
+        description = "로그아웃 성공",
+    )
+    @ApiErrorCodeResponses(
+        [
+            ApiErrorCodeResponse(DefaultStatus::class, ["UNKNOWN_EXCEPTION"]),
+        ],
+    )
+    fun logout(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+    ): ApiResponse<Unit>
 }

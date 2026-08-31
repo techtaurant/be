@@ -56,7 +56,7 @@ class TokenRefreshServiceTest {
                 every { role } returns UserRole.USER
             }
 
-        every { cookieHelper.getCookie(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns refreshTokenValue
+        every { cookieHelper.getCookies(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns listOf(refreshTokenValue)
         every { cookieHelper.addAuthCookie(any(), any(), any(), any()) } returns Unit
         every { jwtTokenProvider.validateAndGetRefreshTokenUserId(refreshTokenValue) } returns userId
         every { refreshTokenStore.exists(userId, refreshTokenValue) } returns true
@@ -99,7 +99,7 @@ class TokenRefreshServiceTest {
         val request = mockk<HttpServletRequest>()
         val response = mockk<HttpServletResponse>()
 
-        every { cookieHelper.getCookie(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns refreshTokenValue
+        every { cookieHelper.getCookies(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns listOf(refreshTokenValue)
         every { jwtTokenProvider.validateAndGetRefreshTokenUserId(refreshTokenValue) } returns userId
         every { refreshTokenStore.exists(userId, refreshTokenValue) } returns false
 
@@ -119,7 +119,7 @@ class TokenRefreshServiceTest {
         val request = mockk<HttpServletRequest>()
         val response = mockk<HttpServletResponse>()
 
-        every { cookieHelper.getCookie(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns refreshTokenValue
+        every { cookieHelper.getCookies(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns listOf(refreshTokenValue)
         every { jwtTokenProvider.validateAndGetRefreshTokenUserId(refreshTokenValue) } throws ExpiredJwtException(null, null, "expired")
 
         // when & then
@@ -131,6 +131,60 @@ class TokenRefreshServiceTest {
     }
 
     @Test
+    @DisplayName("이름이 같은 refreshToken 쿠키가 여러 개 오면 저장소가 인정하는 토큰으로 재발급한다")
+    fun `refresh iterates duplicate refresh token cookies`() {
+        // given
+        val userId = UUID.randomUUID()
+        val staleRefreshToken = "stale-refresh-token"
+        val liveRefreshToken = "live-refresh-token"
+        val newAccessToken = "new-access-token"
+        val newRefreshToken = "new-refresh-token"
+        val request = mockk<HttpServletRequest>()
+        val response = mockk<HttpServletResponse>(relaxed = true)
+        val user =
+            mockk<User> {
+                every { role } returns UserRole.USER
+            }
+
+        every { cookieHelper.getCookies(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns
+            listOf(staleRefreshToken, liveRefreshToken)
+        every { cookieHelper.addAuthCookie(any(), any(), any(), any()) } returns Unit
+        every { jwtTokenProvider.validateAndGetRefreshTokenUserId(staleRefreshToken) } returns userId
+        every { jwtTokenProvider.validateAndGetRefreshTokenUserId(liveRefreshToken) } returns userId
+        every { refreshTokenStore.exists(userId, staleRefreshToken) } returns false
+        every { refreshTokenStore.exists(userId, liveRefreshToken) } returns true
+        every { userRepository.findById(userId) } returns Optional.of(user)
+        every { jwtTokenProvider.createAccessToken(userId, UserRole.USER) } returns newAccessToken
+        every { jwtTokenProvider.createRefreshToken(userId) } returns newRefreshToken
+        every { refreshTokenStore.delete(userId, liveRefreshToken) } returns Unit
+        every { refreshTokenStore.save(userId, newRefreshToken) } returns Unit
+
+        // when
+        tokenRefreshService.execute(request, response)
+
+        // then
+        verify(exactly = 1) { refreshTokenStore.delete(userId, liveRefreshToken) }
+        verify(exactly = 0) { refreshTokenStore.delete(userId, staleRefreshToken) }
+    }
+
+    @Test
+    @DisplayName("refreshToken 쿠키가 하나도 없으면 누락으로 알린다")
+    fun `refresh without any refresh token cookie`() {
+        // given
+        val request = mockk<HttpServletRequest>()
+        val response = mockk<HttpServletResponse>()
+
+        every { cookieHelper.getCookies(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns emptyList()
+
+        // when & then
+        val exception =
+            assertThrows<ApiException> {
+                tokenRefreshService.execute(request, response)
+            }
+        assertEquals(JwtStatus.MISSING_REFRESH_TOKEN, exception.status)
+    }
+
+    @Test
     @DisplayName("User가 존재하지 않을 경우 예외 발생")
     fun `refresh with non-existent user`() {
         // given
@@ -139,7 +193,7 @@ class TokenRefreshServiceTest {
         val request = mockk<HttpServletRequest>()
         val response = mockk<HttpServletResponse>()
 
-        every { cookieHelper.getCookie(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns refreshTokenValue
+        every { cookieHelper.getCookies(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns listOf(refreshTokenValue)
         every { jwtTokenProvider.validateAndGetRefreshTokenUserId(refreshTokenValue) } returns userId
         every { refreshTokenStore.exists(userId, refreshTokenValue) } returns true
         every { userRepository.findById(userId) } returns Optional.empty()

@@ -63,6 +63,18 @@ class CookieHelper(
     }
 
     /**
+     * 브라우저는 Domain·Path 조합이 다르면 이름이 같은 쿠키를 각각 보관해 한 요청에 함께 싣고,
+     * RFC 6265는 서버가 그 순서에 기대지 말라고 정합니다.
+     * 어느 쪽이 쓸 수 있는 값인지는 호출부만 알 수 있으므로 후보를 모두 돌려줍니다.
+     */
+    fun getCookies(
+        request: HttpServletRequest,
+        name: String,
+    ): List<String> {
+        return request.cookies?.filter { it.name == name }?.map { it.value }.orEmpty()
+    }
+
+    /**
      * 쿠키를 발급하면서, 지금 쓰지 않는 옛 Domain·Path 조합의 만료 헤더를 함께 내보낸다.
      */
     private fun issueCookie(
@@ -140,9 +152,21 @@ class CookieHelper(
             addCookieHeader(response, name, "", 0, resolveCookiePath(name), staleAccessTokenDomain)
         }
 
-        if (name == JwtConstants.REFRESH_TOKEN_COOKIE && cookieProperties.path != REFRESH_TOKEN_PATH) {
-            addCookieHeader(response, name, "", 0, cookieProperties.path, domain = null)
+        if (name == JwtConstants.REFRESH_TOKEN_COOKIE) {
+            staleRefreshTokenPaths().forEach { stalePath ->
+                addCookieHeader(response, name, "", 0, stalePath, domain = null)
+            }
         }
+    }
+
+    /**
+     * refreshToken은 Domain 없이 Path만 옮겨 다녔으므로 지금 쓰지 않는 옛 Path 조합을 함께 만료시킵니다.
+     * 전체 경로로 발급되던 시절의 쿠키와, 재발급 경로 하나로만 좁혔던 시절의 쿠키가 대상입니다.
+     */
+    private fun staleRefreshTokenPaths(): List<String> {
+        return listOf(cookieProperties.path, LEGACY_REFRESH_ONLY_TOKEN_PATH)
+            .distinct()
+            .filter { it != REFRESH_TOKEN_PATH }
     }
 
     private fun resolveCookiePath(name: String): String {
@@ -158,7 +182,9 @@ class CookieHelper(
     }
 
     private companion object {
-        const val REFRESH_TOKEN_PATH = "/open-api/auth/refresh"
+        // 재발급과 로그아웃이 모두 이 아래에 있어야 브라우저가 두 요청에 refreshToken을 싣습니다.
+        const val REFRESH_TOKEN_PATH = "/open-api/auth"
+        const val LEGACY_REFRESH_ONLY_TOKEN_PATH = "/open-api/auth/refresh"
         const val ACCESS_TOKEN_COOKIE_DOMAIN = ".techtaurant.com"
     }
 }

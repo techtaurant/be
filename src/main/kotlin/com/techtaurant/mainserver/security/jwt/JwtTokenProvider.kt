@@ -32,7 +32,6 @@ class JwtTokenProvider(
 
         return Jwts.builder()
             .subject(userId.toString())
-            .claim(JwtConstants.TOKEN_TYPE_CLAIM, JwtConstants.ACCESS_TOKEN_TYPE)
             .claim(JwtConstants.ROLE_CLAIM, role.key)
             .claim(JwtConstants.PERMANENT_CLAIM, JwtConstants.EXPIRING_ACCESS_TOKEN_IS_PERMANENT)
             .issuedAt(Date.from(now))
@@ -50,7 +49,6 @@ class JwtTokenProvider(
         return Jwts.builder()
             .id(UUID.randomUUID().toString())
             .subject(userId.toString())
-            .claim(JwtConstants.TOKEN_TYPE_CLAIM, JwtConstants.ACCESS_TOKEN_TYPE)
             .claim(JwtConstants.ROLE_CLAIM, role.key)
             .claim(JwtConstants.PERMANENT_CLAIM, JwtConstants.PERMANENT_ACCESS_TOKEN_IS_PERMANENT)
             .issuedAt(Date.from(now))
@@ -71,7 +69,6 @@ class JwtTokenProvider(
 
         return Jwts.builder()
             .subject(userId.toString())
-            .claim(JwtConstants.TOKEN_TYPE_CLAIM, JwtConstants.REFRESH_TOKEN_TYPE)
             .issuedAt(Date.from(now))
             .expiration(Date.from(expiryAt))
             .signWith(secretKey)
@@ -88,11 +85,9 @@ class JwtTokenProvider(
      * @throws UnsupportedJwtException 지원하지 않는 토큰 형식인 경우
      * @throws MalformedJwtException 잘못된 형식의 토큰인 경우
      * @throws SecurityException 서명 검증에 실패한 경우
-     * @throws IllegalArgumentException RefreshToken이 아닌 토큰인 경우
      */
     fun validateAndGetRefreshTokenUserId(token: String): UUID {
         val claims = getClaims(token)
-        requireTokenType(claims, JwtConstants.REFRESH_TOKEN_TYPE)
 
         return UUID.fromString(claims.subject)
     }
@@ -108,11 +103,9 @@ class JwtTokenProvider(
      * @throws UnsupportedJwtException 지원하지 않는 토큰 형식인 경우
      * @throws MalformedJwtException 잘못된 형식의 토큰인 경우
      * @throws SecurityException 서명 검증에 실패한 경우
-     * @throws IllegalArgumentException AccessToken이 아닌 토큰인 경우
      */
     fun validateAndGetClaims(token: String): JwtClaims {
         val claims = getClaims(token)
-        requireTokenType(claims, JwtConstants.ACCESS_TOKEN_TYPE)
 
         return JwtClaims(
             userId = UUID.fromString(claims.subject),
@@ -121,21 +114,6 @@ class JwtTokenProvider(
                 claims[JwtConstants.PERMANENT_CLAIM] as? Boolean
                     ?: JwtConstants.EXPIRING_ACCESS_TOKEN_IS_PERMANENT,
         )
-    }
-
-    /**
-     * 종류 표시가 없는 예전 토큰과 다른 용도로 발급된 토큰을 같은 자리에서 걸러냅니다.
-     * IllegalArgumentException은 JwtExceptionMapper가 INVALID_TOKEN으로 옮깁니다.
-     */
-    private fun requireTokenType(
-        claims: Claims,
-        expectedTokenType: String,
-    ) {
-        val tokenType = claims[JwtConstants.TOKEN_TYPE_CLAIM] as? String
-
-        require(tokenType == expectedTokenType) {
-            "허용되지 않는 토큰 종류입니다: expected=$expectedTokenType, actual=$tokenType"
-        }
     }
 
     fun hashToken(token: String): String {
