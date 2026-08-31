@@ -7,7 +7,6 @@ import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.stereotype.Service
-import java.util.UUID
 
 /**
  * 로그아웃 서비스
@@ -34,14 +33,11 @@ class LogoutService(
     }
 
     /**
-     * refreshToken 쿠키가 실리지 않는 옛 경로를 위해 인증된 사용자의 세션을 모두 폐기합니다.
-     * 기기별 세션을 남기지 못하지만, 폐기할 토큰을 요청에서 얻을 수 없는 경로에서는 이것이 유일한 방법입니다.
+     * refreshToken 쿠키가 실리지 않는 옛 경로를 위해 인증 쿠키만 걷어냅니다.
+     * 폐기할 토큰을 요청에서 얻을 수 없어 서버에 남은 세션은 만료될 때까지 유지되므로,
+     * 그 기기의 세션까지 끊어야 하는 클라이언트는 logoutCurrentDevice 경로로 옮겨야 합니다.
      */
-    fun logoutAllDevices(
-        authenticatedUserId: UUID,
-        response: HttpServletResponse,
-    ) {
-        refreshTokenStore.deleteAllByUserId(authenticatedUserId)
+    fun clearAuthCookies(response: HttpServletResponse) {
         cookieHelper.deleteAllAuthCookies(response)
     }
 

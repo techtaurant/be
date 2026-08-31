@@ -65,12 +65,6 @@ class JooqRefreshTokenStore(
             .execute()
     }
 
-    override fun deleteAllByUserId(userId: UUID) {
-        dsl.deleteFrom(USER_REFRESH_TOKENS)
-            .where(USER_REFRESH_TOKENS.USER_ID.eq(userId))
-            .execute()
-    }
-
     private fun deleteExpired(
         userId: UUID,
         now: OffsetDateTime,

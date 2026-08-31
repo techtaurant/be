@@ -72,8 +72,8 @@ class AuthApiControllerIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    @DisplayName("refreshToken 쿠키를 받지 못하는 옛 경로는 인증된 사용자의 모든 기기 세션을 폐기한다")
-    fun deprecatedLogoutRevokesEverySessionOfTheUser() {
+    @DisplayName("옛 경로는 인증 쿠키만 삭제하고 서버에 저장된 세션은 모두 남긴다")
+    fun deprecatedLogoutLeavesEverySessionOfTheUser() {
         val userId = createUser()
         val thisDeviceRefreshToken = jwtTokenProvider.createRefreshToken(userId)
         refreshTokenStore.save(userId, thisDeviceRefreshToken)
@@ -86,8 +86,8 @@ class AuthApiControllerIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.OK.value())
 
-        assertThat(refreshTokenStore.exists(userId, thisDeviceRefreshToken)).isFalse()
-        assertThat(refreshTokenStore.exists(userId, OTHER_DEVICE_REFRESH_TOKEN)).isFalse()
+        assertThat(refreshTokenStore.exists(userId, thisDeviceRefreshToken)).isTrue()
+        assertThat(refreshTokenStore.exists(userId, OTHER_DEVICE_REFRESH_TOKEN)).isTrue()
     }
 
     private fun createUser(): UUID {

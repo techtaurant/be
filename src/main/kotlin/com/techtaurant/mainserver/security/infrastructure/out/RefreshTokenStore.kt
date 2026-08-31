@@ -32,9 +32,4 @@ interface RefreshTokenStore {
         userId: UUID,
         refreshToken: String,
     )
-
-    /**
-     * 폐기할 토큰을 요청에서 얻을 수 없는 경로를 위해 한 사용자의 세션을 모두 끊습니다.
-     */
-    fun deleteAllByUserId(userId: UUID)
 }

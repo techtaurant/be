@@ -46,7 +46,6 @@ class LogoutServiceTest {
 
         // then
         verify(exactly = 1) { refreshTokenStore.delete(userId, REFRESH_TOKEN) }
-        verify(exactly = 0) { refreshTokenStore.deleteAllByUserId(any()) }
         verify(exactly = 1) { cookieHelper.deleteAllAuthCookies(response) }
     }
 
@@ -104,17 +103,16 @@ class LogoutServiceTest {
     }
 
     @Test
-    @DisplayName("옛 경로는 refreshToken 쿠키를 받지 못하므로 인증된 사용자의 세션을 모두 폐기한다")
-    fun logoutAllDevicesRevokesEverySessionOfTheUser() {
+    @DisplayName("옛 경로는 폐기할 세션을 특정할 수 없으므로 인증 쿠키만 삭제하고 서버 세션은 남긴다")
+    fun clearAuthCookiesLeavesEverySessionOfTheUser() {
         // given
-        val authenticatedUserId = UUID.randomUUID()
         val response = mockk<HttpServletResponse>(relaxed = true)
 
         // when
-        logoutService.logoutAllDevices(authenticatedUserId, response)
+        logoutService.clearAuthCookies(response)
 
         // then
-        verify(exactly = 1) { refreshTokenStore.deleteAllByUserId(authenticatedUserId) }
+        verify(exactly = 0) { refreshTokenStore.delete(any(), any()) }
         verify(exactly = 1) { cookieHelper.deleteAllAuthCookies(response) }
     }
 
