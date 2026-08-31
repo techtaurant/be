@@ -32,19 +32,20 @@ class TokenRefreshService(
             throw ApiException(JwtStatus.MISSING_REFRESH_TOKEN)
         }
 
-        val userId = consumeReissuableSessionUserId(refreshTokenCandidates)
+        val session = resolveReissuableSession(refreshTokenCandidates)
 
         // 권한 변경이 재발급에 반영되도록 최신 사용자를 다시 읽는다
         val user =
-            userRepository.findById(userId).orElseThrow {
+            userRepository.findById(session.userId).orElseThrow {
                 ApiException(JwtStatus.INVALID_REFRESH_TOKEN)
             }
 
-        val newAccessToken = jwtTokenProvider.createAccessToken(userId, user.role)
-        val newRefreshToken = jwtTokenProvider.createRefreshToken(userId)
+        val newAccessToken = jwtTokenProvider.createAccessToken(session.userId, user.role)
+        val newRefreshToken = jwtTokenProvider.createRefreshToken(session.userId)
 
-        // 쓴 토큰은 후보를 고르며 이미 폐기했으므로, 새 토큰만 더해 다른 기기의 세션을 남긴다
-        refreshTokenStore.save(userId, newRefreshToken)
+        // 사용한 토큰만 폐기하고 새 토큰을 더해 다른 기기의 세션을 남긴다
+        refreshTokenStore.delete(session.userId, session.refreshToken)
+        refreshTokenStore.save(session.userId, newRefreshToken)
 
         cookieHelper.addAuthCookie(
             request,
@@ -66,14 +67,10 @@ class TokenRefreshService(
      * 옛 쿠키를 걷어낼 기회도 오지 않으므로 자력으로 회복할 수 없는 상태에 갇힙니다.
      * 그래서 저장소가 인정하는 토큰을 찾을 때까지 후보를 훑습니다.
      *
-     * 인정 여부를 먼저 묻고 나중에 따로 폐기하면 그사이에 도착한 같은 토큰의 요청도 함께 통과해
-     * 한 세션에서 유효한 refreshToken이 둘로 늘어납니다. 그래서 폐기 자체를 회전의 관문으로 삼아,
-     * 그 행을 실제로 지운 요청만 재발급을 이어가게 합니다.
-     *
      * 후보가 모두 실패하면 만료를 다른 실패보다 우선해 알립니다.
      * 만료만이 재로그인이 필요한 시점을 클라이언트에게 정확히 알려주는 실패이기 때문입니다.
      */
-    private fun consumeReissuableSessionUserId(refreshTokenCandidates: List<String>): UUID {
+    private fun resolveReissuableSession(refreshTokenCandidates: List<String>): ReissuableSession {
         var hasExpiredToken = false
         var lastRejection: JwtStatus? = null
 
@@ -89,8 +86,8 @@ class TokenRefreshService(
                     continue
                 }
 
-            if (refreshTokenStore.consume(userId, refreshToken)) {
-                return userId
+            if (refreshTokenStore.exists(userId, refreshToken)) {
+                return ReissuableSession(userId, refreshToken)
             }
 
             lastRejection = JwtStatus.INVALID_REFRESH_TOKEN
@@ -104,4 +101,9 @@ class TokenRefreshService(
             },
         )
     }
+
+    private data class ReissuableSession(
+        val userId: UUID,
+        val refreshToken: String,
+    )
 }

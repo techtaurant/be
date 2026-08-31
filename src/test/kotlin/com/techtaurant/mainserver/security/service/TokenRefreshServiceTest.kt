@@ -59,10 +59,11 @@ class TokenRefreshServiceTest {
         every { cookieHelper.getCookies(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns listOf(refreshTokenValue)
         every { cookieHelper.addAuthCookie(any(), any(), any(), any()) } returns Unit
         every { jwtTokenProvider.validateAndGetRefreshTokenUserId(refreshTokenValue) } returns userId
-        every { refreshTokenStore.consume(userId, refreshTokenValue) } returns true
+        every { refreshTokenStore.exists(userId, refreshTokenValue) } returns true
         every { userRepository.findById(userId) } returns Optional.of(user)
         every { jwtTokenProvider.createAccessToken(userId, UserRole.USER) } returns newAccessToken
         every { jwtTokenProvider.createRefreshToken(userId) } returns newRefreshToken
+        every { refreshTokenStore.delete(userId, refreshTokenValue) } returns Unit
         every { refreshTokenStore.save(userId, newRefreshToken) } returns Unit
 
         // when
@@ -85,7 +86,7 @@ class TokenRefreshServiceTest {
                 newRefreshToken,
             )
         }
-        verify { refreshTokenStore.consume(userId, refreshTokenValue) }
+        verify { refreshTokenStore.delete(userId, refreshTokenValue) }
         verify { refreshTokenStore.save(userId, newRefreshToken) }
     }
 
@@ -100,7 +101,7 @@ class TokenRefreshServiceTest {
 
         every { cookieHelper.getCookies(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns listOf(refreshTokenValue)
         every { jwtTokenProvider.validateAndGetRefreshTokenUserId(refreshTokenValue) } returns userId
-        every { refreshTokenStore.consume(userId, refreshTokenValue) } returns false
+        every { refreshTokenStore.exists(userId, refreshTokenValue) } returns false
 
         // when & then
         val exception =
@@ -150,19 +151,20 @@ class TokenRefreshServiceTest {
         every { cookieHelper.addAuthCookie(any(), any(), any(), any()) } returns Unit
         every { jwtTokenProvider.validateAndGetRefreshTokenUserId(staleRefreshToken) } returns userId
         every { jwtTokenProvider.validateAndGetRefreshTokenUserId(liveRefreshToken) } returns userId
-        every { refreshTokenStore.consume(userId, staleRefreshToken) } returns false
-        every { refreshTokenStore.consume(userId, liveRefreshToken) } returns true
+        every { refreshTokenStore.exists(userId, staleRefreshToken) } returns false
+        every { refreshTokenStore.exists(userId, liveRefreshToken) } returns true
         every { userRepository.findById(userId) } returns Optional.of(user)
         every { jwtTokenProvider.createAccessToken(userId, UserRole.USER) } returns newAccessToken
         every { jwtTokenProvider.createRefreshToken(userId) } returns newRefreshToken
+        every { refreshTokenStore.delete(userId, liveRefreshToken) } returns Unit
         every { refreshTokenStore.save(userId, newRefreshToken) } returns Unit
 
         // when
         tokenRefreshService.execute(request, response)
 
         // then
-        verify(exactly = 1) { refreshTokenStore.consume(userId, liveRefreshToken) }
-        verify(exactly = 1) { refreshTokenStore.save(userId, newRefreshToken) }
+        verify(exactly = 1) { refreshTokenStore.delete(userId, liveRefreshToken) }
+        verify(exactly = 0) { refreshTokenStore.delete(userId, staleRefreshToken) }
     }
 
     @Test
@@ -193,7 +195,7 @@ class TokenRefreshServiceTest {
 
         every { cookieHelper.getCookies(request, JwtConstants.REFRESH_TOKEN_COOKIE) } returns listOf(refreshTokenValue)
         every { jwtTokenProvider.validateAndGetRefreshTokenUserId(refreshTokenValue) } returns userId
-        every { refreshTokenStore.consume(userId, refreshTokenValue) } returns true
+        every { refreshTokenStore.exists(userId, refreshTokenValue) } returns true
         every { userRepository.findById(userId) } returns Optional.empty()
 
         // when & then
