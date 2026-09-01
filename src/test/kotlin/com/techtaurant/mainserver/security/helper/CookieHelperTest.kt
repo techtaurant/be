@@ -111,6 +111,23 @@ class CookieHelperTest {
     }
 
     @Test
+    @DisplayName("refreshToken은 재발급과 로그아웃 요청에 함께 실리고 그 밖의 API에는 실리지 않는다")
+    fun refreshTokenReachesBothAuthEndpoints() {
+        // given
+        val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
+        val response = MockHttpServletResponse()
+        cookieHelper.addAuthCookie(apiHostRequest(), response, JwtConstants.REFRESH_TOKEN_COOKIE, "refresh-token")
+
+        // when
+        storeSetCookies(cookieManager, LOGIN_URI, response)
+
+        // then
+        assertThat(getCookieHeader(cookieManager, REFRESH_API_URI)).contains("refreshToken=refresh-token")
+        assertThat(getCookieHeader(cookieManager, LOGOUT_API_URI)).contains("refreshToken=refresh-token")
+        assertThat(getCookieHeader(cookieManager, GENERAL_API_URI)).doesNotContain("refreshToken")
+    }
+
+    @Test
     @DisplayName("재발급 응답은 refreshToken을 동일한 제한 Path에서 갱신한다")
     fun refreshResponseUpdatesRefreshTokenAtRestrictedPath() {
         // given
@@ -406,7 +423,9 @@ class CookieHelperTest {
         private const val ACCESS_TOKEN_EXPIRE_MS = 3_600_000L
         private const val REFRESH_TOKEN_EXPIRE_MS = 604_800_000L
         private const val AUTH_COOKIE_MAX_AGE_SECONDS = 604_800L
-        private const val REFRESH_TOKEN_PATH = "/open-api/auth/refresh"
+        private const val REFRESH_TOKEN_PATH = "/open-api/auth"
+        private const val REFRESH_ENDPOINT_PATH = "/open-api/auth/refresh"
+        private const val LOGOUT_ENDPOINT_PATH = "/open-api/auth/logout"
         private const val DOMAIN_ATTRIBUTE = "Domain=.techtaurant.com;"
         private const val OAUTH2_AUTHORIZATION_REQUEST_COOKIE = "oauth2_auth_request"
         private const val API_HOST = "api.techtaurant.com"
@@ -417,10 +436,10 @@ class CookieHelperTest {
         private val DEV_LOGIN_URI = URI("https://$DEV_API_HOST/oauth2/callback/google")
         private val DEV_GENERAL_API_URI = URI("https://$DEV_API_HOST/api/users/me")
         private val FRONTEND_SERVER_URI = URI("https://$FRONTEND_HOST/")
-        private val FRONTEND_REFRESH_URI = URI("https://$FRONTEND_HOST$REFRESH_TOKEN_PATH")
+        private val FRONTEND_REFRESH_URI = URI("https://$FRONTEND_HOST$REFRESH_ENDPOINT_PATH")
         private val GENERAL_API_URI = URI("https://$API_HOST/api/users/me")
-        private val REFRESH_API_URI = URI("https://$API_HOST$REFRESH_TOKEN_PATH")
-        private val LOGOUT_API_URI = URI("https://$API_HOST/api/auth/logout")
+        private val REFRESH_API_URI = URI("https://$API_HOST$REFRESH_ENDPOINT_PATH")
+        private val LOGOUT_API_URI = URI("https://$API_HOST$LOGOUT_ENDPOINT_PATH")
         private val LOCAL_LOGIN_URI = URI("https://$LOCAL_HOST:8080/oauth2/callback/google")
         private val LOCAL_GENERAL_API_URI = URI("https://$LOCAL_HOST:8080/api/users/me")
     }

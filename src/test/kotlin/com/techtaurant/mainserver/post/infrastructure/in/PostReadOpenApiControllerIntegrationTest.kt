@@ -7,6 +7,7 @@ import com.techtaurant.mainserver.post.enums.PostStatusEnum
 import com.techtaurant.mainserver.post.infrastructure.out.PostDailyStatsRepository
 import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.entity.UserBan
@@ -117,7 +118,7 @@ class PostReadOpenApiControllerIntegrationTest : IntegrationTest() {
 
         // when & then
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .get("/open-api/posts")
             .then()
@@ -161,7 +162,7 @@ class PostReadOpenApiControllerIntegrationTest : IntegrationTest() {
 
         // when & then
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .get("/open-api/posts")
             .then()
@@ -197,7 +198,7 @@ class PostReadOpenApiControllerIntegrationTest : IntegrationTest() {
 
         // when & then
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .get("/open-api/posts")
             .then()
@@ -379,7 +380,7 @@ class PostReadOpenApiControllerIntegrationTest : IntegrationTest() {
 
         // when & then
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .get("/open-api/posts/${bannedPost.id}")
             .then()

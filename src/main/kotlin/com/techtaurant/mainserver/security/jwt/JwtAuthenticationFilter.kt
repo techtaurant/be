@@ -2,6 +2,7 @@ package com.techtaurant.mainserver.security.jwt
 
 import com.techtaurant.mainserver.security.SecurityConstants
 import com.techtaurant.mainserver.security.handler.CustomAuthenticationEntryPoint
+import com.techtaurant.mainserver.security.helper.CookieHelper
 import com.techtaurant.mainserver.security.helper.JwtExceptionMapper
 import com.techtaurant.mainserver.user.enums.UserRole
 import com.techtaurant.mainserver.user.infrastructure.out.UserTokenRepository
@@ -26,46 +27,25 @@ class JwtAuthenticationFilter(
     private val jwtTokenProvider: JwtTokenProvider,
     private val userTokenRepository: UserTokenRepository,
     private val authenticationEntryPoint: CustomAuthenticationEntryPoint,
+    private val cookieHelper: CookieHelper,
 ) : OncePerRequestFilter() {
     override fun doFilterInternal(
         request: HttpServletRequest,
         response: HttpServletResponse,
         filterChain: FilterChain,
     ) {
-        val token = resolveToken(request)
+        val authentication = authenticateAccessToken(resolveAccessTokenCookies(request))
 
-        if (token != null) {
-            try {
-                // JWT에서 userId와 role을 추출합니다.
-                val claims = jwtTokenProvider.validateAndGetClaims(token)
+        if (authentication is AccessTokenAuthentication.Rejected) {
+            request.setAttribute(SecurityConstants.ERROR_ATTRIBUTE, authentication.status)
 
-                if (!canAuthenticateByTokenPolicy(claims, token)) {
-                    SecurityContextHolder.clearContext()
-                    request.setAttribute(SecurityConstants.ERROR_ATTRIBUTE, JwtStatus.INVALID_TOKEN)
-                    filterChain.doFilter(request, response)
-                    return
-                }
+            if (authentication.status in UNRECOVERABLE_TOKEN_STATUSES && !managesAuthCookiesItself(request)) {
+                cookieHelper.deleteCookie(response, JwtConstants.ACCESS_TOKEN_COOKIE)
+            }
 
-                // 권한 생성
-                val authorities = listOf(SimpleGrantedAuthority(claims.role))
-
-                // SecurityContext에 인증 정보 설정 (principal: userId)
-                val authentication =
-                    UsernamePasswordAuthenticationToken(
-                        claims.userId, // principal: userId만 저장
-                        null,
-                        authorities,
-                    )
-                SecurityContextHolder.getContext().authentication = authentication
-            } catch (e: ExpiredJwtException) {
-                request.setAttribute(SecurityConstants.ERROR_ATTRIBUTE, JwtStatus.ACCESS_TOKEN_EXPIRED)
-
-                if (requiresExpiredTokenResponse(request)) {
-                    authenticationEntryPoint.writeError(response, JwtStatus.ACCESS_TOKEN_EXPIRED)
-                    return
-                }
-            } catch (e: Exception) {
-                request.setAttribute(SecurityConstants.ERROR_ATTRIBUTE, JwtExceptionMapper.mapToJwtStatus(e = e))
+            if (requiresEndedSessionResponse(request, authentication.status)) {
+                authenticationEntryPoint.writeError(response, authentication.status)
+                return
             }
         }
 
@@ -73,26 +53,78 @@ class JwtAuthenticationFilter(
     }
 
     /**
-     * 인증 없이도 응답하는 경로는 인가 계층이 요청을 통과시켜 토큰이 만료됐다는 사실이 클라이언트까지 전달되지 않습니다.
-     * 재발급으로 되살릴 수 있는 만료만 이 경로에서 직접 401로 알려 클라이언트가 재발급을 시도하게 합니다.
-     * 토큰을 새로 발급하는 경로는 만료된 accessToken을 들고 오는 것이 정상이므로 제외합니다.
+     * 브라우저는 Domain·Path 조합이 다르면 이름이 같은 쿠키를 각각 보관해 한 요청에 여러 개를 함께 싣고,
+     * RFC 6265는 서버가 그 순서에 기대지 말라고 정합니다.
+     * 첫 쿠키만 읽으면 남아 있던 옛 토큰이 인증을 가로채므로, 쓸 수 있는 토큰을 찾을 때까지 후보를 훑습니다.
+     *
+     * 후보가 모두 실패하면 만료를 다른 실패보다 우선해 알립니다.
+     * 만료만이 재발급으로 되살릴 수 있는 실패라서 클라이언트가 재발급을 시도할 근거가 됩니다.
      */
-    private fun requiresExpiredTokenResponse(request: HttpServletRequest): Boolean {
-        val path = request.requestURI
-
-        return path.startsWith("${SecurityConstants.OPEN_API_PREFIX}/") &&
-            TOKEN_ISSUING_PATH_PREFIXES.none { path.startsWith(it) }
-    }
-
-    private fun resolveToken(request: HttpServletRequest): String? {
-        // 1. Authorization 헤더에서 토큰 확인
-        val bearerToken = request.getHeader("Authorization")
-        if (bearerToken != null && bearerToken.startsWith(JwtConstants.BEARER_PREFIX)) {
-            return bearerToken.substring(JwtConstants.BEARER_PREFIX.length)
+    private fun authenticateAccessToken(accessTokenCandidates: List<String>): AccessTokenAuthentication {
+        if (accessTokenCandidates.isEmpty()) {
+            return AccessTokenAuthentication.NoAccessToken
         }
 
-        // 2. 쿠키에서 토큰 확인
-        return request.cookies?.find { it.name == JwtConstants.ACCESS_TOKEN_COOKIE }?.value
+        var hasExpiredToken = false
+        var lastRejection: JwtStatus? = null
+
+        for (token in accessTokenCandidates) {
+            try {
+                val claims = jwtTokenProvider.validateAndGetClaims(token)
+
+                if (!canAuthenticateByTokenPolicy(claims, token)) {
+                    SecurityContextHolder.clearContext()
+                    lastRejection = JwtStatus.INVALID_TOKEN
+                    continue
+                }
+
+                SecurityContextHolder.getContext().authentication = authenticationOf(claims)
+                return AccessTokenAuthentication.Authenticated
+            } catch (e: ExpiredJwtException) {
+                hasExpiredToken = true
+            } catch (e: Exception) {
+                lastRejection = JwtExceptionMapper.mapToJwtStatus(e = e)
+            }
+        }
+
+        return AccessTokenAuthentication.Rejected(
+            if (hasExpiredToken) JwtStatus.ACCESS_TOKEN_EXPIRED else lastRejection ?: JwtStatus.INVALID_TOKEN,
+        )
+    }
+
+    private fun authenticationOf(claims: JwtClaims): UsernamePasswordAuthenticationToken {
+        // principal에는 userId만 담아 인증 이후 조회가 항상 최신 사용자 정보를 보게 합니다.
+        return UsernamePasswordAuthenticationToken(
+            claims.userId,
+            null,
+            listOf(SimpleGrantedAuthority(claims.role)),
+        )
+    }
+
+    /**
+     * 인증 없이도 응답하는 경로는 인가 계층이 요청을 통과시켜 세션이 끝났다는 사실이 클라이언트까지 전달되지 않습니다.
+     * 그중 재발급으로 되살릴 수 있는 만료만 직접 401로 알려 클라이언트가 재발급으로 넘어가게 합니다.
+     * 되살릴 수 없는 실패는 클라이언트가 지금 할 수 있는 일이 없으므로,
+     * 쿠키만 걷어낸 뒤 비로그인 사용자로 통과시켜 공개 콘텐츠를 계속 보여줍니다.
+     */
+    private fun requiresEndedSessionResponse(
+        request: HttpServletRequest,
+        status: JwtStatus,
+    ): Boolean {
+        return status == JwtStatus.ACCESS_TOKEN_EXPIRED &&
+            request.requestURI.startsWith("${SecurityConstants.OPEN_API_PREFIX}/") &&
+            !managesAuthCookiesItself(request)
+    }
+
+    private fun managesAuthCookiesItself(request: HttpServletRequest): Boolean {
+        return SELF_MANAGED_AUTH_COOKIE_PATH_PREFIXES.any { request.requestURI.startsWith(it) }
+    }
+
+    private fun resolveAccessTokenCookies(request: HttpServletRequest): List<String> {
+        return request.cookies
+            ?.filter { it.name == JwtConstants.ACCESS_TOKEN_COOKIE }
+            ?.map { it.value }
+            .orEmpty()
     }
 
     private fun canAuthenticateByTokenPolicy(
@@ -119,8 +151,31 @@ class JwtAuthenticationFilter(
         )
     }
 
+    /**
+     * 인증 성공과 토큰 없음을 모두 null로 돌려주면 호출부가 둘을 구분할 수 없어 상태를 따로 둡니다.
+     */
+    private sealed interface AccessTokenAuthentication {
+        data object Authenticated : AccessTokenAuthentication
+
+        data object NoAccessToken : AccessTokenAuthentication
+
+        data class Rejected(val status: JwtStatus) : AccessTokenAuthentication
+    }
+
     private companion object {
-        val TOKEN_ISSUING_PATH_PREFIXES =
+        /**
+         * 재발급으로 되살릴 수 없어 쿠키에서 걷어내야 하는 상태입니다.
+         * 만료는 여기에 넣지 않습니다 — 재발급이 성공하면 새 쿠키가 덮어쓰는데,
+         * 느린 요청의 응답이 재발급 뒤에 도착하면 방금 받은 쿠키를 지워 재발급이 끝없이 반복됩니다.
+         */
+        val UNRECOVERABLE_TOKEN_STATUSES =
+            setOf(
+                JwtStatus.INVALID_TOKEN,
+                JwtStatus.MALFORMED_TOKEN,
+                JwtStatus.UNSUPPORTED_TOKEN,
+            )
+
+        val SELF_MANAGED_AUTH_COOKIE_PATH_PREFIXES =
             listOf(
                 "${SecurityConstants.OPEN_API_PREFIX}/auth/",
                 "${SecurityConstants.OPEN_API_PREFIX}/dev/auth/",

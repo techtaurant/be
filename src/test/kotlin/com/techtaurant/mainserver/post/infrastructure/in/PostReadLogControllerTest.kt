@@ -11,6 +11,7 @@ import com.techtaurant.mainserver.post.infrastructure.out.CategoryRepository
 import com.techtaurant.mainserver.post.infrastructure.out.PostReadLogRepository
 import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
@@ -108,7 +109,7 @@ class PostReadLogControllerTest : IntegrationTest() {
             RestAssured
                 .given()
                 .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .body(request)
                 .`when`()
                 .post("/api/posts/${testPost.id}/read-logs")
@@ -145,7 +146,7 @@ class PostReadLogControllerTest : IntegrationTest() {
             RestAssured
                 .given()
                 .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .body(request)
                 .`when`()
                 .post("/api/posts/${testPost.id}/read-logs")
@@ -175,7 +176,7 @@ class PostReadLogControllerTest : IntegrationTest() {
             RestAssured
                 .given()
                 .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .body(request)
                 .`when`()
                 .post("/api/posts/$nonExistentPostId/read-logs")
@@ -224,7 +225,7 @@ class PostReadLogControllerTest : IntegrationTest() {
             RestAssured
                 .given()
                 .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .body(request)
                 .`when`()
                 .post("/api/posts/${testPost.id}/read-logs")

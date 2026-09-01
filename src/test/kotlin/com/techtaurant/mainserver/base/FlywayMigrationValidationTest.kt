@@ -256,6 +256,7 @@ class FlywayMigrationValidationTest : IntegrationTest() {
                 "user_bans",
                 "user_follows",
                 "user_links",
+                "user_refresh_tokens",
                 "user_tokens",
                 "users",
             )
@@ -271,6 +272,7 @@ class FlywayMigrationValidationTest : IntegrationTest() {
                 TemporalColumn("links", "published_at_utc"),
                 TemporalColumn("notification_recipients", "read_at_utc"),
                 TemporalColumn("posts", "stats_updated_at_utc"),
+                TemporalColumn("user_refresh_tokens", "expires_at"),
             )
     }
 }

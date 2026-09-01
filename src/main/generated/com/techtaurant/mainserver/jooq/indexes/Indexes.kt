@@ -30,6 +30,7 @@ import com.techtaurant.mainserver.jooq.tables.Tags
 import com.techtaurant.mainserver.jooq.tables.UserBans
 import com.techtaurant.mainserver.jooq.tables.UserFollows
 import com.techtaurant.mainserver.jooq.tables.UserLinks
+import com.techtaurant.mainserver.jooq.tables.UserRefreshTokens
 import com.techtaurant.mainserver.jooq.tables.Users
 
 import org.jooq.Index
@@ -119,4 +120,5 @@ val IDX_USER_BANS_USER_ID: Index = Internal.createIndex(DSL.name("idx_user_bans_
 val IDX_USER_FOLLOWS_FOLLOWER_ID: Index = Internal.createIndex(DSL.name("idx_user_follows_follower_id"), UserFollows.USER_FOLLOWS, arrayOf(UserFollows.USER_FOLLOWS.FOLLOWER_ID), false)
 val IDX_USER_FOLLOWS_FOLLOWING_ID: Index = Internal.createIndex(DSL.name("idx_user_follows_following_id"), UserFollows.USER_FOLLOWS, arrayOf(UserFollows.USER_FOLLOWS.FOLLOWING_ID), false)
 val IDX_USER_LINKS_USER_LINK: Index = Internal.createIndex(DSL.name("idx_user_links_user_link"), UserLinks.USER_LINKS, arrayOf(UserLinks.USER_LINKS.USER_ID, UserLinks.USER_LINKS.LINK_ID), false)
+val IDX_USER_REFRESH_TOKENS_USER_ID_TOKEN_HASH: Index = Internal.createIndex(DSL.name("idx_user_refresh_tokens_user_id_token_hash"), UserRefreshTokens.USER_REFRESH_TOKENS, arrayOf(UserRefreshTokens.USER_REFRESH_TOKENS.USER_ID, UserRefreshTokens.USER_REFRESH_TOKENS.TOKEN_HASH), false)
 val IDX_USERS_NAME_TRGM: Index = Internal.createIndex(DSL.name("idx_users_name_trgm"), Users.USERS, arrayOf(Users.USERS.NAME), false)

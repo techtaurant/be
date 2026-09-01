@@ -3,7 +3,6 @@ package com.techtaurant.mainserver.security.jwt
 object JwtConstants {
     const val ACCESS_TOKEN_COOKIE = "accessToken"
     const val REFRESH_TOKEN_COOKIE = "refreshToken"
-    const val BEARER_PREFIX = "Bearer "
 
     const val ROLE_CLAIM = "role"
     const val PERMANENT_CLAIM = "permanent"

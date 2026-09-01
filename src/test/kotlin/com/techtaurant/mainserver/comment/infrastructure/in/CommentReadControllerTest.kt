@@ -11,6 +11,7 @@ import com.techtaurant.mainserver.common.dto.CursorPageResponse
 import com.techtaurant.mainserver.post.entity.Post
 import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.entity.UserBan
@@ -361,7 +362,7 @@ class CommentReadControllerTest : IntegrationTest() {
         val response =
             RestAssured
                 .given()
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .queryParam("sort", "LATEST")
                 .queryParam("size", 10)
                 .`when`()
@@ -533,7 +534,7 @@ class CommentReadControllerTest : IntegrationTest() {
         val response =
             RestAssured
                 .given()
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .queryParam("commentIds", blockedComment.id, likedComment.id)
                 .`when`()
                 .get("/api/comments/me/states")

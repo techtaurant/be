@@ -12,6 +12,7 @@ import com.techtaurant.mainserver.post.entity.Post
 import com.techtaurant.mainserver.post.infrastructure.out.CategoryRepository
 import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
@@ -121,7 +122,7 @@ class CommentLikeControllerIntegrationTest : IntegrationTest() {
         // When - 좋아요 요청
         val response =
             given()
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .contentType(ContentType.JSON)
                 .body(request)
                 .`when`()
@@ -150,7 +151,7 @@ class CommentLikeControllerIntegrationTest : IntegrationTest() {
         // When - 싫어요로 변경 요청
         val response =
             given()
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .contentType(ContentType.JSON)
                 .body(request)
                 .`when`()
@@ -180,7 +181,7 @@ class CommentLikeControllerIntegrationTest : IntegrationTest() {
         // When - 다시 좋아요 요청
         val response =
             given()
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .contentType(ContentType.JSON)
                 .body(request)
                 .`when`()
@@ -222,7 +223,7 @@ class CommentLikeControllerIntegrationTest : IntegrationTest() {
         // When - 좋아요 요청
         val response =
             given()
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .contentType(ContentType.JSON)
                 .body(request)
                 .`when`()

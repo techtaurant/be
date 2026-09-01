@@ -1,9 +1,9 @@
 package com.techtaurant.mainserver.security.service
 
 import com.techtaurant.mainserver.common.exception.ApiException
-import com.techtaurant.mainserver.security.cache.TokenCachePort
 import com.techtaurant.mainserver.security.helper.CookieHelper
 import com.techtaurant.mainserver.security.helper.JwtExceptionMapper
+import com.techtaurant.mainserver.security.infrastructure.out.RefreshTokenStore
 import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtStatus
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
@@ -13,12 +13,13 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.util.UUID
 
 @Service
 class TokenRefreshService(
     private val cookieHelper: CookieHelper,
     private val jwtTokenProvider: JwtTokenProvider,
-    private val tokenCacheManager: TokenCachePort,
+    private val refreshTokenStore: RefreshTokenStore,
     private val userRepository: UserRepository,
 ) {
     @Transactional
@@ -26,45 +27,26 @@ class TokenRefreshService(
         request: HttpServletRequest,
         response: HttpServletResponse,
     ) {
-        // 1. 쿠키에서 refresh token 읽기
-        val clientRefreshToken =
-            cookieHelper.getCookie(request, JwtConstants.REFRESH_TOKEN_COOKIE)
-                ?: throw ApiException(JwtStatus.MISSING_REFRESH_TOKEN)
-
-        // 2. JWT 검증 및 userId 추출 (먼저!)
-        val userId =
-            try {
-                jwtTokenProvider.validateAndGetUserId(clientRefreshToken)
-            } catch (e: ExpiredJwtException) {
-                throw ApiException(JwtStatus.REFRESH_TOKEN_EXPIRED)
-            } catch (e: Exception) {
-                throw ApiException(JwtExceptionMapper.mapToJwtStatus(e = e))
-            }
-
-        // 3. 캐시에서 userId로 저장된 refresh token 조회
-        val cachedRefreshToken =
-            tokenCacheManager.getRefreshToken(userId.toString())
-                ?: throw ApiException(JwtStatus.INVALID_REFRESH_TOKEN)
-
-        // 4. 클라이언트 토큰과 캐시 토큰 비교 (토큰 재사용 공격 방어)
-        if (clientRefreshToken != cachedRefreshToken) {
-            throw ApiException(JwtStatus.INVALID_REFRESH_TOKEN)
+        val refreshTokenCandidates = cookieHelper.getCookies(request, JwtConstants.REFRESH_TOKEN_COOKIE)
+        if (refreshTokenCandidates.isEmpty()) {
+            throw ApiException(JwtStatus.MISSING_REFRESH_TOKEN)
         }
 
-        // 5. DB에서 최신 User 조회 (권한 변경 반영)
+        val session = resolveReissuableSession(refreshTokenCandidates)
+
+        // 권한 변경이 재발급에 반영되도록 최신 사용자를 다시 읽는다
         val user =
-            userRepository.findById(userId).orElseThrow {
+            userRepository.findById(session.userId).orElseThrow {
                 ApiException(JwtStatus.INVALID_REFRESH_TOKEN)
             }
 
-        // 6. 새 토큰 발급 (최신 권한 포함)
-        val newAccessToken = jwtTokenProvider.createAccessToken(userId, user.role)
-        val newRefreshToken = jwtTokenProvider.createRefreshToken(userId)
+        val newAccessToken = jwtTokenProvider.createAccessToken(session.userId, user.role)
+        val newRefreshToken = jwtTokenProvider.createRefreshToken(session.userId)
 
-        // 7. 새 refresh token 저장 (기존 토큰은 자동으로 덮어씌워짐)
-        tokenCacheManager.saveRefreshToken(userId.toString(), newRefreshToken)
+        // 사용한 토큰만 폐기하고 새 토큰을 더해 다른 기기의 세션을 남긴다
+        refreshTokenStore.delete(session.userId, session.refreshToken)
+        refreshTokenStore.save(session.userId, newRefreshToken)
 
-        // 8. 쿠키에 새 토큰 설정
         cookieHelper.addAuthCookie(
             request,
             response,
@@ -78,4 +60,50 @@ class TokenRefreshService(
             newRefreshToken,
         )
     }
+
+    /**
+     * 브라우저는 Path가 다르면 이름이 같은 refreshToken 쿠키를 각각 보관해 한 요청에 함께 싣습니다.
+     * 첫 쿠키만 읽으면 남아 있던 옛 토큰이 재발급을 가로채고, 재발급이 실패하면 새 쿠키를 내려보내
+     * 옛 쿠키를 걷어낼 기회도 오지 않으므로 자력으로 회복할 수 없는 상태에 갇힙니다.
+     * 그래서 저장소가 인정하는 토큰을 찾을 때까지 후보를 훑습니다.
+     *
+     * 후보가 모두 실패하면 만료를 다른 실패보다 우선해 알립니다.
+     * 만료만이 재로그인이 필요한 시점을 클라이언트에게 정확히 알려주는 실패이기 때문입니다.
+     */
+    private fun resolveReissuableSession(refreshTokenCandidates: List<String>): ReissuableSession {
+        var hasExpiredToken = false
+        var lastRejection: JwtStatus? = null
+
+        for (refreshToken in refreshTokenCandidates) {
+            val userId =
+                try {
+                    jwtTokenProvider.validateAndGetRefreshTokenUserId(refreshToken)
+                } catch (e: ExpiredJwtException) {
+                    hasExpiredToken = true
+                    continue
+                } catch (e: Exception) {
+                    lastRejection = JwtExceptionMapper.mapToJwtStatus(e = e)
+                    continue
+                }
+
+            if (refreshTokenStore.exists(userId, refreshToken)) {
+                return ReissuableSession(userId, refreshToken)
+            }
+
+            lastRejection = JwtStatus.INVALID_REFRESH_TOKEN
+        }
+
+        throw ApiException(
+            if (hasExpiredToken) {
+                JwtStatus.REFRESH_TOKEN_EXPIRED
+            } else {
+                lastRejection ?: JwtStatus.INVALID_REFRESH_TOKEN
+            },
+        )
+    }
+
+    private data class ReissuableSession(
+        val userId: UUID,
+        val refreshToken: String,
+    )
 }

@@ -12,6 +12,7 @@ import com.techtaurant.mainserver.link.infrastructure.out.LinkRepository
 import com.techtaurant.mainserver.link.infrastructure.out.UserLinkRepository
 import com.techtaurant.mainserver.post.infrastructure.out.TagRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
@@ -211,7 +212,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
         val batchId =
             given()
                 .contentType("application/json")
-                .header("Authorization", "Bearer $adminAccessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
                 .body(
                     """
                     {
@@ -245,7 +246,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
         assertEquals(3, linkRepository.findAll().size)
 
         given()
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .`when`()
             .post("/admin/link-crawl-batches/$batchId/runs")
             .then()
@@ -272,7 +273,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
         linkCrawlBatchRepository.saveAndFlush(savedBatch)
 
         given()
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .`when`()
             .post("/admin/link-crawl-batches/$batchId/runs")
             .then()
@@ -310,7 +311,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             )
 
         given()
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .`when`()
             .post("/admin/link-crawl-batches/${batch.id}/runs")
             .then()
@@ -335,7 +336,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
     fun createBatchFailsValidationWhenEndPageIsBeforeStartPage() {
         given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .body(
                 """
                 {
@@ -369,7 +370,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
     fun createBatchFailsWhenFirstPageHasNoCrawlableLink() {
         given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .body(
                 """
                 {
@@ -403,7 +404,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
     fun createBatchFailsWhenCreatedAtCannotBeCollected() {
         given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .body(
                 """
                 {
@@ -455,7 +456,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             )
 
         given()
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .`when`()
             .post("/admin/link-crawl-batches/${batch.id}/runs")
             .then()
@@ -465,7 +466,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             .body("data.failedJobCount", equalTo(3))
 
         given()
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .`when`()
             .get("/admin/link-crawl-batches/${batch.id}/runs")
             .then()
@@ -480,7 +481,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
         val runId = linkCrawlRunRepository.findAllByBatchIdOrderByStartedAtDesc(batch.id!!).single().id!!
 
         given()
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .`when`()
             .get("/admin/link-crawl-runs/$runId/failed-jobs")
             .then()
@@ -497,7 +498,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
         linkCrawlBatchRepository.saveAndFlush(batch)
 
         given()
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .`when`()
             .post("/admin/link-crawl-runs/$runId/failed-job-retries")
             .then()
@@ -510,7 +511,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
         assertEquals(3, linkRepository.findAll().size)
 
         given()
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .`when`()
             .get("/admin/link-crawl-runs/$runId/failed-jobs")
             .then()
@@ -518,7 +519,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             .body("data", hasSize<Any>(0))
 
         given()
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .`when`()
             .get("/admin/link-crawl-batches/${batch.id}/runs")
             .then()
@@ -570,7 +571,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             )
 
         given()
-            .header("Authorization", "Bearer $adminAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .`when`()
             .post("/admin/link-crawl-batches/${batch.id}/runs")
             .then()
