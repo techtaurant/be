@@ -10,6 +10,7 @@ import com.techtaurant.mainserver.post.infrastructure.out.CategoryRepository
 import com.techtaurant.mainserver.post.infrastructure.out.PostDailyStatsRepository
 import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
@@ -90,7 +91,7 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
 
         // when
         given()
-            .header("Authorization", "Bearer $authorAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, authorAccessToken)
             .`when`()
             .delete("/api/comments/${comment.id}")
             .then()
@@ -117,7 +118,7 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
 
         // when
         given()
-            .header("Authorization", "Bearer $authorAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, authorAccessToken)
             .`when`()
             .delete("/api/comments/${replyComment.id}")
             .then()
@@ -146,7 +147,7 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
 
         // when
         given()
-            .header("Authorization", "Bearer $authorAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, authorAccessToken)
             .`when`()
             .delete("/api/comments/${replyComment.id}")
             .then()
@@ -171,7 +172,7 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
 
         // when
         given()
-            .header("Authorization", "Bearer $otherUserAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, otherUserAccessToken)
             .`when`()
             .delete("/api/comments/${comment.id}")
             .then()
@@ -192,7 +193,7 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
         val comment = createComment(author, "이미 삭제될 댓글")
 
         given()
-            .header("Authorization", "Bearer $authorAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, authorAccessToken)
             .`when`()
             .delete("/api/comments/${comment.id}")
             .then()
@@ -200,7 +201,7 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
 
         // when
         given()
-            .header("Authorization", "Bearer $authorAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, authorAccessToken)
             .`when`()
             .delete("/api/comments/${comment.id}")
             .then()
@@ -217,7 +218,7 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
 
         // when
         given()
-            .header("Authorization", "Bearer $authorAccessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, authorAccessToken)
             .`when`()
             .delete("/api/comments/$nonExistentCommentId")
             .then()

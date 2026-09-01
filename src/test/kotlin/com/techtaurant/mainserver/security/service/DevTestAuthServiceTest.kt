@@ -1,9 +1,9 @@
 package com.techtaurant.mainserver.security.service
 
-import com.techtaurant.mainserver.security.cache.TokenCachePort
 import com.techtaurant.mainserver.security.dto.DevTestLoginRequest
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.security.helper.CookieHelper
+import com.techtaurant.mainserver.security.infrastructure.out.RefreshTokenStore
 import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.application.UserUniqueNameService
@@ -25,7 +25,7 @@ class DevTestAuthServiceTest {
     private val userRepository: UserRepository = mockk()
     private val jwtTokenProvider: JwtTokenProvider = mockk()
     private val cookieHelper: CookieHelper = mockk(relaxed = true)
-    private val tokenCacheManager: TokenCachePort = mockk(relaxed = true)
+    private val refreshTokenStore: RefreshTokenStore = mockk(relaxed = true)
     private val userUniqueNameService: UserUniqueNameService = mockk()
     private lateinit var devTestAuthService: DevTestAuthService
 
@@ -36,7 +36,7 @@ class DevTestAuthServiceTest {
                 userRepository,
                 jwtTokenProvider,
                 cookieHelper,
-                tokenCacheManager,
+                refreshTokenStore,
                 userUniqueNameService,
             )
     }
@@ -95,7 +95,7 @@ class DevTestAuthServiceTest {
                 "refresh-token",
             )
         }
-        verify { tokenCacheManager.saveRefreshToken(userId.toString(), "refresh-token") }
+        verify { refreshTokenStore.save(userId, "refresh-token") }
     }
 
     @Test

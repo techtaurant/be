@@ -3,6 +3,7 @@ package com.techtaurant.mainserver.user.infrastructure.`in`
 import com.techtaurant.mainserver.attachment.infrastructure.out.AttachmentRepository
 import com.techtaurant.mainserver.base.IntegrationTest
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.dto.UpdateUserRequest
 import com.techtaurant.mainserver.user.entity.User
@@ -69,7 +70,7 @@ class UserControllerProfileIntegrationTest : IntegrationTest() {
         // when
         given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .body(UpdateUserRequest(name = "새이름"))
             .`when`()
             .patch("/api/users/me")
@@ -80,7 +81,7 @@ class UserControllerProfileIntegrationTest : IntegrationTest() {
 
         // then
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .get("/api/users/me")
             .then()
@@ -106,7 +107,7 @@ class UserControllerProfileIntegrationTest : IntegrationTest() {
         // when & then
         given()
             .contentType("application/json")
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .body(UpdateUserRequest(name = "중복닉네임"))
             .`when`()
             .patch("/api/users/me")

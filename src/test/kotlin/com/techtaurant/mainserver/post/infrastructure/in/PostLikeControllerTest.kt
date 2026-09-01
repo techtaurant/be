@@ -12,6 +12,7 @@ import com.techtaurant.mainserver.post.infrastructure.out.CategoryRepository
 import com.techtaurant.mainserver.post.infrastructure.out.PostLikeLogRepository
 import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
@@ -117,7 +118,7 @@ class PostLikeControllerTest : IntegrationTest() {
             RestAssured
                 .given()
                 .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .body(request)
                 .`when`()
                 .post("/api/posts/${testPost.id}/like")
@@ -147,7 +148,7 @@ class PostLikeControllerTest : IntegrationTest() {
             RestAssured
                 .given()
                 .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .body(request)
                 .`when`()
                 .post("/api/posts/$nonExistentPostId/like")
@@ -173,7 +174,7 @@ class PostLikeControllerTest : IntegrationTest() {
             RestAssured
                 .given()
                 .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer $accessToken")
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
                 .body(request)
                 .`when`()
                 .post("/api/posts/${testPost.id}/like")

@@ -88,7 +88,7 @@ class PostController(
         @PathVariable postId: UUID,
         @AuthenticationPrincipal userId: UUID,
     ): ApiResponse<PostDetailResponse> {
-        return ApiResponse.ok(postDetailReadService.getPostDetail(postId, userId, null, null))
+        return ApiResponse.ok(postDetailReadService.getPostDetail(postId, userId))
     }
 
     @DeleteMapping("/{postId}")

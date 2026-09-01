@@ -8,12 +8,17 @@ import com.techtaurant.mainserver.security.jwt.JwtStatus
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.servlet.http.HttpServletResponse
-import java.util.UUID
 import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 
 @Tag(name = "인증", description = "인증 API")
 interface AuthApiControllerDocs {
-    @Operation(summary = "로그아웃", description = "쿠키에서 토큰을 삭제하여 로그아웃합니다")
+    @Operation(
+        summary = "로그아웃 (deprecated)",
+        description =
+            "인증 쿠키만 삭제합니다. 서버에 남은 로그인 기록은 만료될 때까지 유지되므로, " +
+                "그 기기의 세션까지 끊으려면 POST /open-api/auth/logout을 사용하세요",
+        deprecated = true,
+    )
     @SwaggerApiResponse(
         responseCode = "200",
         description = "로그아웃 성공",
@@ -24,8 +29,5 @@ interface AuthApiControllerDocs {
             ApiErrorCodeResponse(DefaultStatus::class, ["UNKNOWN_EXCEPTION"]),
         ],
     )
-    fun logout(
-        authenticatedUserId: UUID,
-        response: HttpServletResponse,
-    ): ApiResponse<Unit>
+    fun logout(response: HttpServletResponse): ApiResponse<Unit>
 }

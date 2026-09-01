@@ -2,11 +2,11 @@ package com.techtaurant.mainserver.security.service
 
 import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.common.status.DefaultStatus
-import com.techtaurant.mainserver.security.cache.TokenCachePort
 import com.techtaurant.mainserver.security.dto.DevTestLoginRequest
 import com.techtaurant.mainserver.security.dto.DevTestLoginResponse
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.security.helper.CookieHelper
+import com.techtaurant.mainserver.security.infrastructure.out.RefreshTokenStore
 import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.application.UserUniqueNameService
@@ -33,7 +33,7 @@ class DevTestAuthService(
     private val userRepository: UserRepository,
     private val jwtTokenProvider: JwtTokenProvider,
     private val cookieHelper: CookieHelper,
-    private val tokenCacheManager: TokenCachePort,
+    private val refreshTokenStore: RefreshTokenStore,
     private val userUniqueNameService: UserUniqueNameService,
 ) {
     companion object {
@@ -64,7 +64,7 @@ class DevTestAuthService(
         val accessToken = jwtTokenProvider.createAccessToken(userId, user.role)
         val refreshToken = jwtTokenProvider.createRefreshToken(userId)
 
-        tokenCacheManager.saveRefreshToken(userId.toString(), refreshToken)
+        refreshTokenStore.save(userId, refreshToken)
 
         cookieHelper.addAuthCookie(
             httpRequest,

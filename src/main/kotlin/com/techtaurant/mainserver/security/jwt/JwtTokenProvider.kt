@@ -76,18 +76,19 @@ class JwtTokenProvider(
     }
 
     /**
-     * 토큰을 검증하고 userId를 추출합니다.
+     * RefreshToken을 검증하고 userId를 추출합니다.
      * 한 번의 파싱으로 검증과 추출을 동시에 수행하여 성능을 최적화합니다.
      *
-     * @param token JWT 토큰
+     * @param token RefreshToken
      * @return 토큰에서 추출한 userId
      * @throws ExpiredJwtException 토큰이 만료된 경우
      * @throws UnsupportedJwtException 지원하지 않는 토큰 형식인 경우
      * @throws MalformedJwtException 잘못된 형식의 토큰인 경우
      * @throws SecurityException 서명 검증에 실패한 경우
      */
-    fun validateAndGetUserId(token: String): UUID {
+    fun validateAndGetRefreshTokenUserId(token: String): UUID {
         val claims = getClaims(token)
+
         return UUID.fromString(claims.subject)
     }
 
@@ -105,6 +106,7 @@ class JwtTokenProvider(
      */
     fun validateAndGetClaims(token: String): JwtClaims {
         val claims = getClaims(token)
+
         return JwtClaims(
             userId = UUID.fromString(claims.subject),
             role = claims[JwtConstants.ROLE_CLAIM] as String,

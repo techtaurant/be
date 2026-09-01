@@ -30,6 +30,7 @@ import com.techtaurant.mainserver.jooq.tables.Tags
 import com.techtaurant.mainserver.jooq.tables.UserBans
 import com.techtaurant.mainserver.jooq.tables.UserFollows
 import com.techtaurant.mainserver.jooq.tables.UserLinks
+import com.techtaurant.mainserver.jooq.tables.UserRefreshTokens
 import com.techtaurant.mainserver.jooq.tables.UserTokens
 import com.techtaurant.mainserver.jooq.tables.Users
 import com.techtaurant.mainserver.jooq.tables.records.AttachmentsRecord
@@ -58,6 +59,7 @@ import com.techtaurant.mainserver.jooq.tables.records.TagsRecord
 import com.techtaurant.mainserver.jooq.tables.records.UserBansRecord
 import com.techtaurant.mainserver.jooq.tables.records.UserFollowsRecord
 import com.techtaurant.mainserver.jooq.tables.records.UserLinksRecord
+import com.techtaurant.mainserver.jooq.tables.records.UserRefreshTokensRecord
 import com.techtaurant.mainserver.jooq.tables.records.UserTokensRecord
 import com.techtaurant.mainserver.jooq.tables.records.UsersRecord
 
@@ -114,6 +116,7 @@ val UK_USER_FOLLOWS_FOLLOWER_ID_FOLLOWING_ID: UniqueKey<UserFollowsRecord> = Int
 val USER_FOLLOWS_PKEY: UniqueKey<UserFollowsRecord> = Internal.createUniqueKey(UserFollows.USER_FOLLOWS, DSL.name("user_follows_pkey"), arrayOf(UserFollows.USER_FOLLOWS.ID), true)
 val UK_USER_LINKS_USER_ID_LINK_ID: UniqueKey<UserLinksRecord> = Internal.createUniqueKey(UserLinks.USER_LINKS, DSL.name("uk_user_links_user_id_link_id"), arrayOf(UserLinks.USER_LINKS.USER_ID, UserLinks.USER_LINKS.LINK_ID), true)
 val USER_LINKS_PKEY: UniqueKey<UserLinksRecord> = Internal.createUniqueKey(UserLinks.USER_LINKS, DSL.name("user_links_pkey"), arrayOf(UserLinks.USER_LINKS.ID), true)
+val USER_REFRESH_TOKENS_PKEY: UniqueKey<UserRefreshTokensRecord> = Internal.createUniqueKey(UserRefreshTokens.USER_REFRESH_TOKENS, DSL.name("user_refresh_tokens_pkey"), arrayOf(UserRefreshTokens.USER_REFRESH_TOKENS.ID), true)
 val UK_USER_TOKENS_TOKEN_HASH: UniqueKey<UserTokensRecord> = Internal.createUniqueKey(UserTokens.USER_TOKENS, DSL.name("uk_user_tokens_token_hash"), arrayOf(UserTokens.USER_TOKENS.TOKEN_HASH), true)
 val UK_USER_TOKENS_USER_ID: UniqueKey<UserTokensRecord> = Internal.createUniqueKey(UserTokens.USER_TOKENS, DSL.name("uk_user_tokens_user_id"), arrayOf(UserTokens.USER_TOKENS.USER_ID), true)
 val USER_TOKENS_PKEY: UniqueKey<UserTokensRecord> = Internal.createUniqueKey(UserTokens.USER_TOKENS, DSL.name("user_tokens_pkey"), arrayOf(UserTokens.USER_TOKENS.ID), true)
@@ -165,5 +168,6 @@ val USER_FOLLOWS__USER_FOLLOWS_FOLLOWER_ID_FKEY: ForeignKey<UserFollowsRecord, U
 val USER_FOLLOWS__USER_FOLLOWS_FOLLOWING_ID_FKEY: ForeignKey<UserFollowsRecord, UsersRecord> = Internal.createForeignKey(UserFollows.USER_FOLLOWS, DSL.name("user_follows_following_id_fkey"), arrayOf(UserFollows.USER_FOLLOWS.FOLLOWING_ID), com.techtaurant.mainserver.jooq.keys.USERS_PKEY, arrayOf(Users.USERS.ID), true)
 val USER_LINKS__USER_LINKS_LINK_ID_FKEY: ForeignKey<UserLinksRecord, LinksRecord> = Internal.createForeignKey(UserLinks.USER_LINKS, DSL.name("user_links_link_id_fkey"), arrayOf(UserLinks.USER_LINKS.LINK_ID), com.techtaurant.mainserver.jooq.keys.LINKS_PKEY, arrayOf(Links.LINKS.ID), true)
 val USER_LINKS__USER_LINKS_USER_ID_FKEY: ForeignKey<UserLinksRecord, UsersRecord> = Internal.createForeignKey(UserLinks.USER_LINKS, DSL.name("user_links_user_id_fkey"), arrayOf(UserLinks.USER_LINKS.USER_ID), com.techtaurant.mainserver.jooq.keys.USERS_PKEY, arrayOf(Users.USERS.ID), true)
+val USER_REFRESH_TOKENS__USER_REFRESH_TOKENS_USER_ID_FKEY: ForeignKey<UserRefreshTokensRecord, UsersRecord> = Internal.createForeignKey(UserRefreshTokens.USER_REFRESH_TOKENS, DSL.name("user_refresh_tokens_user_id_fkey"), arrayOf(UserRefreshTokens.USER_REFRESH_TOKENS.USER_ID), com.techtaurant.mainserver.jooq.keys.USERS_PKEY, arrayOf(Users.USERS.ID), true)
 val USER_TOKENS__USER_TOKENS_USER_ID_FKEY: ForeignKey<UserTokensRecord, UsersRecord> = Internal.createForeignKey(UserTokens.USER_TOKENS, DSL.name("user_tokens_user_id_fkey"), arrayOf(UserTokens.USER_TOKENS.USER_ID), com.techtaurant.mainserver.jooq.keys.USERS_PKEY, arrayOf(Users.USERS.ID), true)
 val USERS__FK_USERS_SERVICE_PROFILE_IMAGE_ATTACHMENT: ForeignKey<UsersRecord, AttachmentsRecord> = Internal.createForeignKey(Users.USERS, DSL.name("fk_users_service_profile_image_attachment"), arrayOf(Users.USERS.SERVICE_PROFILE_IMAGE_ATTACHMENT_ID), com.techtaurant.mainserver.jooq.keys.ATTACHMENTS_PKEY, arrayOf(Attachments.ATTACHMENTS.ID), true)

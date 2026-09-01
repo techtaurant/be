@@ -30,6 +30,7 @@ import com.techtaurant.mainserver.jooq.tables.Tags
 import com.techtaurant.mainserver.jooq.tables.UserBans
 import com.techtaurant.mainserver.jooq.tables.UserFollows
 import com.techtaurant.mainserver.jooq.tables.UserLinks
+import com.techtaurant.mainserver.jooq.tables.UserRefreshTokens
 import com.techtaurant.mainserver.jooq.tables.UserTokens
 import com.techtaurant.mainserver.jooq.tables.Users
 
@@ -184,6 +185,11 @@ open class Public : SchemaImpl("public", DefaultCatalog.DEFAULT_CATALOG) {
     val USER_LINKS: UserLinks get() = UserLinks.USER_LINKS
 
     /**
+     * 사용자별 refresh token 저장소
+     */
+    val USER_REFRESH_TOKENS: UserRefreshTokens get() = UserRefreshTokens.USER_REFRESH_TOKENS
+
+    /**
      * The table <code>public.user_tokens</code>.
      */
     val USER_TOKENS: UserTokens get() = UserTokens.USER_TOKENS
@@ -222,6 +228,7 @@ open class Public : SchemaImpl("public", DefaultCatalog.DEFAULT_CATALOG) {
         UserBans.USER_BANS,
         UserFollows.USER_FOLLOWS,
         UserLinks.USER_LINKS,
+        UserRefreshTokens.USER_REFRESH_TOKENS,
         UserTokens.USER_TOKENS,
         Users.USERS
     )

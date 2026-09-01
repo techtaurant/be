@@ -7,6 +7,7 @@ import com.techtaurant.mainserver.post.enums.PostStatusEnum
 import com.techtaurant.mainserver.post.infrastructure.out.PostDailyStatsRepository
 import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.entity.UserBan
@@ -117,7 +118,7 @@ class PostReadOpenApiControllerIntegrationTest : IntegrationTest() {
 
         // when & then
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .get("/open-api/posts")
             .then()
@@ -161,7 +162,7 @@ class PostReadOpenApiControllerIntegrationTest : IntegrationTest() {
 
         // when & then
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .get("/open-api/posts")
             .then()
@@ -197,7 +198,7 @@ class PostReadOpenApiControllerIntegrationTest : IntegrationTest() {
 
         // when & then
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .get("/open-api/posts")
             .then()
@@ -379,7 +380,7 @@ class PostReadOpenApiControllerIntegrationTest : IntegrationTest() {
 
         // when & then
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .get("/open-api/posts/${bannedPost.id}")
             .then()
@@ -387,14 +388,14 @@ class PostReadOpenApiControllerIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    @DisplayName("게시물 상세 조회는 기존 호환을 위해 조회수를 증가시킨다")
-    fun getPostDetail_incrementsViewCount() {
+    @DisplayName("게시물 상세 조회는 조회수를 증가시키지 않는다")
+    fun getPostDetail_doesNotIncrementViewCount() {
         // given
         val post =
             postRepository.save(
                 Post(
                     title = "조회수 분리 게시물",
-                    content = "기존 상세 조회에서도 조회 로그가 기록된다",
+                    content = "조회 로그 기록은 view-logs API가 담당한다",
                     author = testUser,
                     viewCount = 0,
                     status = PostStatusEnum.PUBLISHED,
@@ -409,7 +410,7 @@ class PostReadOpenApiControllerIntegrationTest : IntegrationTest() {
             .statusCode(HttpStatus.OK.value())
 
         val updatedPost = postRepository.findById(post.id!!).orElseThrow()
-        assertThat(updatedPost.viewCount).isEqualTo(1)
+        assertThat(updatedPost.viewCount).isEqualTo(0)
     }
 
     private fun createPublishedPost(

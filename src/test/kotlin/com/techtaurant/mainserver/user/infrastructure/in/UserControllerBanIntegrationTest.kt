@@ -2,6 +2,7 @@ package com.techtaurant.mainserver.user.infrastructure.`in`
 
 import com.techtaurant.mainserver.base.IntegrationTest
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.entity.UserBan
@@ -73,7 +74,7 @@ class UserControllerBanIntegrationTest : IntegrationTest() {
     fun ban_success() {
         // When & Then
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .post("/api/users/${targetUser.id}/ban")
             .then()
@@ -90,7 +91,7 @@ class UserControllerBanIntegrationTest : IntegrationTest() {
 
         // When & Then
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .get("/api/users/me/bans")
             .then()
@@ -107,7 +108,7 @@ class UserControllerBanIntegrationTest : IntegrationTest() {
 
         // When & Then
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .delete("/api/users/${targetUser.id}/ban")
             .then()
@@ -121,13 +122,13 @@ class UserControllerBanIntegrationTest : IntegrationTest() {
         userBanRepository.save(UserBan(user = testUser, bannedUser = targetUser))
 
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .delete("/api/users/${targetUser.id}/ban")
 
         // When & Then
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .get("/api/users/me/bans")
             .then()
@@ -142,7 +143,7 @@ class UserControllerBanIntegrationTest : IntegrationTest() {
         userFollowRepository.save(UserFollow(follower = targetUser, following = testUser))
 
         given()
-            .header("Authorization", "Bearer $accessToken")
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .`when`()
             .post("/api/users/${targetUser.id}/ban")
             .then()

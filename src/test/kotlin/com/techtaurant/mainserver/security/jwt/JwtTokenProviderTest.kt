@@ -45,6 +45,16 @@ class JwtTokenProviderTest {
     }
 
     @Test
+    @DisplayName("Refresh token은 refresh 전용 검증으로 userId를 돌려준다")
+    fun validateAndGetRefreshTokenUserId_acceptsRefreshToken() {
+        val userId = UUID.randomUUID()
+
+        val token = provider.createRefreshToken(userId)
+
+        assertThat(provider.validateAndGetRefreshTokenUserId(token)).isEqualTo(userId)
+    }
+
+    @Test
     @DisplayName("Permanent access token은 만료 시간이 없고 permanent claim을 포함한다")
     fun createPermanentAccessToken_hasNoExpirationAndContainsPermanentClaim() {
         val userId = UUID.randomUUID()
