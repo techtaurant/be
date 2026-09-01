@@ -39,7 +39,7 @@ class JwtAuthenticationFilter(
         if (authentication is AccessTokenAuthentication.Rejected) {
             request.setAttribute(SecurityConstants.ERROR_ATTRIBUTE, authentication.status)
 
-            if (authentication.status in UNRECOVERABLE_TOKEN_STATUSES && !isTokenIssuingPath(request)) {
+            if (authentication.status in UNRECOVERABLE_TOKEN_STATUSES && !managesAuthCookiesItself(request)) {
                 cookieHelper.deleteCookie(response, JwtConstants.ACCESS_TOKEN_COOKIE)
             }
 
@@ -113,15 +113,11 @@ class JwtAuthenticationFilter(
     ): Boolean {
         return status == JwtStatus.ACCESS_TOKEN_EXPIRED &&
             request.requestURI.startsWith("${SecurityConstants.OPEN_API_PREFIX}/") &&
-            !isTokenIssuingPath(request)
+            !managesAuthCookiesItself(request)
     }
 
-    /**
-     * 토큰을 새로 발급하는 경로는 만료된 accessToken을 들고 오는 것이 정상입니다.
-     * 같은 응답에서 새 쿠키를 내려주므로 만료 헤더를 함께 실으면 방금 발급한 쿠키를 지웁니다.
-     */
-    private fun isTokenIssuingPath(request: HttpServletRequest): Boolean {
-        return TOKEN_ISSUING_PATH_PREFIXES.any { request.requestURI.startsWith(it) }
+    private fun managesAuthCookiesItself(request: HttpServletRequest): Boolean {
+        return SELF_MANAGED_AUTH_COOKIE_PATH_PREFIXES.any { request.requestURI.startsWith(it) }
     }
 
     private fun resolveAccessTokenCookies(request: HttpServletRequest): List<String> {
@@ -179,7 +175,7 @@ class JwtAuthenticationFilter(
                 JwtStatus.UNSUPPORTED_TOKEN,
             )
 
-        val TOKEN_ISSUING_PATH_PREFIXES =
+        val SELF_MANAGED_AUTH_COOKIE_PATH_PREFIXES =
             listOf(
                 "${SecurityConstants.OPEN_API_PREFIX}/auth/",
                 "${SecurityConstants.OPEN_API_PREFIX}/dev/auth/",
