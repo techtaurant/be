@@ -37,17 +37,7 @@ class HttpCookieOAuth2AuthorizationRequestRepository(
     }
 
     override fun loadAuthorizationRequest(request: HttpServletRequest): OAuth2AuthorizationRequest? {
-        val cookieValue = cookieHelper.getCookie(request, OAUTH2_AUTHORIZATION_REQUEST_COOKIE)
-        val originCookie = cookieHelper.getCookie(request, OAUTH2_ORIGIN_COOKIE)
-        logger.info(
-            "loadAuthorizationRequest: authRequestCookiePresent={}, originCookie={}, requestURI={}",
-            cookieValue != null,
-            originCookie,
-            request.requestURI,
-        )
-        val allCookieNames = request.cookies?.map { it.name } ?: emptyList()
-        logger.info("loadAuthorizationRequest: allCookies={}", allCookieNames)
-        return cookieValue?.let { deserialize(it) }
+        return cookieHelper.getCookie(request, OAUTH2_AUTHORIZATION_REQUEST_COOKIE)?.let { deserialize(it) }
     }
 
     override fun saveAuthorizationRequest(
@@ -56,7 +46,7 @@ class HttpCookieOAuth2AuthorizationRequestRepository(
         response: HttpServletResponse,
     ) {
         if (authorizationRequest == null) {
-            removeAuthorizationRequestCookies(response)
+            removeOAuthAuthorizationRequestCookies(response)
             return
         }
 
@@ -107,10 +97,12 @@ class HttpCookieOAuth2AuthorizationRequestRepository(
         request: HttpServletRequest,
         response: HttpServletResponse,
     ): OAuth2AuthorizationRequest? {
-        return loadAuthorizationRequest(request)
+        val authorizationRequest = loadAuthorizationRequest(request)
+        removeOAuthAuthorizationRequestCookies(response)
+        return authorizationRequest
     }
 
-    fun removeAuthorizationRequestCookies(response: HttpServletResponse) {
+    fun removeOAuthAuthorizationRequestCookies(response: HttpServletResponse) {
         cookieHelper.deleteCookie(response, OAUTH2_AUTHORIZATION_REQUEST_COOKIE)
         cookieHelper.deleteCookie(response, OAUTH2_ORIGIN_COOKIE)
         cookieHelper.deleteCookie(response, OAUTH2_SUCCESS_REDIRECT_URI_COOKIE)

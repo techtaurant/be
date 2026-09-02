@@ -71,6 +71,9 @@ class SecurityConfig(
                     )
                     .anyRequest().authenticated()
             }
+            // redirectionEndpoint를 재정의하면 CookieHelper.OAUTH2_COOKIE_PATH가 함께 옮겨져야 한다.
+            // 두 값이 어긋나면 브라우저가 콜백에 oauth2_ 쿠키를 싣지 않아 모든 로그인이
+            // authorization_request_not_found로 실패한다.
             .oauth2Login { oauth2 ->
                 oauth2
                     .authorizationEndpoint { endpoint ->
