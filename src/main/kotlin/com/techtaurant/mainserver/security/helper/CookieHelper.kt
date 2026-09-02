@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.HttpHeaders
 import org.springframework.http.ResponseCookie
+import org.springframework.security.oauth2.client.web.OAuth2LoginAuthenticationFilter
 import org.springframework.stereotype.Component
 import java.time.Duration
 
@@ -193,6 +194,15 @@ class CookieHelper(
          * 쿠키를 심는 곳은 authorization 요청이지만 Path는 읽는 곳 기준으로 정합니다.
          */
         const val OAUTH2_COOKIE_NAME_PREFIX = "oauth2_"
-        const val OAUTH2_COOKIE_PATH = "/login/oauth2"
+
+        /**
+         * 콜백을 처리하는 URI에서 직접 끌어옵니다.
+         * 값을 따로 적으면 Spring이 콜백을 받는 경로와 문자열로만 맞아떨어지는 상태가 되고,
+         * 둘이 어긋나는 순간 브라우저가 콜백에 쿠키를 싣지 않아 모든 로그인이 실패합니다.
+         * SecurityConfig가 redirectionEndpoint.baseUri를 재정의하면 이 파생이 깨지므로,
+         * 그때는 재정의한 값을 기준으로 이 Path도 함께 옮겨야 합니다.
+         */
+        val OAUTH2_COOKIE_PATH: String =
+            OAuth2LoginAuthenticationFilter.DEFAULT_FILTER_PROCESSES_URI.removeSuffix("/code/*")
     }
 }

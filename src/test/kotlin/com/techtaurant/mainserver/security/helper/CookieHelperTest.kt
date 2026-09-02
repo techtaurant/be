@@ -44,14 +44,14 @@ class CookieHelperTest {
         val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
         val legacyResponse = MockHttpServletResponse()
         addLegacyHostOnlyCookie(legacyResponse, JwtConstants.REFRESH_TOKEN_COOKIE, "legacy-refresh-token", "/")
-        storeSetCookies(cookieManager, LOGIN_URI, legacyResponse)
+        storeSetCookies(cookieManager, OAUTH2_CALLBACK_URI, legacyResponse)
 
         val response = MockHttpServletResponse()
         cookieHelper.addAuthCookie(apiHostRequest(), response, JwtConstants.ACCESS_TOKEN_COOKIE, "access-token")
         cookieHelper.addAuthCookie(apiHostRequest(), response, JwtConstants.REFRESH_TOKEN_COOKIE, "refresh-token")
 
         // when
-        storeSetCookies(cookieManager, LOGIN_URI, response)
+        storeSetCookies(cookieManager, OAUTH2_CALLBACK_URI, response)
         val generalApiCookieHeader = getCookieHeader(cookieManager, GENERAL_API_URI)
         val refreshApiCookieHeader = getCookieHeader(cookieManager, REFRESH_API_URI)
 
@@ -119,7 +119,7 @@ class CookieHelperTest {
         cookieHelper.addAuthCookie(apiHostRequest(), response, JwtConstants.REFRESH_TOKEN_COOKIE, "refresh-token")
 
         // when
-        storeSetCookies(cookieManager, LOGIN_URI, response)
+        storeSetCookies(cookieManager, OAUTH2_CALLBACK_URI, response)
 
         // then
         assertThat(getCookieHeader(cookieManager, REFRESH_API_URI)).contains("refreshToken=refresh-token")
@@ -145,7 +145,7 @@ class CookieHelperTest {
             "old-refresh-token",
         )
         val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
-        storeSetCookies(cookieManager, LOGIN_URI, loginResponse)
+        storeSetCookies(cookieManager, OAUTH2_CALLBACK_URI, loginResponse)
 
         val refreshResponse = MockHttpServletResponse()
         cookieHelper.addAuthCookie(
@@ -195,7 +195,7 @@ class CookieHelperTest {
             "refresh-token",
         )
         val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
-        storeSetCookies(cookieManager, LOGIN_URI, loginResponse)
+        storeSetCookies(cookieManager, OAUTH2_CALLBACK_URI, loginResponse)
         val logoutResponse = MockHttpServletResponse()
 
         // when
@@ -230,7 +230,7 @@ class CookieHelperTest {
         val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
 
         // when
-        storeSetCookies(cookieManager, LOGIN_URI, response)
+        storeSetCookies(cookieManager, OAUTH2_CALLBACK_URI, response)
         val frontendCookieHeader = getCookieHeader(cookieManager, FRONTEND_SERVER_URI)
 
         // then
@@ -249,7 +249,7 @@ class CookieHelperTest {
         val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
 
         // when
-        storeSetCookies(cookieManager, LOGIN_URI, response)
+        storeSetCookies(cookieManager, OAUTH2_CALLBACK_URI, response)
         val frontendRefreshCookieHeader = getCookieHeader(cookieManager, FRONTEND_REFRESH_URI)
         val refreshApiCookieHeader = getCookieHeader(cookieManager, REFRESH_API_URI)
 
@@ -270,7 +270,7 @@ class CookieHelperTest {
         val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
 
         // when
-        storeSetCookies(cookieManager, LOCAL_LOGIN_URI, response)
+        storeSetCookies(cookieManager, LOCAL_OAUTH2_CALLBACK_URI, response)
         val localApiCookieHeader = getCookieHeader(cookieManager, LOCAL_GENERAL_API_URI)
 
         // then
@@ -286,13 +286,13 @@ class CookieHelperTest {
         val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
         val legacyResponse = MockHttpServletResponse()
         addLegacyHostOnlyCookie(legacyResponse, JwtConstants.ACCESS_TOKEN_COOKIE, "legacy-access-token", "/")
-        storeSetCookies(cookieManager, LOGIN_URI, legacyResponse)
+        storeSetCookies(cookieManager, OAUTH2_CALLBACK_URI, legacyResponse)
 
         val response = MockHttpServletResponse()
         cookieHelper.addAuthCookie(apiHostRequest(), response, JwtConstants.ACCESS_TOKEN_COOKIE, "access-token")
 
         // when
-        storeSetCookies(cookieManager, LOGIN_URI, response)
+        storeSetCookies(cookieManager, OAUTH2_CALLBACK_URI, response)
 
         // then
         assertThat(getCookieHeader(cookieManager, GENERAL_API_URI))
@@ -312,7 +312,7 @@ class CookieHelperTest {
             JwtConstants.ACCESS_TOKEN_COOKIE,
             "prod-access-token",
         )
-        storeSetCookies(cookieManager, LOGIN_URI, prodResponse)
+        storeSetCookies(cookieManager, OAUTH2_CALLBACK_URI, prodResponse)
 
         val devResponse = MockHttpServletResponse()
         cookieHelper.addAuthCookie(
@@ -323,7 +323,7 @@ class CookieHelperTest {
         )
 
         // when
-        storeSetCookies(cookieManager, DEV_LOGIN_URI, devResponse)
+        storeSetCookies(cookieManager, DEV_OAUTH2_CALLBACK_URI, devResponse)
 
         // then
         assertThat(devResponse.getHeaders(HttpHeaders.SET_COOKIE).single { it.startsWith("accessToken=dev-access-token") })
@@ -347,7 +347,7 @@ class CookieHelperTest {
             JwtConstants.ACCESS_TOKEN_COOKIE,
             "domain-access-token",
         )
-        storeSetCookies(cookieManager, LOGIN_URI, domainResponse)
+        storeSetCookies(cookieManager, OAUTH2_CALLBACK_URI, domainResponse)
 
         val rolledBackResponse = MockHttpServletResponse()
         addLegacyHostOnlyCookie(
@@ -358,7 +358,7 @@ class CookieHelperTest {
         )
 
         // when
-        storeSetCookies(cookieManager, LOGIN_URI, rolledBackResponse)
+        storeSetCookies(cookieManager, OAUTH2_CALLBACK_URI, rolledBackResponse)
         val cookieHeader = getCookieHeader(cookieManager, GENERAL_API_URI)
 
         // then
@@ -386,6 +386,11 @@ class CookieHelperTest {
         storeSetCookies(cookieManager, AUTHORIZATION_URI, response)
 
         // then
+        // 오라클로 쓰는 java.net.CookieManager의 path 매칭은 HttpCookie.pathMatches = 단순 startsWith라
+        // RFC 6265 §5.1.4가 요구하는 경계(`/`)를 보지 않는다. 경로 경계는 발급 헤더의 Path를 직접 단언해야 지켜진다.
+        assertThat(response.getHeaders(HttpHeaders.SET_COOKIE).single())
+            .startsWith("$OAUTH2_AUTHORIZATION_REQUEST_COOKIE=oauth-state")
+            .contains("Path=$OAUTH2_COOKIE_PATH;")
         assertThat(getCookieHeader(cookieManager, OAUTH2_CALLBACK_URI))
             .contains("$OAUTH2_AUTHORIZATION_REQUEST_COOKIE=oauth-state")
         assertThat(getCookieHeader(cookieManager, GENERAL_API_URI))
@@ -479,21 +484,26 @@ class CookieHelperTest {
         private const val DOMAIN_ATTRIBUTE = "Domain=.techtaurant.com;"
         private const val OAUTH2_AUTHORIZATION_REQUEST_COOKIE = "oauth2_auth_request"
         private const val OAUTH2_COOKIE_MAX_AGE_SECONDS = 180
+
+        // Spring이 콜백을 처리하는 경로는 /login/oauth2/code/{registrationId} 하나뿐이고,
+        // oauth2_ 쿠키 Path는 그 경로를 담는 상위 경로여야 브라우저가 콜백에만 쿠키를 싣는다.
+        // 두 값은 프로덕션 상수를 검증하는 오라클이므로 서로 파생시키지 않고 각각 적는다.
+        private const val OAUTH2_COOKIE_PATH = "/login/oauth2"
+        private const val OAUTH2_CALLBACK_PATH = "/login/oauth2/code/google"
         private const val API_HOST = "api.techtaurant.com"
         private const val DEV_API_HOST = "dev-api.techtaurant.com"
         private const val FRONTEND_HOST = "techtaurant.com"
         private const val LOCAL_HOST = "localhost"
-        private val LOGIN_URI = URI("https://$API_HOST/oauth2/callback/google")
         private val AUTHORIZATION_URI = URI("https://$API_HOST/oauth2/authorization/google")
-        private val OAUTH2_CALLBACK_URI = URI("https://$API_HOST/login/oauth2/code/google")
-        private val DEV_LOGIN_URI = URI("https://$DEV_API_HOST/oauth2/callback/google")
+        private val OAUTH2_CALLBACK_URI = URI("https://$API_HOST$OAUTH2_CALLBACK_PATH")
+        private val DEV_OAUTH2_CALLBACK_URI = URI("https://$DEV_API_HOST$OAUTH2_CALLBACK_PATH")
         private val DEV_GENERAL_API_URI = URI("https://$DEV_API_HOST/api/users/me")
         private val FRONTEND_SERVER_URI = URI("https://$FRONTEND_HOST/")
         private val FRONTEND_REFRESH_URI = URI("https://$FRONTEND_HOST$REFRESH_ENDPOINT_PATH")
         private val GENERAL_API_URI = URI("https://$API_HOST/api/users/me")
         private val REFRESH_API_URI = URI("https://$API_HOST$REFRESH_ENDPOINT_PATH")
         private val LOGOUT_API_URI = URI("https://$API_HOST$LOGOUT_ENDPOINT_PATH")
-        private val LOCAL_LOGIN_URI = URI("https://$LOCAL_HOST:8080/oauth2/callback/google")
+        private val LOCAL_OAUTH2_CALLBACK_URI = URI("https://$LOCAL_HOST:8080$OAUTH2_CALLBACK_PATH")
         private val LOCAL_GENERAL_API_URI = URI("https://$LOCAL_HOST:8080/api/users/me")
     }
 }

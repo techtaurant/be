@@ -54,7 +54,7 @@ class OAuth2FailureHandler(
 
     /**
      * Request URI에서 OAuth provider 이름을 추출한다.
-     * 예: /oauth2/callback/google -> google
+     * 예: /login/oauth2/code/google -> google
      */
     private fun extractOAuthProvider(requestUri: String): String {
         return requestUri.split("/").lastOrNull { it.isNotBlank() } ?: "unknown"
