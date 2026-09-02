@@ -170,10 +170,10 @@ class CookieHelper(
     }
 
     private fun resolveCookiePath(name: String): String {
-        return if (name == JwtConstants.REFRESH_TOKEN_COOKIE) {
-            REFRESH_TOKEN_PATH
-        } else {
-            cookieProperties.path
+        return when {
+            name == JwtConstants.REFRESH_TOKEN_COOKIE -> REFRESH_TOKEN_PATH
+            name.startsWith(OAUTH2_COOKIE_NAME_PREFIX) -> OAUTH2_COOKIE_PATH
+            else -> cookieProperties.path
         }
     }
 
@@ -186,5 +186,13 @@ class CookieHelper(
         const val REFRESH_TOKEN_PATH = "/open-api/auth"
         const val LEGACY_REFRESH_ONLY_TOKEN_PATH = "/open-api/auth/refresh"
         const val ACCESS_TOKEN_COOKIE_DOMAIN = ".techtaurant.com"
+
+        /**
+         * oauth2_ 로 시작하는 쿠키는 OAuth 콜백 요청 한 번에서만 읽습니다.
+         * 그 경로로 좁혀야 로그인 진행 중에도 일반 API 요청에 딸려 가지 않습니다.
+         * 쿠키를 심는 곳은 authorization 요청이지만 Path는 읽는 곳 기준으로 정합니다.
+         */
+        const val OAUTH2_COOKIE_NAME_PREFIX = "oauth2_"
+        const val OAUTH2_COOKIE_PATH = "/login/oauth2"
     }
 }

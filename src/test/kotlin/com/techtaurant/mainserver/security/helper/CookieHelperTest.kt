@@ -368,6 +368,56 @@ class CookieHelperTest {
         assertThat(cookieHeader.split("; ").count { it.startsWith("accessToken=") }).isEqualTo(2)
     }
 
+    @Test
+    @DisplayName("OAuth 쿠키는 콜백 요청에만 실리고 로그인 진행 중인 일반 API 요청에는 실리지 않는다")
+    fun oauthCookiesReachCallbackOnly() {
+        // given
+        val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
+        val response = MockHttpServletResponse()
+        cookieHelper.addCookie(
+            apiHostRequest(),
+            response,
+            OAUTH2_AUTHORIZATION_REQUEST_COOKIE,
+            "oauth-state",
+            OAUTH2_COOKIE_MAX_AGE_SECONDS,
+        )
+
+        // when
+        storeSetCookies(cookieManager, AUTHORIZATION_URI, response)
+
+        // then
+        assertThat(getCookieHeader(cookieManager, OAUTH2_CALLBACK_URI))
+            .contains("$OAUTH2_AUTHORIZATION_REQUEST_COOKIE=oauth-state")
+        assertThat(getCookieHeader(cookieManager, GENERAL_API_URI))
+            .doesNotContain(OAUTH2_AUTHORIZATION_REQUEST_COOKIE)
+    }
+
+    @Test
+    @DisplayName("OAuth 쿠키 삭제는 발급과 같은 Path를 써서 브라우저에서 실제로 제거된다")
+    fun oauthCookieDeletionMatchesIssuedPath() {
+        // given
+        val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
+        val issueResponse = MockHttpServletResponse()
+        cookieHelper.addCookie(
+            apiHostRequest(),
+            issueResponse,
+            OAUTH2_AUTHORIZATION_REQUEST_COOKIE,
+            "oauth-state",
+            OAUTH2_COOKIE_MAX_AGE_SECONDS,
+        )
+        storeSetCookies(cookieManager, AUTHORIZATION_URI, issueResponse)
+
+        val deleteResponse = MockHttpServletResponse()
+        cookieHelper.deleteCookie(deleteResponse, OAUTH2_AUTHORIZATION_REQUEST_COOKIE)
+
+        // when
+        storeSetCookies(cookieManager, OAUTH2_CALLBACK_URI, deleteResponse)
+
+        // then
+        assertThat(getCookieHeader(cookieManager, OAUTH2_CALLBACK_URI))
+            .doesNotContain(OAUTH2_AUTHORIZATION_REQUEST_COOKIE)
+    }
+
     private fun apiHostRequest(): MockHttpServletRequest {
         return MockHttpServletRequest().apply { serverName = API_HOST }
     }
@@ -428,11 +478,14 @@ class CookieHelperTest {
         private const val LOGOUT_ENDPOINT_PATH = "/open-api/auth/logout"
         private const val DOMAIN_ATTRIBUTE = "Domain=.techtaurant.com;"
         private const val OAUTH2_AUTHORIZATION_REQUEST_COOKIE = "oauth2_auth_request"
+        private const val OAUTH2_COOKIE_MAX_AGE_SECONDS = 180
         private const val API_HOST = "api.techtaurant.com"
         private const val DEV_API_HOST = "dev-api.techtaurant.com"
         private const val FRONTEND_HOST = "techtaurant.com"
         private const val LOCAL_HOST = "localhost"
         private val LOGIN_URI = URI("https://$API_HOST/oauth2/callback/google")
+        private val AUTHORIZATION_URI = URI("https://$API_HOST/oauth2/authorization/google")
+        private val OAUTH2_CALLBACK_URI = URI("https://$API_HOST/login/oauth2/code/google")
         private val DEV_LOGIN_URI = URI("https://$DEV_API_HOST/oauth2/callback/google")
         private val DEV_GENERAL_API_URI = URI("https://$DEV_API_HOST/api/users/me")
         private val FRONTEND_SERVER_URI = URI("https://$FRONTEND_HOST/")

@@ -47,8 +47,7 @@ class OAuth2FailureHandler(
                 .encode()
                 .toUriString()
 
-        // OAuth2 인증 실패 후 authorization request 쿠키 정리
-        cookieOAuth2AuthorizationRequestRepository.removeAuthorizationRequestCookies(response)
+        cookieOAuth2AuthorizationRequestRepository.removeOAuthAuthorizationRequestCookies(response)
 
         response.sendRedirect(redirectUrl)
     }
