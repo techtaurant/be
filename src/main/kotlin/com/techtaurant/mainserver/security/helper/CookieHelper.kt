@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.HttpHeaders
 import org.springframework.http.ResponseCookie
+import org.springframework.security.oauth2.client.web.OAuth2LoginAuthenticationFilter
 import org.springframework.stereotype.Component
 import java.time.Duration
 
@@ -170,10 +171,10 @@ class CookieHelper(
     }
 
     private fun resolveCookiePath(name: String): String {
-        return if (name == JwtConstants.REFRESH_TOKEN_COOKIE) {
-            REFRESH_TOKEN_PATH
-        } else {
-            cookieProperties.path
+        return when {
+            name == JwtConstants.REFRESH_TOKEN_COOKIE -> REFRESH_TOKEN_PATH
+            name.startsWith(OAUTH2_COOKIE_NAME_PREFIX) -> OAUTH2_COOKIE_PATH
+            else -> cookieProperties.path
         }
     }
 
@@ -186,5 +187,22 @@ class CookieHelper(
         const val REFRESH_TOKEN_PATH = "/open-api/auth"
         const val LEGACY_REFRESH_ONLY_TOKEN_PATH = "/open-api/auth/refresh"
         const val ACCESS_TOKEN_COOKIE_DOMAIN = ".techtaurant.com"
+
+        /**
+         * oauth2_ 로 시작하는 쿠키는 OAuth 콜백 요청 한 번에서만 읽습니다.
+         * 그 경로로 좁혀야 로그인 진행 중에도 일반 API 요청에 딸려 가지 않습니다.
+         * 쿠키를 심는 곳은 authorization 요청이지만 Path는 읽는 곳 기준으로 정합니다.
+         */
+        const val OAUTH2_COOKIE_NAME_PREFIX = "oauth2_"
+
+        /**
+         * 콜백을 처리하는 URI에서 직접 끌어옵니다.
+         * 값을 따로 적으면 Spring이 콜백을 받는 경로와 문자열로만 맞아떨어지는 상태가 되고,
+         * 둘이 어긋나는 순간 브라우저가 콜백에 쿠키를 싣지 않아 모든 로그인이 실패합니다.
+         * SecurityConfig가 redirectionEndpoint.baseUri를 재정의하면 이 파생이 깨지므로,
+         * 그때는 재정의한 값을 기준으로 이 Path도 함께 옮겨야 합니다.
+         */
+        val OAUTH2_COOKIE_PATH: String =
+            OAuth2LoginAuthenticationFilter.DEFAULT_FILTER_PROCESSES_URI.removeSuffix("/code/*")
     }
 }
