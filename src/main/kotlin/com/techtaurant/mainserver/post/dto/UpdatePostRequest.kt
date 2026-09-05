@@ -42,7 +42,8 @@ data class UpdatePostRequest(
         description =
             "대표 썸네일로 사용할 attachment ID " +
                 "(생략 시 기존 썸네일 유지, 지정된 적 없으면 본문 첫 첨부로 노출, " +
-                "교체 시 본문에서 참조되지 않는 이전 썸네일은 삭제)",
+                "교체 시 본문에서 참조되지 않는 이전 썸네일은 삭제. " +
+                "DRAFT도 저장되며, 이때 첨부는 확정되지 않고 tmp 경로에 남으며 이전 썸네일도 삭제하지 않는다)",
         example = "01234567-89ab-cdef-0123-456789abcdef",
     )
     val thumbnailAttachmentId: UUID? = null,

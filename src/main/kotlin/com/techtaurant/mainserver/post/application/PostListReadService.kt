@@ -3,6 +3,7 @@ package com.techtaurant.mainserver.post.application
 import com.techtaurant.mainserver.attachment.application.AttachmentService
 import com.techtaurant.mainserver.attachment.enums.AttachmentReferenceType
 import com.techtaurant.mainserver.common.dto.CursorPageResponse
+import com.techtaurant.mainserver.common.policy.TemporaryContentRetention
 import com.techtaurant.mainserver.post.dto.CategoryResponse
 import com.techtaurant.mainserver.post.dto.DraftListItemResponse
 import com.techtaurant.mainserver.post.dto.PostContentListItemResponse
@@ -35,7 +36,6 @@ class PostListReadService(
     private val userProfileImageResolver: UserProfileImageResolver,
 ) {
     companion object {
-        private const val STALE_DRAFT_DAYS = 14
         private const val POST_LIST_CONTENT_MAX_LENGTH = 2000
     }
 
@@ -286,7 +286,7 @@ class PostListReadService(
      * @param userId 사용자 ID
      */
     private fun deleteExpiredDrafts(userId: UUID) {
-        val expirationDate = Instant.now().minus(STALE_DRAFT_DAYS.toLong(), ChronoUnit.DAYS)
+        val expirationDate = Instant.now().minus(TemporaryContentRetention.DAYS, ChronoUnit.DAYS)
 
         val staleDrafts = postRepository.findStaleDraftsByAuthor(userId, expirationDate)
         staleDrafts.forEach { post ->

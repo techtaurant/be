@@ -3,6 +3,7 @@ package com.techtaurant.mainserver.attachment.infrastructure.out
 import com.techtaurant.mainserver.attachment.entity.Attachment
 import com.techtaurant.mainserver.attachment.enums.AttachmentReferenceType
 import com.techtaurant.mainserver.attachment.enums.AttachmentStatus
+import java.time.Instant
 import java.util.UUID
 
 interface AttachmentRepositoryCustom {
@@ -24,6 +25,17 @@ interface AttachmentRepositoryCustom {
     fun findAllById(ids: Iterable<UUID>): List<Attachment>
 
     fun findAllByIdForUpdate(ids: Iterable<UUID>): List<Attachment>
+
+    fun updateReferenceIdByIds(
+        referenceId: UUID,
+        attachmentIds: List<UUID>,
+    )
+
+    fun findAllUnclaimedByStatusAndCreatedAtBefore(
+        status: AttachmentStatus,
+        createdAtBefore: Instant,
+        limit: Int,
+    ): List<Attachment>
 
     fun findAllByObjectKeyInAndStatus(
         objectKeys: List<String>,

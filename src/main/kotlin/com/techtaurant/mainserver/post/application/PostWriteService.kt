@@ -42,6 +42,7 @@ class PostWriteService(
      * 게시물을 생성합니다.
      * 카테고리/태그 생성 시 락과 트랜잭션이 함께 관리되며, 게시물 저장은 별도 트랜잭션에서 수행됩니다.
      * DRAFT 상태일 경우 빈 제목/본문에 기본값을 설정하고, PUBLISHED/PRIVATE 상태일 경우 제목/본문이 필수입니다.
+     * 썸네일은 상태와 무관하게 저장하며, DRAFT는 첨부를 확정하지 않으므로 tmp 경로의 미확정 첨부를 그대로 가리킵니다.
      *
      * @param userId 작성자 ID
      * @param request 게시물 생성 요청
@@ -94,28 +95,33 @@ class PostWriteService(
 
         val isDraft = status == PostStatusEnum.DRAFT
         val attachmentIds =
-            if (isDraft) {
-                emptyList()
-            } else {
-                mergeAttachmentIds(
-                    filterAttachmentIdsIncludedInContent(post.referencedAttachmentIds(), request.attachmentIds),
-                    request.thumbnailAttachmentId,
-                )
-            }
+            mergeAttachmentIds(
+                filterAttachmentIdsIncludedInContent(post.referencedAttachmentIds(), request.attachmentIds),
+                request.thumbnailAttachmentId,
+            )
         val savedPost = postRepository.save(post)
 
-        if (!isDraft) {
-            // thumbnail_image는 attachments를 참조하는 FK라, 존재하지 않는 첨부 ID가 오면
-            // 확정 검증보다 먼저 쓰일 경우 NOT_FOUND 대신 FK 위반으로 실패한다.
-            // 따라서 confirm으로 첨부 존재를 검증한 뒤에 썸네일을 저장한다.
+        // thumbnail_image는 attachments를 참조하는 FK라, 존재하지 않는 첨부 ID가 오면
+        // 존재 검증보다 먼저 쓰일 경우 NOT_FOUND 대신 FK 위반으로 실패한다.
+        // 따라서 첨부 존재가 확인된 뒤에 썸네일을 저장한다.
+        if (isDraft) {
+            // DRAFT는 확정하지 않고 소유만 기록해 첨부를 tmp 경로에 남긴다.
+            // 확정하면 objectKey가 tmp/에서 벗어나 재진입 시 TMP 미리보기 URL 발급이 거절된다.
+            attachmentService.claimTmpAttachments(
+                referenceId = savedPost.id!!,
+                referenceType = AttachmentReferenceType.POST,
+                attachmentIds = attachmentIds,
+            )
+        } else {
             attachmentService.confirmAttachmentsByIds(
                 referenceId = savedPost.id!!,
                 referenceType = AttachmentReferenceType.POST,
                 attachmentIds = attachmentIds,
             )
-            savedPost.thumbnailImage = request.thumbnailAttachmentId
-            savedPost.updatedAt = postRepository.updateThumbnailImage(savedPost.id!!, savedPost.thumbnailImage)
         }
+
+        savedPost.thumbnailImage = request.thumbnailAttachmentId
+        savedPost.updatedAt = postRepository.updateThumbnailImage(savedPost.id!!, savedPost.thumbnailImage)
 
         if (status == PostStatusEnum.PUBLISHED) {
             createFollowerPostNotification(savedPost)
@@ -128,7 +134,7 @@ class PostWriteService(
      * 게시물을 수정합니다.
      * 요청에 포함된 필드만 업데이트하며, 작성자 권한을 검증합니다.
      * 상태 전환 시 DRAFT를 제외한 상태는 제목과 본문이 필수입니다.
-     * DRAFT 상태에서는 생성 경로와 동일하게 첨부 확정과 orphan 정리를 수행하지 않습니다.
+     * DRAFT 상태에서는 생성 경로와 동일하게 첨부 확정과 orphan 정리 없이 첨부 소유와 썸네일만 기록합니다.
      * 본문, 첨부 목록, 썸네일 중 하나라도 전달되면 본문 참조와 현재 썸네일을 기준으로 orphan 첨부를 정리합니다.
      *
      * @param postId 게시물 ID
@@ -200,6 +206,22 @@ class PostWriteService(
                     keepAttachmentIds = mergeAttachmentIds(attachmentIdsReferencedInContent, post.thumbnailImage),
                 )
             }
+        } else {
+            // DRAFT는 확정하지 않고 소유만 기록한다. 확정하면 objectKey가 tmp/에서 벗어나
+            // 재진입 시 TMP 미리보기 URL 발급이 거절된다.
+            // 본문에서 참조가 끊긴 첨부는 여기서 지우지 않는다. 편집 중 되돌리기를 막게 되고,
+            // 발행 시 orphan 정리와 보관 기간 배치가 그 역할을 이미 맡고 있다.
+            attachmentService.claimTmpAttachments(
+                referenceId = postId,
+                referenceType = AttachmentReferenceType.POST,
+                attachmentIds =
+                    mergeAttachmentIds(
+                        filterAttachmentIdsIncludedInContent(post.referencedAttachmentIds(), request.attachmentIds),
+                        request.thumbnailAttachmentId,
+                    ),
+            )
+
+            request.thumbnailAttachmentId?.let { post.thumbnailImage = it }
         }
 
         val savedPost = postRepository.save(post)

@@ -69,6 +69,7 @@ class PostWriteServiceAttachmentTest {
         every { userRepository.findById(author.id!!) } returns Optional.of(author)
         every { userFollowRepository.findFollowerIdsByFollowingId(author.id!!) } returns emptyList()
         every { tagWriteService.resolveTags(any()) } returns emptySet()
+        every { attachmentService.claimTmpAttachments(any(), any(), any()) } just runs
         every { attachmentService.confirmAttachmentsByIds(any(), any(), any()) } just runs
         every { attachmentService.deleteOrphanedAttachmentsByIds(any(), any(), any()) } just runs
         every { attachmentService.deleteAttachmentsByReference(any(), any()) } just runs
@@ -154,6 +155,36 @@ class PostWriteServiceAttachmentTest {
             }
             assertThat(savedPost?.thumbnailImage).isEqualTo(thumbnailAttachmentId)
             assertThat(response.updatedAt).isEqualTo(thumbnailUpdatedAt)
+        }
+
+        @Test
+        @DisplayName("DRAFT 생성 시 thumbnailAttachmentId는 확정 없이 썸네일로 저장한다")
+        fun createPost_draftWithThumbnailAttachmentId_savesThumbnailWithoutConfirm() {
+            // given
+            val thumbnailAttachmentId = UUID.randomUUID()
+            var savedPost: Post? = null
+            val request =
+                CreatePostRequest(
+                    title = "임시저장 게시물",
+                    content = "본문",
+                    thumbnailAttachmentId = thumbnailAttachmentId,
+                    status = PostStatusEnum.DRAFT,
+                )
+            every { postRepository.save(any()) } answers {
+                firstArg<Post>().apply {
+                    if (id == null) {
+                        id = UUID.randomUUID()
+                    }
+                    savedPost = this
+                }
+            }
+
+            // when
+            postWriteService.createPost(author.id!!, request)
+
+            // then
+            assertThat(savedPost?.thumbnailImage).isEqualTo(thumbnailAttachmentId)
+            verify(exactly = 0) { attachmentService.confirmAttachmentsByIds(any(), any(), any()) }
         }
 
         @Test
@@ -680,8 +711,8 @@ class PostWriteServiceAttachmentTest {
         }
 
         @Test
-        @DisplayName("DRAFT로 전환하면서 본문과 첨부를 전달해도 첨부를 확정하거나 정리하지 않는다")
-        fun updatePost_toDraftWithAttachmentFields_skipsAttachmentConfirmAndCleanup() {
+        @DisplayName("DRAFT로 전환하면서 본문과 첨부를 전달하면 썸네일만 저장하고 첨부를 확정하거나 정리하지 않는다")
+        fun updatePost_toDraftWithAttachmentFields_savesThumbnailAndSkipsConfirmAndCleanup() {
             // given
             val postId = UUID.randomUUID()
             val newAttachmentId = UUID.randomUUID()
@@ -708,7 +739,7 @@ class PostWriteServiceAttachmentTest {
             )
 
             // then
-            assertThat(post.thumbnailImage).isNull()
+            assertThat(post.thumbnailImage).isEqualTo(newAttachmentId)
             verify(exactly = 0) { attachmentService.confirmAttachmentsByIds(any(), any(), any()) }
             verify(exactly = 0) { attachmentService.deleteOrphanedAttachmentsByIds(any(), any(), any()) }
         }

@@ -32,7 +32,10 @@ data class CreatePostRequest(
     val tags: List<String>? = null,
     @field:Schema(description = "게시물에 연결할 attachment ID 목록", example = "[\"01234567-89ab-cdef-0123-456789abcdef\"]")
     val attachmentIds: List<UUID>? = null,
-    @field:Schema(description = "대표 썸네일로 사용할 attachment ID", example = "01234567-89ab-cdef-0123-456789abcdef")
+    @field:Schema(
+        description = "대표 썸네일로 사용할 attachment ID (DRAFT도 저장되며, 이때 첨부는 확정되지 않고 tmp 경로에 남는다)",
+        example = "01234567-89ab-cdef-0123-456789abcdef",
+    )
     val thumbnailAttachmentId: UUID? = null,
     @field:Schema(description = "게시물 상태 (DRAFT/PUBLISHED/PRIVATE, 기본값: PUBLISHED)", example = "PUBLISHED")
     val status: PostStatusEnum? = null,

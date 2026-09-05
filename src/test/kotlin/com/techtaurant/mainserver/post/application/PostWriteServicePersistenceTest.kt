@@ -161,6 +161,174 @@ class PostWriteServicePersistenceTest : IntegrationTest() {
         assertThat(reloadedPost.thumbnailImage).isEqualTo(replacedThumbnailAttachmentId)
     }
 
+    @Test
+    @DisplayName("DRAFT로 저장한 썸네일은 tmp 경로의 미확정 첨부인 채로 DB에 유지된다")
+    fun createDraftPostPersistsThumbnailAttachmentIdWithoutConfirming() {
+        // Given
+        val thumbnailAttachmentId = saveTmpAttachment()
+
+        // When
+        val response =
+            postWriteService.createPost(
+                userId = author.id!!,
+                request =
+                    CreatePostRequest(
+                        title = "임시저장 게시물",
+                        content = "본문입니다.",
+                        status = PostStatusEnum.DRAFT,
+                        thumbnailAttachmentId = thumbnailAttachmentId,
+                    ),
+            )
+
+        // Then
+        val reloadedPost = postRepository.findById(response.id).orElseThrow()
+        assertThat(reloadedPost.thumbnailImage).isEqualTo(thumbnailAttachmentId)
+
+        val reloadedAttachment = attachmentRepository.findAllById(listOf(thumbnailAttachmentId)).single()
+        assertThat(reloadedAttachment.status).isEqualTo(AttachmentStatus.TMP)
+        assertThat(reloadedAttachment.objectKey).startsWith("tmp/")
+    }
+
+    @Test
+    @DisplayName("DRAFT로 저장한 본문 첨부와 썸네일은 확정 없이 그 게시물 소유로 기록된다")
+    fun createDraftPostClaimsAttachmentsWithoutConfirming() {
+        // Given
+        val bodyAttachmentId = saveTmpAttachment()
+        val thumbnailAttachmentId = saveTmpAttachment()
+
+        // When
+        val response =
+            postWriteService.createPost(
+                userId = author.id!!,
+                request =
+                    CreatePostRequest(
+                        title = "임시저장 게시물",
+                        content = "<img src=\"$bodyAttachmentId\" />",
+                        status = PostStatusEnum.DRAFT,
+                        attachmentIds = listOf(bodyAttachmentId),
+                        thumbnailAttachmentId = thumbnailAttachmentId,
+                    ),
+            )
+
+        // Then
+        val claimed = attachmentRepository.findAllById(listOf(bodyAttachmentId, thumbnailAttachmentId))
+        assertThat(claimed).allSatisfy { attachment ->
+            assertThat(attachment.referenceId).isEqualTo(response.id)
+            assertThat(attachment.status).isEqualTo(AttachmentStatus.TMP)
+            assertThat(attachment.objectKey).startsWith("tmp/")
+        }
+    }
+
+    @Test
+    @DisplayName("DRAFT를 삭제하면 확정되지 않은 첨부 행도 함께 지워진다")
+    fun deleteDraftPostAlsoDeletesClaimedTmpAttachments() {
+        // Given
+        val bodyAttachmentId = saveTmpAttachment()
+        val createdPost =
+            postWriteService.createPost(
+                userId = author.id!!,
+                request =
+                    CreatePostRequest(
+                        title = "삭제할 임시저장 게시물",
+                        content = "<img src=\"$bodyAttachmentId\" />",
+                        status = PostStatusEnum.DRAFT,
+                        attachmentIds = listOf(bodyAttachmentId),
+                    ),
+            )
+
+        // When
+        postWriteService.deletePost(postId = createdPost.id, userId = author.id!!)
+
+        // Then
+        assertThat(attachmentRepository.findAllById(listOf(bodyAttachmentId))).isEmpty()
+    }
+
+    @Test
+    @DisplayName("다른 게시물이 이미 소유한 첨부를 DRAFT 썸네일로 지정하면 400으로 거부한다")
+    fun createDraftPostWithAttachmentOwnedByOtherPostFailsWithBadRequest() {
+        // Given
+        val thumbnailAttachmentId = saveTmpAttachment()
+        postWriteService.createPost(
+            userId = author.id!!,
+            request =
+                CreatePostRequest(
+                    title = "썸네일을 먼저 차지한 게시물",
+                    content = "본문입니다.",
+                    status = PostStatusEnum.DRAFT,
+                    thumbnailAttachmentId = thumbnailAttachmentId,
+                ),
+        )
+
+        // When & Then
+        assertThatThrownBy {
+            postWriteService.createPost(
+                userId = author.id!!,
+                request =
+                    CreatePostRequest(
+                        title = "같은 썸네일을 노리는 게시물",
+                        content = "본문입니다.",
+                        status = PostStatusEnum.DRAFT,
+                        thumbnailAttachmentId = thumbnailAttachmentId,
+                    ),
+            )
+        }.isInstanceOf(ApiException::class.java)
+            .hasMessage("다른 대상에 연결된 첨부파일은 사용할 수 없습니다")
+    }
+
+    @Test
+    @DisplayName("DRAFT 수정으로 지정한 썸네일도 tmp 경로의 미확정 첨부인 채로 DB에 유지된다")
+    fun updateDraftPostPersistsThumbnailAttachmentIdWithoutConfirming() {
+        // Given
+        val thumbnailAttachmentId = saveTmpAttachment()
+        val createdPost =
+            postWriteService.createPost(
+                userId = author.id!!,
+                request =
+                    CreatePostRequest(
+                        title = "썸네일을 나중에 고를 임시저장 게시물",
+                        content = "본문입니다.",
+                        status = PostStatusEnum.DRAFT,
+                    ),
+            )
+
+        // When
+        postWriteService.updatePost(
+            postId = createdPost.id,
+            request = UpdatePostRequest(thumbnailAttachmentId = thumbnailAttachmentId),
+            userId = author.id!!,
+        )
+
+        // Then
+        val reloadedPost = postRepository.findById(createdPost.id).orElseThrow()
+        assertThat(reloadedPost.thumbnailImage).isEqualTo(thumbnailAttachmentId)
+
+        val reloadedAttachment = attachmentRepository.findAllById(listOf(thumbnailAttachmentId)).single()
+        assertThat(reloadedAttachment.status).isEqualTo(AttachmentStatus.TMP)
+        assertThat(reloadedAttachment.objectKey).startsWith("tmp/")
+    }
+
+    @Test
+    @DisplayName("DRAFT도 존재하지 않는 thumbnailAttachmentId는 FK 위반이 아니라 NOT_FOUND로 실패한다")
+    fun createDraftPostWithUnknownThumbnailAttachmentIdFailsWithNotFound() {
+        // Given
+        val unknownAttachmentId = UUID.randomUUID()
+
+        // When & Then
+        assertThatThrownBy {
+            postWriteService.createPost(
+                userId = author.id!!,
+                request =
+                    CreatePostRequest(
+                        title = "존재하지 않는 썸네일을 가리키는 임시저장 게시물",
+                        content = "본문입니다.",
+                        status = PostStatusEnum.DRAFT,
+                        thumbnailAttachmentId = unknownAttachmentId,
+                    ),
+            )
+        }.isInstanceOf(ApiException::class.java)
+            .hasMessage("첨부파일을 찾을 수 없습니다")
+    }
+
     /**
      * confirm 대상에서 제외되도록 CONFIRMED 상태로 저장해 S3 호출 없이 첨부 ID만 확보한다.
      */
@@ -171,6 +339,25 @@ class PostWriteServicePersistenceTest : IntegrationTest() {
                     referenceType = AttachmentReferenceType.POST,
                     objectKey = "posts/${UUID.randomUUID()}/thumbnail.png",
                     status = AttachmentStatus.CONFIRMED,
+                    originalFileName = "thumbnail.png",
+                    contentType = "image/png",
+                    fileSize = 1024,
+                ),
+            )
+
+        return attachment.id!!
+    }
+
+    /**
+     * DRAFT는 첨부를 확정하지 않으므로, 임시저장 썸네일이 실제로 거치는 TMP 상태와 tmp 경로 그대로 저장한다.
+     */
+    private fun saveTmpAttachment(): UUID {
+        val attachment =
+            attachmentRepository.save(
+                Attachment(
+                    referenceType = AttachmentReferenceType.POST,
+                    objectKey = "tmp/${UUID.randomUUID()}/thumbnail.png",
+                    status = AttachmentStatus.TMP,
                     originalFileName = "thumbnail.png",
                     contentType = "image/png",
                     fileSize = 1024,
