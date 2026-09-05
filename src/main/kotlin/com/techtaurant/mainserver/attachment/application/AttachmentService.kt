@@ -157,7 +157,7 @@ class AttachmentService(
         limit: Int,
     ): Int {
         val expiredAttachments =
-            attachmentRepository.findAllByStatusAndCreatedAtBefore(AttachmentStatus.TMP, expirationThreshold, limit)
+            attachmentRepository.findAllUnclaimedByStatusAndCreatedAtBefore(AttachmentStatus.TMP, expirationThreshold, limit)
 
         if (expiredAttachments.isEmpty()) return 0
 

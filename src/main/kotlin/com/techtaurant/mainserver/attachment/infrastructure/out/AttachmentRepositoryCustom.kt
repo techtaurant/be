@@ -31,7 +31,7 @@ interface AttachmentRepositoryCustom {
         attachmentIds: List<UUID>,
     )
 
-    fun findAllByStatusAndCreatedAtBefore(
+    fun findAllUnclaimedByStatusAndCreatedAtBefore(
         status: AttachmentStatus,
         createdAtBefore: Instant,
         limit: Int,

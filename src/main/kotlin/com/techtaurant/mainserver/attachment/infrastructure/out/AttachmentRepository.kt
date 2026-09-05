@@ -40,14 +40,19 @@ interface AttachmentRepository : Repository<Attachment, UUID>, AttachmentReposit
     )
 
     /**
-     * 보관 기간이 지난 특정 상태의 첨부를 한 번에 처리할 수 있는 만큼만 조회합니다.
+     * 보관 기간이 지나고 아직 어느 대상에도 소유가 기록되지 않은 특정 상태의 첨부를
+     * 한 번에 처리할 수 있는 만큼만 조회합니다.
+     *
+     * 소유가 기록된 첨부는 게시물 삭제와 orphan 정리가 referenceId로 찾을 수 있으므로 제외한다.
+     * 임시저장은 확정 없이 소유만 기록해 status를 TMP로 남기기 때문에, status만 보면
+     * 편집 중인 임시저장의 첨부까지 만료 대상이 된다.
      *
      * @param status 조회할 첨부 상태
      * @param createdAtBefore 이 시각 이전에 생성된 첨부만 반환
      * @param limit 최대 반환 건수
      * @return 조건에 맞는 첨부 목록
      */
-    override fun findAllByStatusAndCreatedAtBefore(
+    override fun findAllUnclaimedByStatusAndCreatedAtBefore(
         status: AttachmentStatus,
         createdAtBefore: Instant,
         limit: Int,

@@ -560,7 +560,7 @@ class AttachmentServiceTest {
             val threshold = Instant.parse("2026-09-01T00:00:00Z")
             val expired = makeAttachment("tmp/${UUID.randomUUID()}/old.jpg", AttachmentStatus.TMP, referenceId = null)
             every {
-                attachmentRepository.findAllByStatusAndCreatedAtBefore(AttachmentStatus.TMP, threshold, 100)
+                attachmentRepository.findAllUnclaimedByStatusAndCreatedAtBefore(AttachmentStatus.TMP, threshold, 100)
             } returns listOf(expired)
             every { attachmentRepository.deleteAll(any<List<Attachment>>()) } just runs
             every { s3StorageService.deleteObjects(any()) } just runs
@@ -581,7 +581,7 @@ class AttachmentServiceTest {
             // given
             val threshold = Instant.parse("2026-09-01T00:00:00Z")
             every {
-                attachmentRepository.findAllByStatusAndCreatedAtBefore(AttachmentStatus.TMP, threshold, 100)
+                attachmentRepository.findAllUnclaimedByStatusAndCreatedAtBefore(AttachmentStatus.TMP, threshold, 100)
             } returns emptyList()
 
             // when

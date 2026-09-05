@@ -100,14 +100,16 @@ class AttachmentRepositoryCustomImpl(
             .execute()
     }
 
-    override fun findAllByStatusAndCreatedAtBefore(
+    override fun findAllUnclaimedByStatusAndCreatedAtBefore(
         status: AttachmentStatus,
         createdAtBefore: Instant,
         limit: Int,
     ): List<Attachment> =
         dsl.selectFrom(ATTACHMENTS)
             .where(
-                ATTACHMENTS.STATUS.cast(String::class.java).eq(status.name)
+                // 컬럼을 캐스팅하면 idx_attachments_unclaimed_status_created_at의 선두 컬럼과 형태가 달라져 인덱스가 선택되지 않는다.
+                ATTACHMENTS.STATUS.eq(enumValue("attachment_status", status.name))
+                    .and(ATTACHMENTS.REFERENCE_ID.isNull)
                     .and(ATTACHMENTS.CREATED_AT_UTC.lt(createdAtBefore.atOffset(ZoneOffset.UTC))),
             )
             .orderBy(ATTACHMENTS.CREATED_AT_UTC.asc())
