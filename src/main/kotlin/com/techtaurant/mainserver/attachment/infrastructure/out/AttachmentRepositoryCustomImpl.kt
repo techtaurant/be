@@ -87,6 +87,21 @@ class AttachmentRepositoryCustomImpl(
         }
     }
 
+    override fun findAllByStatusAndCreatedAtBefore(
+        status: AttachmentStatus,
+        createdAtBefore: Instant,
+        limit: Int,
+    ): List<Attachment> =
+        dsl.selectFrom(ATTACHMENTS)
+            .where(
+                ATTACHMENTS.STATUS.cast(String::class.java).eq(status.name)
+                    .and(ATTACHMENTS.CREATED_AT_UTC.lt(createdAtBefore.atOffset(ZoneOffset.UTC))),
+            )
+            .orderBy(ATTACHMENTS.CREATED_AT_UTC.asc())
+            .limit(limit)
+            .fetch()
+            .map { record -> record.toAttachment() }
+
     override fun findAllByObjectKeyInAndStatus(
         objectKeys: List<String>,
         status: AttachmentStatus,

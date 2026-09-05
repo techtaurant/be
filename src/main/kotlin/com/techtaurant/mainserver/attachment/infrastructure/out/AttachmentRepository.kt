@@ -4,6 +4,7 @@ import com.techtaurant.mainserver.attachment.entity.Attachment
 import com.techtaurant.mainserver.attachment.enums.AttachmentReferenceType
 import com.techtaurant.mainserver.attachment.enums.AttachmentStatus
 import org.springframework.data.repository.Repository
+import java.time.Instant
 import java.util.UUID
 
 interface AttachmentRepository : Repository<Attachment, UUID>, AttachmentRepositoryCustom {
@@ -26,6 +27,20 @@ interface AttachmentRepository : Repository<Attachment, UUID>, AttachmentReposit
      * @return 존재하는 첨부 목록
      */
     override fun findAllByIdForUpdate(ids: Iterable<UUID>): List<Attachment>
+
+    /**
+     * 보관 기간이 지난 특정 상태의 첨부를 한 번에 처리할 수 있는 만큼만 조회합니다.
+     *
+     * @param status 조회할 첨부 상태
+     * @param createdAtBefore 이 시각 이전에 생성된 첨부만 반환
+     * @param limit 최대 반환 건수
+     * @return 조건에 맞는 첨부 목록
+     */
+    override fun findAllByStatusAndCreatedAtBefore(
+        status: AttachmentStatus,
+        createdAtBefore: Instant,
+        limit: Int,
+    ): List<Attachment>
 
     override fun findAllByObjectKeyInAndStatus(
         objectKeys: List<String>,
