@@ -41,6 +41,8 @@ class AttachmentService(
      */
     @Transactional
     fun issuePresignedUploadUrl(request: PresignedUrlRequest): PresignedUrlResponse {
+        validateAllowedContentType(request.contentType)
+
         val uniqueId = UUID.randomUUID()
         val objectKey = "tmp/$uniqueId/${request.fileName}"
 
@@ -61,9 +63,9 @@ class AttachmentService(
             s3StorageService.generatePresignedUploadUrl(
                 objectKey = objectKey,
                 contentType = request.contentType,
+                fileSize = request.fileSize,
                 expireMinutes = presignedUrlExpireMinutes,
             )
-                fileSize = request.fileSize,
 
         return PresignedUrlResponse.from(attachment, presignedUrl)
     }
@@ -360,6 +362,15 @@ class AttachmentService(
         }
     }
 
+    private fun validateAllowedContentType(contentType: String) {
+        if (contentType.trim().lowercase() !in ALLOWED_CONTENT_TYPES) {
+            throw ApiException(
+                DefaultStatus.BAD_REQUEST,
+                "지원하지 않는 파일 형식입니다. 허용 형식: ${ALLOWED_CONTENT_TYPES.joinToString()}",
+            )
+        }
+    }
+
     private fun buildConfirmedObjectKey(
         referenceType: AttachmentReferenceType,
         referenceId: UUID,
@@ -392,4 +403,24 @@ class AttachmentService(
             .findAllByReferenceIdInAndReferenceType(referenceIds, referenceType)
             .filter { it.status == AttachmentStatus.CONFIRMED }
             .groupBy { it.referenceId!! }
+
+    companion object {
+        /**
+         * 업로드를 허용하는 MIME 타입.
+         *
+         * 글 본문 렌더러가 sanitize 단계에서 img·picture·source만 남기므로, 업로드해도 화면에
+         * 표시되지 않는 비디오·오디오는 제외한다. image/svg+xml은 파일 자체가 스크립트를 담을 수 있어
+         * 링크를 직접 열면 실행될 수 있으므로 이미지 중에서도 제외한다.
+         *
+         * 선언된 값만 검증하므로 확장자를 위장한 파일은 걸러내지 못한다.
+         */
+        private val ALLOWED_CONTENT_TYPES =
+            setOf(
+                "image/jpeg",
+                "image/png",
+                "image/gif",
+                "image/webp",
+                "image/avif",
+            )
+    }
 }

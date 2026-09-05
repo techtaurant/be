@@ -135,6 +135,56 @@ class AttachmentServiceTest {
                 )
             }
         }
+
+        @Test
+        @DisplayName("허용 목록에 없는 형식이면 400 예외를 던지고 Attachment를 저장하지 않는다")
+        fun issuePresignedUploadUrl_disallowedContentType_throwsBadRequest() {
+            // given
+            val pdfRequest = request.copy(fileName = "doc.pdf", contentType = "application/pdf")
+
+            // when & then
+            val exception = assertThrows<ApiException> { attachmentService.issuePresignedUploadUrl(pdfRequest) }
+
+            assertThat(exception.status).isEqualTo(DefaultStatus.BAD_REQUEST)
+            verify(exactly = 0) { attachmentRepository.save(any()) }
+        }
+
+        @Test
+        @DisplayName("SVG는 이미지여도 허용하지 않는다")
+        fun issuePresignedUploadUrl_svgContentType_throwsBadRequest() {
+            // given
+            val svgRequest = request.copy(fileName = "icon.svg", contentType = "image/svg+xml")
+
+            // when & then
+            val exception = assertThrows<ApiException> { attachmentService.issuePresignedUploadUrl(svgRequest) }
+
+            assertThat(exception.status).isEqualTo(DefaultStatus.BAD_REQUEST)
+        }
+
+        @Test
+        @DisplayName("본문에 표시되지 않는 비디오는 허용하지 않는다")
+        fun issuePresignedUploadUrl_videoContentType_throwsBadRequest() {
+            // given
+            val videoRequest = request.copy(fileName = "clip.mp4", contentType = "video/mp4")
+
+            // when & then
+            val exception = assertThrows<ApiException> { attachmentService.issuePresignedUploadUrl(videoRequest) }
+
+            assertThat(exception.status).isEqualTo(DefaultStatus.BAD_REQUEST)
+        }
+
+        @Test
+        @DisplayName("MIME 타입은 대소문자를 구분하지 않는다")
+        fun issuePresignedUploadUrl_upperCaseContentType_issuesPresignedUrl() {
+            // given
+            val upperCaseRequest = request.copy(fileName = "photo.png", contentType = "IMAGE/PNG")
+
+            // when
+            val response = attachmentService.issuePresignedUploadUrl(upperCaseRequest)
+
+            // then
+            assertThat(response.attachmentId).isNotNull()
+        }
     }
 
     @Nested

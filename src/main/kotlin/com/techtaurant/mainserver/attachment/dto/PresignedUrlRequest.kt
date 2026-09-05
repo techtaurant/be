@@ -11,15 +11,18 @@ data class PresignedUrlRequest(
     @field:Schema(description = "업로드할 파일명", example = "photo.jpg")
     @field:NotBlank
     val fileName: String,
-    @field:Schema(description = "파일 MIME 타입", example = "image/jpeg")
+    @field:Schema(
+        description = "파일 MIME 타입 (image/jpeg, image/png, image/gif, image/webp, image/avif만 허용)",
+        example = "image/jpeg",
+    )
     @field:NotBlank
     val contentType: String,
     @field:Schema(description = "파일 크기 (bytes, 최대 30MB)", example = "1048576")
     @field:Positive
+    @field:Max(MAX_FILE_SIZE_BYTES)
     val fileSize: Long,
     @field:Schema(description = "첨부파일 연관 도메인 타입", example = "POST")
     val referenceType: AttachmentReferenceType,
-    @field:Max(MAX_FILE_SIZE_BYTES)
 ) {
     companion object {
         /**
