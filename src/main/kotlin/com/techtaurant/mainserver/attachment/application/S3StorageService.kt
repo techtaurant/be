@@ -31,14 +31,20 @@ class S3StorageService(
     /**
      * S3 PUT Presigned URL을 생성합니다.
      *
+     * fileSize를 지정하면 Content-Length가 서명 헤더(X-Amz-SignedHeaders)에 포함되므로,
+     * S3가 수신한 실제 Content-Length로 서명을 재계산해 값이 다르면 업로드를 거부한다.
+     * 덕분에 크기 제한이 확정 단계의 사후 검증이 아니라 업로드 시점에 강제된다.
+     *
      * @param objectKey 업로드 대상 S3 오브젝트 키
      * @param contentType 파일 MIME 타입
+     * @param fileSize 업로드를 허용할 정확한 바이트 수
      * @param expireMinutes URL 만료 시간 (분)
      * @return Presigned URL 문자열
      */
     fun generatePresignedUploadUrl(
         objectKey: String,
         contentType: String,
+        fileSize: Long,
         expireMinutes: Long,
     ): String {
         val putObjectRequest =
@@ -46,6 +52,7 @@ class S3StorageService(
                 .bucket(bucketName)
                 .key(objectKey)
                 .contentType(contentType)
+                .contentLength(fileSize)
                 .build()
 
         val presignRequest =

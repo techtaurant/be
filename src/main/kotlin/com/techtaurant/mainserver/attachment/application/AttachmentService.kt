@@ -41,6 +41,8 @@ class AttachmentService(
      */
     @Transactional
     fun issuePresignedUploadUrl(request: PresignedUrlRequest): PresignedUrlResponse {
+        val contentType = normalizeAllowedContentType(request.contentType)
+
         val uniqueId = UUID.randomUUID()
         val objectKey = "tmp/$uniqueId/${request.fileName}"
 
@@ -52,7 +54,7 @@ class AttachmentService(
                     objectKey = objectKey,
                     status = AttachmentStatus.TMP,
                     originalFileName = request.fileName,
-                    contentType = request.contentType,
+                    contentType = contentType,
                     fileSize = request.fileSize,
                 ),
             )
@@ -60,7 +62,8 @@ class AttachmentService(
         val presignedUrl =
             s3StorageService.generatePresignedUploadUrl(
                 objectKey = objectKey,
-                contentType = request.contentType,
+                contentType = contentType,
+                fileSize = request.fileSize,
                 expireMinutes = presignedUrlExpireMinutes,
             )
 
@@ -359,6 +362,23 @@ class AttachmentService(
         }
     }
 
+    /**
+     * 허용 목록에 있는 MIME 타입인지 검증하고, 저장·서명에 함께 쓸 정규화된 값을 돌려준다.
+     * 검증만 정규화하면 대소문자·공백이 섞인 원본이 DB와 S3 객체 Content-Type에 그대로 남는다.
+     */
+    private fun normalizeAllowedContentType(contentType: String): String {
+        val normalized = contentType.trim().lowercase()
+
+        if (normalized !in ALLOWED_CONTENT_TYPES) {
+            throw ApiException(
+                DefaultStatus.BAD_REQUEST,
+                "지원하지 않는 파일 형식입니다. 허용 형식: ${ALLOWED_CONTENT_TYPES.joinToString()}",
+            )
+        }
+
+        return normalized
+    }
+
     private fun buildConfirmedObjectKey(
         referenceType: AttachmentReferenceType,
         referenceId: UUID,
@@ -391,4 +411,24 @@ class AttachmentService(
             .findAllByReferenceIdInAndReferenceType(referenceIds, referenceType)
             .filter { it.status == AttachmentStatus.CONFIRMED }
             .groupBy { it.referenceId!! }
+
+    companion object {
+        /**
+         * 업로드를 허용하는 MIME 타입.
+         *
+         * 글 본문 렌더러가 sanitize 단계에서 img·picture·source만 남기므로, 업로드해도 화면에
+         * 표시되지 않는 비디오·오디오는 제외한다. image/svg+xml은 파일 자체가 스크립트를 담을 수 있어
+         * 링크를 직접 열면 실행될 수 있으므로 이미지 중에서도 제외한다.
+         *
+         * 선언된 값만 검증하므로 확장자를 위장한 파일은 걸러내지 못한다.
+         */
+        private val ALLOWED_CONTENT_TYPES =
+            setOf(
+                "image/jpeg",
+                "image/png",
+                "image/gif",
+                "image/webp",
+                "image/avif",
+            )
+    }
 }

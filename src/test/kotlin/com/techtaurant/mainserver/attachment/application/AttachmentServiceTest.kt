@@ -82,14 +82,15 @@ class AttachmentServiceTest {
                 referenceType = AttachmentReferenceType.POST,
             )
 
+        private val attachmentSlot = slot<Attachment>()
+
         @BeforeEach
         fun setUp() {
-            val attachmentSlot = slot<Attachment>()
             every { attachmentRepository.save(capture(attachmentSlot)) } answers {
                 attachmentSlot.captured.apply { id = UUID.randomUUID() }
             }
             every {
-                s3StorageService.generatePresignedUploadUrl(any(), any(), any())
+                s3StorageService.generatePresignedUploadUrl(any(), any(), any(), any())
             } returns "https://s3.example.com/presigned"
         }
 
@@ -120,7 +121,7 @@ class AttachmentServiceTest {
         }
 
         @Test
-        @DisplayName("Presigned URL 생성 시 요청의 contentType과 만료 시간을 전달한다")
+        @DisplayName("Presigned URL 생성 시 요청의 contentType, 파일 크기, 만료 시간을 전달한다")
         fun issuePresignedUploadUrl_validRequest_passesCorrectParamsToS3() {
             // given & when
             attachmentService.issuePresignedUploadUrl(request)
@@ -130,7 +131,87 @@ class AttachmentServiceTest {
                 s3StorageService.generatePresignedUploadUrl(
                     objectKey = match { it.startsWith("tmp/") },
                     contentType = "image/jpeg",
+                    fileSize = 1024L,
                     expireMinutes = presignedUrlExpireMinutes,
+                )
+            }
+        }
+
+        @Test
+        @DisplayName("허용 목록에 없는 형식이면 400 예외를 던지고 Attachment를 저장하지 않는다")
+        fun issuePresignedUploadUrl_disallowedContentType_throwsBadRequest() {
+            // given
+            val pdfRequest = request.copy(fileName = "doc.pdf", contentType = "application/pdf")
+
+            // when & then
+            val exception = assertThrows<ApiException> { attachmentService.issuePresignedUploadUrl(pdfRequest) }
+
+            assertThat(exception.status).isEqualTo(DefaultStatus.BAD_REQUEST)
+            verify(exactly = 0) { attachmentRepository.save(any()) }
+        }
+
+        @Test
+        @DisplayName("SVG는 이미지여도 허용하지 않는다")
+        fun issuePresignedUploadUrl_svgContentType_throwsBadRequest() {
+            // given
+            val svgRequest = request.copy(fileName = "icon.svg", contentType = "image/svg+xml")
+
+            // when & then
+            val exception = assertThrows<ApiException> { attachmentService.issuePresignedUploadUrl(svgRequest) }
+
+            assertThat(exception.status).isEqualTo(DefaultStatus.BAD_REQUEST)
+        }
+
+        @Test
+        @DisplayName("본문에 표시되지 않는 비디오는 허용하지 않는다")
+        fun issuePresignedUploadUrl_videoContentType_throwsBadRequest() {
+            // given
+            val videoRequest = request.copy(fileName = "clip.mp4", contentType = "video/mp4")
+
+            // when & then
+            val exception = assertThrows<ApiException> { attachmentService.issuePresignedUploadUrl(videoRequest) }
+
+            assertThat(exception.status).isEqualTo(DefaultStatus.BAD_REQUEST)
+        }
+
+        @Test
+        @DisplayName("MIME 타입은 대소문자를 구분하지 않으며, 정규화한 값으로 저장하고 서명한다")
+        fun issuePresignedUploadUrl_upperCaseContentType_storesAndSignsNormalizedContentType() {
+            // given
+            val upperCaseRequest = request.copy(fileName = "photo.png", contentType = "IMAGE/PNG")
+
+            // when
+            attachmentService.issuePresignedUploadUrl(upperCaseRequest)
+
+            // then
+            assertThat(attachmentSlot.captured.contentType).isEqualTo("image/png")
+            verify {
+                s3StorageService.generatePresignedUploadUrl(
+                    objectKey = any(),
+                    contentType = "image/png",
+                    fileSize = any(),
+                    expireMinutes = any(),
+                )
+            }
+        }
+
+        @Test
+        @DisplayName("MIME 타입 앞뒤 공백은 제거한 값으로 저장하고 서명한다")
+        fun issuePresignedUploadUrl_paddedContentType_storesAndSignsTrimmedContentType() {
+            // given
+            val paddedRequest = request.copy(fileName = "photo.png", contentType = " image/png\r\n")
+
+            // when
+            attachmentService.issuePresignedUploadUrl(paddedRequest)
+
+            // then
+            assertThat(attachmentSlot.captured.contentType).isEqualTo("image/png")
+            verify {
+                s3StorageService.generatePresignedUploadUrl(
+                    objectKey = any(),
+                    contentType = "image/png",
+                    fileSize = any(),
+                    expireMinutes = any(),
                 )
             }
         }
