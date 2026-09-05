@@ -89,7 +89,7 @@ class AttachmentServiceTest {
                 attachmentSlot.captured.apply { id = UUID.randomUUID() }
             }
             every {
-                s3StorageService.generatePresignedUploadUrl(any(), any(), any())
+                s3StorageService.generatePresignedUploadUrl(any(), any(), any(), any())
             } returns "https://s3.example.com/presigned"
         }
 
@@ -120,7 +120,7 @@ class AttachmentServiceTest {
         }
 
         @Test
-        @DisplayName("Presigned URL 생성 시 요청의 contentType과 만료 시간을 전달한다")
+        @DisplayName("Presigned URL 생성 시 요청의 contentType, 파일 크기, 만료 시간을 전달한다")
         fun issuePresignedUploadUrl_validRequest_passesCorrectParamsToS3() {
             // given & when
             attachmentService.issuePresignedUploadUrl(request)
@@ -130,6 +130,7 @@ class AttachmentServiceTest {
                 s3StorageService.generatePresignedUploadUrl(
                     objectKey = match { it.startsWith("tmp/") },
                     contentType = "image/jpeg",
+                    fileSize = 1024L,
                     expireMinutes = presignedUrlExpireMinutes,
                 )
             }

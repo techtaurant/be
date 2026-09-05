@@ -63,6 +63,7 @@ class AttachmentService(
                 contentType = request.contentType,
                 expireMinutes = presignedUrlExpireMinutes,
             )
+                fileSize = request.fileSize,
 
         return PresignedUrlResponse.from(attachment, presignedUrl)
     }
