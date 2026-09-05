@@ -131,13 +131,14 @@ class AttachmentService(
         if (attachmentIds.isEmpty()) return
 
         val requestedAttachments = findAttachmentsOwnableBy(referenceId, referenceType, attachmentIds)
-        val unclaimedTmpAttachments =
-            requestedAttachments.filter { it.status == AttachmentStatus.TMP && it.referenceId != referenceId }
+        val unclaimedTmpAttachmentIds =
+            requestedAttachments
+                .filter { it.status == AttachmentStatus.TMP && it.referenceId != referenceId }
+                .mapNotNull { it.id }
 
-        if (unclaimedTmpAttachments.isEmpty()) return
+        if (unclaimedTmpAttachmentIds.isEmpty()) return
 
-        unclaimedTmpAttachments.forEach { it.referenceId = referenceId }
-        attachmentRepository.saveAll(unclaimedTmpAttachments)
+        attachmentRepository.updateReferenceIdByIds(referenceId, unclaimedTmpAttachmentIds)
     }
 
     /**

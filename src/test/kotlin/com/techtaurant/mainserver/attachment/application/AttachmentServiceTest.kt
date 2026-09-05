@@ -446,11 +446,11 @@ class AttachmentServiceTest {
             every { attachmentRepository.findAllByIdForUpdate(any()) } answers {
                 attachmentRepository.findAllById(firstArg<List<UUID>>())
             }
-            every { attachmentRepository.saveAll(any<List<Attachment>>()) } answers { firstArg() }
+            every { attachmentRepository.updateReferenceIdByIds(any(), any()) } just runs
         }
 
         @Test
-        @DisplayName("TMP 첨부에 소유 대상만 기록하고 상태와 tmp 경로는 그대로 둔다")
+        @DisplayName("TMP 첨부의 소유 대상만 한 번의 UPDATE로 기록하고 상태와 tmp 경로는 그대로 둔다")
         fun claimTmpAttachments_unclaimedTmpAttachment_recordsReferenceWithoutConfirming() {
             // given
             val tmpKey = "tmp/${UUID.randomUUID()}/photo.jpg"
@@ -465,7 +465,7 @@ class AttachmentServiceTest {
             )
 
             // then
-            assertThat(tmpAttachment.referenceId).isEqualTo(postId)
+            verify(exactly = 1) { attachmentRepository.updateReferenceIdByIds(postId, listOf(tmpAttachment.id!!)) }
             assertThat(tmpAttachment.status).isEqualTo(AttachmentStatus.TMP)
             assertThat(tmpAttachment.objectKey).isEqualTo(tmpKey)
             verify(exactly = 0) { s3StorageService.copyObject(any(), any()) }
@@ -546,6 +546,7 @@ class AttachmentServiceTest {
             // then
             assertThat(confirmedAttachment.status).isEqualTo(AttachmentStatus.CONFIRMED)
             assertThat(confirmedAttachment.referenceId).isEqualTo(postId)
+            verify(exactly = 0) { attachmentRepository.updateReferenceIdByIds(any(), any()) }
         }
     }
 

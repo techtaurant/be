@@ -87,6 +87,19 @@ class AttachmentRepositoryCustomImpl(
         }
     }
 
+    override fun updateReferenceIdByIds(
+        referenceId: UUID,
+        attachmentIds: List<UUID>,
+    ) {
+        if (attachmentIds.isEmpty()) return
+        val now = Instant.now().truncatedTo(ChronoUnit.MICROS).atOffset(ZoneOffset.UTC)
+        dsl.update(ATTACHMENTS)
+            .set(ATTACHMENTS.REFERENCE_ID, referenceId)
+            .set(ATTACHMENTS.UPDATED_AT_UTC, now)
+            .where(ATTACHMENTS.ID.`in`(attachmentIds))
+            .execute()
+    }
+
     override fun findAllByStatusAndCreatedAtBefore(
         status: AttachmentStatus,
         createdAtBefore: Instant,

@@ -26,6 +26,11 @@ interface AttachmentRepositoryCustom {
 
     fun findAllByIdForUpdate(ids: Iterable<UUID>): List<Attachment>
 
+    fun updateReferenceIdByIds(
+        referenceId: UUID,
+        attachmentIds: List<UUID>,
+    )
+
     fun findAllByStatusAndCreatedAtBefore(
         status: AttachmentStatus,
         createdAtBefore: Instant,

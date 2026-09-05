@@ -29,6 +29,17 @@ interface AttachmentRepository : Repository<Attachment, UUID>, AttachmentReposit
     override fun findAllByIdForUpdate(ids: Iterable<UUID>): List<Attachment>
 
     /**
+     * 요청된 첨부의 소유 대상만 한 번의 UPDATE로 기록합니다.
+     *
+     * @param referenceId 기록할 연관 도메인 PK
+     * @param attachmentIds 갱신할 첨부 ID 목록
+     */
+    override fun updateReferenceIdByIds(
+        referenceId: UUID,
+        attachmentIds: List<UUID>,
+    )
+
+    /**
      * 보관 기간이 지난 특정 상태의 첨부를 한 번에 처리할 수 있는 만큼만 조회합니다.
      *
      * @param status 조회할 첨부 상태
