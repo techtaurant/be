@@ -82,9 +82,10 @@ class AttachmentServiceTest {
                 referenceType = AttachmentReferenceType.POST,
             )
 
+        private val attachmentSlot = slot<Attachment>()
+
         @BeforeEach
         fun setUp() {
-            val attachmentSlot = slot<Attachment>()
             every { attachmentRepository.save(capture(attachmentSlot)) } answers {
                 attachmentSlot.captured.apply { id = UUID.randomUUID() }
             }
@@ -174,16 +175,45 @@ class AttachmentServiceTest {
         }
 
         @Test
-        @DisplayName("MIME 타입은 대소문자를 구분하지 않는다")
-        fun issuePresignedUploadUrl_upperCaseContentType_issuesPresignedUrl() {
+        @DisplayName("MIME 타입은 대소문자를 구분하지 않으며, 정규화한 값으로 저장하고 서명한다")
+        fun issuePresignedUploadUrl_upperCaseContentType_storesAndSignsNormalizedContentType() {
             // given
             val upperCaseRequest = request.copy(fileName = "photo.png", contentType = "IMAGE/PNG")
 
             // when
-            val response = attachmentService.issuePresignedUploadUrl(upperCaseRequest)
+            attachmentService.issuePresignedUploadUrl(upperCaseRequest)
 
             // then
-            assertThat(response.attachmentId).isNotNull()
+            assertThat(attachmentSlot.captured.contentType).isEqualTo("image/png")
+            verify {
+                s3StorageService.generatePresignedUploadUrl(
+                    objectKey = any(),
+                    contentType = "image/png",
+                    fileSize = any(),
+                    expireMinutes = any(),
+                )
+            }
+        }
+
+        @Test
+        @DisplayName("MIME 타입 앞뒤 공백은 제거한 값으로 저장하고 서명한다")
+        fun issuePresignedUploadUrl_paddedContentType_storesAndSignsTrimmedContentType() {
+            // given
+            val paddedRequest = request.copy(fileName = "photo.png", contentType = " image/png\r\n")
+
+            // when
+            attachmentService.issuePresignedUploadUrl(paddedRequest)
+
+            // then
+            assertThat(attachmentSlot.captured.contentType).isEqualTo("image/png")
+            verify {
+                s3StorageService.generatePresignedUploadUrl(
+                    objectKey = any(),
+                    contentType = "image/png",
+                    fileSize = any(),
+                    expireMinutes = any(),
+                )
+            }
         }
     }
 

@@ -41,7 +41,7 @@ class AttachmentService(
      */
     @Transactional
     fun issuePresignedUploadUrl(request: PresignedUrlRequest): PresignedUrlResponse {
-        validateAllowedContentType(request.contentType)
+        val contentType = normalizeAllowedContentType(request.contentType)
 
         val uniqueId = UUID.randomUUID()
         val objectKey = "tmp/$uniqueId/${request.fileName}"
@@ -54,7 +54,7 @@ class AttachmentService(
                     objectKey = objectKey,
                     status = AttachmentStatus.TMP,
                     originalFileName = request.fileName,
-                    contentType = request.contentType,
+                    contentType = contentType,
                     fileSize = request.fileSize,
                 ),
             )
@@ -62,7 +62,7 @@ class AttachmentService(
         val presignedUrl =
             s3StorageService.generatePresignedUploadUrl(
                 objectKey = objectKey,
-                contentType = request.contentType,
+                contentType = contentType,
                 fileSize = request.fileSize,
                 expireMinutes = presignedUrlExpireMinutes,
             )
@@ -362,13 +362,21 @@ class AttachmentService(
         }
     }
 
-    private fun validateAllowedContentType(contentType: String) {
-        if (contentType.trim().lowercase() !in ALLOWED_CONTENT_TYPES) {
+    /**
+     * 허용 목록에 있는 MIME 타입인지 검증하고, 저장·서명에 함께 쓸 정규화된 값을 돌려준다.
+     * 검증만 정규화하면 대소문자·공백이 섞인 원본이 DB와 S3 객체 Content-Type에 그대로 남는다.
+     */
+    private fun normalizeAllowedContentType(contentType: String): String {
+        val normalized = contentType.trim().lowercase()
+
+        if (normalized !in ALLOWED_CONTENT_TYPES) {
             throw ApiException(
                 DefaultStatus.BAD_REQUEST,
                 "지원하지 않는 파일 형식입니다. 허용 형식: ${ALLOWED_CONTENT_TYPES.joinToString()}",
             )
         }
+
+        return normalized
     }
 
     private fun buildConfirmedObjectKey(
