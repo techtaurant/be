@@ -118,6 +118,34 @@ class PostDetailReadServiceTest {
         }
 
         @Test
+        @DisplayName("확정 전 첨부를 썸네일로 지정한 임시저장 게시물도 썸네일 attachmentId를 반환한다")
+        fun getPostDetail_draftWithUnconfirmedThumbnail_returnsThumbnailAttachmentId() {
+            // given
+            val postId = UUID.randomUUID()
+            val viewerId = author.id!!
+            val thumbnailAttachmentId = UUID.randomUUID()
+            val post =
+                Post(
+                    title = "임시저장 게시물",
+                    content = "본문",
+                    author = author,
+                    thumbnailImage = thumbnailAttachmentId,
+                    status = PostStatusEnum.DRAFT,
+                ).apply { id = postId }
+
+            every { postRepository.findPostDetailByIdForViewer(postId, viewerId) } returns post
+            every { postLikeLogRepository.findByPostIdAndUserId(postId, viewerId) } returns null
+            every { postReadLogRepository.existsByPostIdAndUserId(postId, viewerId) } returns false
+
+            // when
+            val result = postDetailReadService.getPostDetail(postId, viewerId)
+
+            // then
+            assertThat(result.thumbnailAttachmentId).isEqualTo(thumbnailAttachmentId)
+            assertThat(result.attachmentPresignedUrls).isEmpty()
+        }
+
+        @Test
         @DisplayName("비로그인 사용자는 읽음 여부를 false로 반환한다")
         fun getPostDetail_anonymousUser_returnsUnread() {
             // given
