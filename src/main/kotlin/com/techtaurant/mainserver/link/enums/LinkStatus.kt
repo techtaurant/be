@@ -15,6 +15,8 @@ enum class LinkStatus(
     LINK_CRAWL_BATCH_CREATED_AT_REQUIRED(HttpStatus.BAD_REQUEST.value(), 6006, "링크 수집 배치에서 생성일을 수집할 수 없습니다"),
     LINK_CRAWL_BATCH_NOT_CRAWLABLE(HttpStatus.BAD_REQUEST.value(), 6007, "링크 수집 배치를 크롤링할 수 없습니다"),
     LINK_CRAWL_RUN_NOT_FOUND(HttpStatus.NOT_FOUND.value(), 6008, "링크 수집 실행 이력을 찾을 수 없습니다"),
+    LINK_CRAWL_FAILED_JOB_NOT_FOUND(HttpStatus.NOT_FOUND.value(), 6009, "링크 수집 실패 잡을 찾을 수 없습니다"),
+    LINK_CRAWL_FAILED_JOB_ALREADY_RESOLVED(HttpStatus.CONFLICT.value(), 6010, "이미 해소된 링크 수집 실패 잡입니다"),
     ;
 
     override fun getHttpStatusCode(): Int {

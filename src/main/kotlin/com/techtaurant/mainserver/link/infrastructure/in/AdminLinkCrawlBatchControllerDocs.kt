@@ -11,7 +11,7 @@ import com.techtaurant.mainserver.link.dto.LinkCrawlBatchResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobRetryResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlRunResponse
-import com.techtaurant.mainserver.link.dto.RegisterLinkManuallyRequest
+import com.techtaurant.mainserver.link.dto.ResolveFailedJobManuallyRequest
 import com.techtaurant.mainserver.link.enums.LinkStatus
 import com.techtaurant.mainserver.security.jwt.JwtStatus
 import com.techtaurant.mainserver.user.enums.UserStatus
@@ -173,21 +173,22 @@ interface AdminLinkCrawlBatchControllerDocs {
     ): ApiResponse<List<LinkCrawlFailedJobResponse>>
 
     @Operation(
-        summary = "링크 수동 등록",
+        summary = "실패 잡 수동 해소",
         description =
-            "크롤러가 수집하지 못한 아티클을 관리자가 직접 입력해 등록합니다. 등록에 성공하면 해당 URL의 실패 잡도 해소 처리됩니다. " +
-                "이미 같은 URL의 링크가 있으면 입력한 내용으로 갱신합니다",
+            "크롤러가 수집하지 못한 실패 잡을 관리자가 아티클 내용을 직접 입력해 해소합니다. " +
+                "링크는 실패 잡의 아티클 URL로 등록되고, 배치의 태그가 붙으며, 관리자가 아니라 배치를 소유한 회사에 연결됩니다. " +
+                "이미 같은 URL의 링크가 있으면 입력한 내용으로 갱신합니다. 해소 후 마지막 실행 이력의 미해소 실패 잡이 없으면 실행 이력 상태가 RESOLVED로 전환됩니다",
     )
     @ApiErrorCodeResponses(
         [
             ApiErrorCodeResponse(JwtStatus::class, ["AUTHENTICATION_REQUIRED", "ACCESS_DENIED"]),
-            ApiErrorCodeResponse(LinkStatus::class, ["LINK_CRAWL_BATCH_NOT_FOUND"]),
+            ApiErrorCodeResponse(LinkStatus::class, ["LINK_CRAWL_FAILED_JOB_NOT_FOUND", "LINK_CRAWL_FAILED_JOB_ALREADY_RESOLVED"]),
             ApiErrorCodeResponse(DefaultStatus::class, ["UNKNOWN_EXCEPTION"]),
         ],
     )
-    fun registerLinkManually(
-        @Parameter(description = "배치 ID") batchId: UUID,
-        request: RegisterLinkManuallyRequest,
+    fun resolveFailedJobManually(
+        @Parameter(description = "실패 잡 ID") failedJobId: UUID,
+        request: ResolveFailedJobManuallyRequest,
     ): ApiResponse<Unit>
 
     @Operation(

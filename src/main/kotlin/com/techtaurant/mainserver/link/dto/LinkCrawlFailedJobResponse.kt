@@ -9,7 +9,7 @@ import java.util.UUID
 data class LinkCrawlFailedJobResponse(
     @field:Schema(description = "실패 잡 ID")
     val id: UUID,
-    @field:Schema(description = "마지막으로 이 URL을 실패시킨 실행 이력 ID. 관리자가 직접 등록한 실패 URL에는 값이 없습니다", nullable = true)
+    @field:Schema(description = "마지막으로 이 URL을 실패시킨 실행 이력 ID. 실행 이력이 삭제되면 값이 없습니다", nullable = true)
     val runId: UUID?,
     @field:Schema(description = "배치 ID")
     val batchId: UUID,

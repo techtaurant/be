@@ -18,6 +18,7 @@ import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
 import com.techtaurant.mainserver.user.infrastructure.out.UserRepository
 import io.restassured.RestAssured.given
+import io.restassured.response.ValidatableResponse
 import org.hamcrest.Matchers.equalTo
 import org.hamcrest.Matchers.hasItem
 import org.hamcrest.Matchers.hasKey
@@ -36,6 +37,8 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @DisplayName("AdminLinkCrawlBatchController 통합 테스트")
@@ -653,42 +656,24 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    @DisplayName("수동으로 링크를 등록하면 링크가 생성되고 같은 URL의 실패 잡이 해소된다")
-    fun manualLinkRegistrationCreatesLinkAndResolvesFailedJob() {
+    @DisplayName("실패 잡을 수동 해소하면 그 URL로 배치 태그가 붙은 링크가 회사 소유로 등록되고 실패 잡이 해소된다")
+    fun manualResolutionRegistersCompanyOwnedLinkAndResolvesFailedJob() {
         val batch = saveFailingDateSelectorBatch()
-
-        given()
-            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
-            .`when`()
-            .post("/admin/link-crawl-batches/${batch.id}/runs")
-            .then()
-            .statusCode(HttpStatus.OK.value())
-            .body("data.failedJobCount", equalTo(3))
-
+        runBatchExpectingFailedJobs(batch, 3)
         val failedArticleUrl = "$crawlerBaseUrl/article/metric-review"
+        val failedJob = linkCrawlFailedJobRepository.findByBatchIdAndArticleUrl(batch.id!!, failedArticleUrl)!!
 
-        given()
-            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
-            .contentType("application/json")
-            .body(
-                """
-                {
-                  "url": "$failedArticleUrl",
-                  "title": "관리자가 직접 입력한 제목",
-                  "summary": "관리자가 직접 입력한 요약",
-                  "createdAt": "2026-04-20T00:00:00Z"
-                }
-                """.trimIndent(),
-            )
-            .`when`()
-            .post("/admin/link-crawl-batches/${batch.id}/links")
-            .then()
-            .statusCode(HttpStatus.CREATED.value())
+        resolveFailedJobManually(failedJob.id!!, title = "관리자가 직접 입력한 제목")
+            .statusCode(HttpStatus.OK.value())
 
-        val registeredLink = linkRepository.findByUrl(failedArticleUrl)
-        assertEquals("관리자가 직접 입력한 제목", registeredLink?.title)
-        assertEquals(Instant.parse("2026-04-20T00:00:00Z"), registeredLink?.createdAt)
-        assertEquals(1, userLinkRepository.findByUserIdAndLinkIdIn(companyUser.id!!, listOf(registeredLink!!.id!!)).size)
+        val registeredLink = linkRepository.findByIdWithTags(linkRepository.findByUrl(failedArticleUrl)!!.id!!)!!
+        assertEquals("관리자가 직접 입력한 제목", registeredLink.title)
+        assertEquals("관리자가 직접 입력한 요약", registeredLink.summary)
+        assertEquals(Instant.parse("2026-04-20T00:00:00Z"), registeredLink.createdAt)
+        assertEquals(listOf("engineering"), registeredLink.tags.map { it.name })
+        assertEquals(1, userLinkRepository.findByUserIdAndLinkIdIn(companyUser.id!!, listOf(registeredLink.id!!)).size)
+        assertEquals(0, userLinkRepository.findByUserIdAndLinkIdIn(adminUser.id!!, listOf(registeredLink.id!!)).size)
+        assertNotNull(linkCrawlFailedJobRepository.findById(failedJob.id!!).get().resolvedAt)
 
         given()
             .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
@@ -701,63 +686,106 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    @DisplayName("이미 있는 URL을 수동 등록하면 링크를 중복 생성하지 않고 입력한 내용으로 갱신한다")
-    fun manualLinkRegistrationUpdatesExistingLinkInsteadOfDuplicating() {
+    @DisplayName("실행의 마지막 미해소 실패 잡까지 수동 해소하면 실행 이력 상태가 RESOLVED로 전환된다")
+    fun manualResolutionOfLastUnresolvedFailedJobMarksRunResolved() {
         val batch = saveFailingDateSelectorBatch()
-        val existingUrl = "$crawlerBaseUrl/article/manual-existing"
-        linkRepository.save(
-            Link(
-                title = "기존 제목",
-                url = existingUrl,
-                summary = "기존 요약",
-                createdAt = Instant.parse("2026-01-01T00:00:00Z"),
-            ),
-        )
+        runBatchExpectingFailedJobs(batch, 3)
+        val failedJobIds = linkCrawlFailedJobRepository.findAllByBatchIdOrderByCreatedAtAsc(batch.id!!, resolved = false).map { it.id!! }
 
-        given()
-            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
-            .contentType("application/json")
-            .body(
-                """
-                {
-                  "url": "$existingUrl",
-                  "title": "갱신된 제목",
-                  "summary": "갱신된 요약",
-                  "createdAt": "2026-05-05T00:00:00Z"
-                }
-                """.trimIndent(),
-            )
-            .`when`()
-            .post("/admin/link-crawl-batches/${batch.id}/links")
-            .then()
-            .statusCode(HttpStatus.CREATED.value())
+        failedJobIds.dropLast(1).forEach { failedJobId ->
+            resolveFailedJobManually(failedJobId, title = "관리자가 직접 입력한 제목 $failedJobId")
+                .statusCode(HttpStatus.OK.value())
+        }
+        assertRunStatus(batch, "UNRESOLVED")
 
-        val links = linkRepository.findAll().filter { it.url == existingUrl }
-        assertEquals(1, links.size)
-        assertEquals("갱신된 제목", links.single().title)
-        assertEquals("갱신된 요약", links.single().summary)
+        resolveFailedJobManually(failedJobIds.last(), title = "관리자가 직접 입력한 마지막 제목")
+            .statusCode(HttpStatus.OK.value())
+        assertRunStatus(batch, "RESOLVED")
     }
 
     @Test
-    @DisplayName("존재하지 않는 배치에 링크를 수동 등록하면 배치를 찾을 수 없다는 응답을 준다")
-    fun manualLinkRegistrationRejectsUnknownBatch() {
+    @DisplayName("이미 해소된 실패 잡을 수동 해소하면 409를 주고 링크를 바꾸지 않는다")
+    fun manualResolutionRejectsAlreadyResolvedFailedJob() {
+        val batch = saveFailingDateSelectorBatch()
+        runBatchExpectingFailedJobs(batch, 3)
+        val failedArticleUrl = "$crawlerBaseUrl/article/metric-review"
+        val failedJobId = linkCrawlFailedJobRepository.findByBatchIdAndArticleUrl(batch.id!!, failedArticleUrl)!!.id!!
+        resolveFailedJobManually(failedJobId, title = "처음 입력한 제목")
+            .statusCode(HttpStatus.OK.value())
+
+        resolveFailedJobManually(failedJobId, title = "다시 입력한 제목")
+            .statusCode(HttpStatus.CONFLICT.value())
+            .body("status", equalTo(6010))
+
+        assertEquals("처음 입력한 제목", linkRepository.findByUrl(failedArticleUrl)?.title)
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 실패 잡을 수동 해소하면 실패 잡을 찾을 수 없다는 응답을 준다")
+    fun manualResolutionRejectsUnknownFailedJob() {
+        resolveFailedJobManually(UUID.randomUUID(), title = "제목")
+            .statusCode(HttpStatus.NOT_FOUND.value())
+            .body("status", equalTo(6009))
+    }
+
+    @Test
+    @DisplayName("제목 없이 실패 잡을 수동 해소하면 검증에 실패하고 실패 잡은 미해소로 남는다")
+    fun manualResolutionRequiresTitle() {
+        val batch = saveFailingDateSelectorBatch()
+        runBatchExpectingFailedJobs(batch, 3)
+        val failedJobId = linkCrawlFailedJobRepository.findAllByBatchIdOrderByCreatedAtAsc(batch.id!!, resolved = false).first().id!!
+
+        resolveFailedJobManually(failedJobId, title = " ")
+            .statusCode(HttpStatus.BAD_REQUEST.value())
+
+        assertNull(linkCrawlFailedJobRepository.findById(failedJobId).get().resolvedAt)
+    }
+
+    private fun runBatchExpectingFailedJobs(
+        batch: LinkCrawlBatch,
+        failedJobCount: Int,
+    ) {
         given()
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
+            .`when`()
+            .post("/admin/link-crawl-batches/${batch.id}/runs")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data.failedJobCount", equalTo(failedJobCount))
+    }
+
+    private fun resolveFailedJobManually(
+        failedJobId: UUID,
+        title: String,
+    ): ValidatableResponse {
+        return given()
             .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
             .contentType("application/json")
             .body(
                 """
                 {
-                  "url": "https://example.com/article/unknown-batch",
-                  "title": "제목",
-                  "summary": "요약",
+                  "title": "$title",
+                  "summary": "관리자가 직접 입력한 요약",
                   "createdAt": "2026-04-20T00:00:00Z"
                 }
                 """.trimIndent(),
             )
             .`when`()
-            .post("/admin/link-crawl-batches/${UUID.randomUUID()}/links")
+            .post("/admin/link-crawl-failed-jobs/$failedJobId/manual-resolution")
             .then()
-            .statusCode(HttpStatus.NOT_FOUND.value())
+    }
+
+    private fun assertRunStatus(
+        batch: LinkCrawlBatch,
+        expectedStatus: String,
+    ) {
+        given()
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
+            .`when`()
+            .get("/admin/link-crawl-batches/${batch.id}/runs")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data[0].status", equalTo(expectedStatus))
     }
 
     private fun saveFailingDateSelectorBatch(): LinkCrawlBatch {

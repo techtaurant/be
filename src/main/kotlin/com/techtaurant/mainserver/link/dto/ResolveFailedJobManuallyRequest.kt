@@ -7,12 +7,8 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import java.time.Instant
 
-@Schema(description = "링크 수동 등록 요청")
-data class RegisterLinkManuallyRequest(
-    @field:NotBlank(message = "url은 필수입니다")
-    @field:Size(max = Link.URL_MAX_LENGTH, message = "url은 최대 ${Link.URL_MAX_LENGTH}자까지 가능합니다")
-    @field:Schema(description = "등록할 아티클 URL", example = "https://toss.tech/article/manual-entry")
-    val url: String,
+@Schema(description = "실패 잡 수동 해소 요청. URL은 실패 잡에 기록된 아티클 URL을 사용합니다")
+data class ResolveFailedJobManuallyRequest(
     @field:NotBlank(message = "title은 필수입니다")
     @field:Size(max = Link.TITLE_MAX_LENGTH, message = "title은 최대 ${Link.TITLE_MAX_LENGTH}자까지 가능합니다")
     @field:Schema(description = "링크 제목", example = "수동으로 등록한 아티클")
@@ -22,10 +18,10 @@ data class RegisterLinkManuallyRequest(
     @field:Schema(description = "링크 발행 시각", example = "2026-09-16T00:00:00Z")
     val createdAt: Instant,
 ) {
-    fun toLinkSnapshot(): LinkSnapshot =
+    fun toLinkSnapshot(articleUrl: String): LinkSnapshot =
         LinkSnapshot(
             title = title,
-            url = url,
+            url = articleUrl,
             summary = summary,
             createdAt = createdAt,
         )

@@ -168,7 +168,7 @@ class LinkCrawlFailedJobRetryService(
         linkCrawlFailedJobRepository.save(failedJob)
     }
 
-    private fun refreshRunStatus(run: LinkCrawlRun) {
+    internal fun refreshRunStatus(run: LinkCrawlRun) {
         val runId = run.id ?: return
         run.status =
             when {
