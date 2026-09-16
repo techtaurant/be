@@ -8,7 +8,7 @@ import com.techtaurant.mainserver.jooq.tables.Tags.Companion.TAGS
 import com.techtaurant.mainserver.jooq.tables.UserLinks.Companion.USER_LINKS
 import com.techtaurant.mainserver.jooq.tables.records.LinksRecord
 import com.techtaurant.mainserver.jooq.tables.records.TagsRecord
-import com.techtaurant.mainserver.link.dto.LinkCursorV1
+import com.techtaurant.mainserver.link.dto.LinkCursor
 import com.techtaurant.mainserver.link.entity.Link
 import com.techtaurant.mainserver.link.enums.LinkPeriod
 import com.techtaurant.mainserver.link.enums.LinkSortType
@@ -17,7 +17,6 @@ import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.Field
 import org.jooq.impl.DSL
-import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Repository
 import java.time.Instant
 import java.time.LocalDate
@@ -141,32 +140,11 @@ class LinkRepositoryCustomImpl(
             ),
         )
 
-    override fun findFirstPageIds(
-        sourceCompanyUserId: UUID?,
-        tag: String?,
-        pageable: Pageable,
-    ): List<UUID> = fetchLinkIds(baseCondition(sourceCompanyUserId, tag), pageable.pageSize)
-
-    override fun findNextPageIds(
-        sourceCompanyUserId: UUID?,
-        tag: String?,
-        cursorCreatedAt: Instant,
-        cursorId: UUID,
-        pageable: Pageable,
-    ): List<UUID> =
-        fetchLinkIds(
-            baseCondition(sourceCompanyUserId, tag).and(
-                LINKS.CREATED_AT_UTC.lt(cursorCreatedAt.atOffset(ZoneOffset.UTC))
-                    .or(LINKS.CREATED_AT_UTC.eq(cursorCreatedAt.atOffset(ZoneOffset.UTC)).and(LINKS.ID.lt(cursorId))),
-            ),
-            pageable.pageSize,
-        )
-
     override fun findAllByIdInWithTags(linkIds: List<UUID>): List<Link> =
         if (linkIds.isEmpty()) emptyList() else fetchLinks(LINKS.ID.`in`(linkIds))
 
     override fun findPublicLinkIds(
-        cursor: LinkCursorV1?,
+        cursor: LinkCursor?,
         limit: Int,
         sortType: LinkSortType,
         period: LinkPeriod,
@@ -181,7 +159,7 @@ class LinkRepositoryCustomImpl(
         }
 
     private fun findPublishedLinks(
-        cursor: LinkCursorV1?,
+        cursor: LinkCursor?,
         limit: Int,
         period: LinkPeriod,
         sourceCompanyUserId: UUID?,
@@ -203,7 +181,7 @@ class LinkRepositoryCustomImpl(
     }
 
     private fun findStatRankedLinks(
-        cursor: LinkCursorV1?,
+        cursor: LinkCursor?,
         limit: Int,
         sortType: LinkSortType,
         period: LinkPeriod,
@@ -257,14 +235,14 @@ class LinkRepositoryCustomImpl(
         return conditions.fold(DSL.trueCondition(), Condition::and)
     }
 
-    private fun createdAtCursorCondition(cursor: LinkCursorV1): Condition {
+    private fun createdAtCursorCondition(cursor: LinkCursor): Condition {
         val cursorInstant = cursor.sortInstant.atOffset(ZoneOffset.UTC)
         return LINKS.CREATED_AT_UTC.lt(cursorInstant)
             .or(LINKS.CREATED_AT_UTC.eq(cursorInstant).and(LINKS.ID.lt(cursor.id)))
     }
 
     private fun statsCursorCondition(
-        cursor: LinkCursorV1,
+        cursor: LinkCursor,
         sortValue: Field<Long>,
     ): Condition {
         val cursorInstant = cursor.sortInstant.atOffset(ZoneOffset.UTC)
@@ -287,18 +265,6 @@ class LinkRepositoryCustomImpl(
     }
 
     private fun statsCutoffDate(days: Int): LocalDate = LocalDate.now(ZoneOffset.UTC).minusDays(days.toLong())
-
-    private fun fetchLinkIds(
-        condition: Condition,
-        limit: Int,
-    ): List<UUID> =
-        dsl.select(LINKS.ID)
-            .from(LINKS)
-            .where(condition)
-            .orderBy(LINKS.CREATED_AT_UTC.desc(), LINKS.ID.desc())
-            .limit(limit)
-            .fetch(LINKS.ID)
-            .filterNotNull()
 
     private fun fetchLinks(condition: Condition): List<Link> {
         val rows =

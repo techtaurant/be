@@ -24,11 +24,18 @@ data class LinkContentDetailResponse(
     val createdAt: Instant,
     @field:Schema(description = "최종 수정일")
     val updatedAt: Instant,
+    @field:Schema(description = "조회수 합계")
+    val viewCount: Long,
+    @field:Schema(description = "좋아요수 합계")
+    val likeCount: Long,
+    @field:Schema(description = "저장수 합계")
+    val saveCount: Long,
 ) {
     companion object {
         fun from(
             link: Link,
             sourceCompanyUserId: UUID?,
+            stats: LinkStatsResponse?,
         ): LinkContentDetailResponse =
             LinkContentDetailResponse(
                 id = link.id ?: throw IllegalStateException("링크 ID가 없습니다"),
@@ -42,6 +49,9 @@ data class LinkContentDetailResponse(
                         .sorted(),
                 createdAt = link.createdAt,
                 updatedAt = link.updatedAt,
+                viewCount = stats?.viewCount ?: 0,
+                likeCount = stats?.likeCount ?: 0,
+                saveCount = stats?.saveCount ?: 0,
             )
     }
 }

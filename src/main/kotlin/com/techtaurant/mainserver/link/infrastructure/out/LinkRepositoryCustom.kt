@@ -1,11 +1,9 @@
 package com.techtaurant.mainserver.link.infrastructure.out
 
-import com.techtaurant.mainserver.link.dto.LinkCursorV1
+import com.techtaurant.mainserver.link.dto.LinkCursor
 import com.techtaurant.mainserver.link.entity.Link
 import com.techtaurant.mainserver.link.enums.LinkPeriod
 import com.techtaurant.mainserver.link.enums.LinkSortType
-import org.springframework.data.domain.Pageable
-import java.time.Instant
 import java.util.Optional
 import java.util.UUID
 
@@ -50,7 +48,7 @@ interface LinkRepositoryCustom {
      * @return 정렬 순서를 유지한 ID + 정렬값 목록
      */
     fun findPublicLinkIds(
-        cursor: LinkCursorV1?,
+        cursor: LinkCursor?,
         limit: Int,
         sortType: LinkSortType,
         period: LinkPeriod,
@@ -65,20 +63,6 @@ interface LinkRepositoryCustom {
     fun findAllWithTags(): List<Link>
 
     fun findAllByConnectedUserIdWithTags(companyUserId: UUID): List<Link>
-
-    fun findFirstPageIds(
-        sourceCompanyUserId: UUID?,
-        tag: String?,
-        pageable: Pageable,
-    ): List<UUID>
-
-    fun findNextPageIds(
-        sourceCompanyUserId: UUID?,
-        tag: String?,
-        cursorCreatedAt: Instant,
-        cursorId: UUID,
-        pageable: Pageable,
-    ): List<UUID>
 
     fun findAllByIdInWithTags(linkIds: List<UUID>): List<Link>
 }
