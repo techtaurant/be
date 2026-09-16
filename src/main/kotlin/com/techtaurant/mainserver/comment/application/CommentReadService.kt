@@ -1,6 +1,5 @@
 package com.techtaurant.mainserver.comment.application
 
-import com.techtaurant.mainserver.comment.dto.CommentContentListResponse
 import com.techtaurant.mainserver.comment.dto.CommentCursor
 import com.techtaurant.mainserver.comment.dto.CommentListResponse
 import com.techtaurant.mainserver.comment.entity.Comment
@@ -58,30 +57,6 @@ class CommentReadService(
         )
     }
 
-    fun getParentCommentContents(
-        postId: UUID,
-        cursor: String?,
-        size: Int,
-        sortType: CommentSortType = CommentSortType.LATEST,
-    ): CursorPageResponse<CommentContentListResponse> {
-        val commentPage =
-            getCommentPage(cursor, size, sortType) { commentCursor, pageSize ->
-                commentRepository.findParentCommentsIncludingDeletedWithConditions(
-                    postId = postId,
-                    cursor = commentCursor,
-                    size = pageSize,
-                    sortType = sortType,
-                )
-            }
-
-        return CursorPageResponse(
-            content = commentResponseAssembler.assembleContents(commentPage.content),
-            nextCursor = commentPage.nextCursor,
-            hasNext = commentPage.hasNext,
-            size = commentPage.size,
-        )
-    }
-
     /**
      * 대댓글 목록을 커서 기반 페이지네이션으로 조회합니다.
      *
@@ -110,30 +85,6 @@ class CommentReadService(
 
         return CursorPageResponse(
             content = mapCommentsWithLikeStatus(commentPage.content, userId),
-            nextCursor = commentPage.nextCursor,
-            hasNext = commentPage.hasNext,
-            size = commentPage.size,
-        )
-    }
-
-    fun getReplyContents(
-        parentId: UUID,
-        cursor: String?,
-        size: Int,
-        sortType: CommentSortType = CommentSortType.LATEST,
-    ): CursorPageResponse<CommentContentListResponse> {
-        val commentPage =
-            getCommentPage(cursor, size, sortType) { commentCursor, pageSize ->
-                commentRepository.findRepliesIncludingDeletedWithConditions(
-                    parentId = parentId,
-                    cursor = commentCursor,
-                    size = pageSize,
-                    sortType = sortType,
-                )
-            }
-
-        return CursorPageResponse(
-            content = commentResponseAssembler.assembleContents(commentPage.content),
             nextCursor = commentPage.nextCursor,
             hasNext = commentPage.hasNext,
             size = commentPage.size,

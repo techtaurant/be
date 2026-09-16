@@ -3,7 +3,6 @@ package com.techtaurant.mainserver.post.application
 import com.techtaurant.mainserver.common.dto.CursorPageResponse
 import com.techtaurant.mainserver.post.dto.CategoryResponse
 import com.techtaurant.mainserver.post.dto.DraftListItemResponse
-import com.techtaurant.mainserver.post.dto.PostContentListItemResponse
 import com.techtaurant.mainserver.post.dto.PostCursor
 import com.techtaurant.mainserver.post.dto.PostListItemResponse
 import com.techtaurant.mainserver.post.dto.PostListTagResponse
@@ -57,6 +56,7 @@ class PostListReadService(
      * @param authorId 작성자 필터 (null이면 전체 조회)
      * @param categoryId 카테고리 필터 (null이면 전체, authorId 지정 시에만 적용)
      * @param tagIds 태그 UUID 필터 (여러 개 전달 시 OR 조건)
+     * @param keyword 제목 또는 본문 부분 일치 검색어 (null이면 미적용)
      * @return 커서 기반 페이지 응답
      */
     fun getPosts(
@@ -68,6 +68,7 @@ class PostListReadService(
         authorId: UUID? = null,
         categoryId: UUID? = null,
         tagIds: List<UUID>? = null,
+        keyword: String? = null,
     ): CursorPageResponse<PostListItemResponse> {
         val postPage =
             getPostPage(
@@ -79,6 +80,7 @@ class PostListReadService(
                 authorId = authorId,
                 categoryId = categoryId,
                 tagIds = tagIds,
+                keyword = keyword,
             )
         val content = postPage.content
 
@@ -112,42 +114,6 @@ class PostListReadService(
         )
     }
 
-    /**
-     * 게시물 정적 콘텐츠 목록을 커서 기반 페이지네이션으로 조회합니다.
-     *
-     * 동적 집계, 사용자 상태, presigned URL 생성 없이 SSG/ISR에 적합한 콘텐츠 필드만 반환합니다.
-     */
-    fun getPostContents(
-        cursor: String?,
-        size: Int,
-        period: PostPeriod = PostPeriod.ALL,
-        sortType: PostSortType = PostSortType.LATEST,
-        authorId: UUID? = null,
-        categoryId: UUID? = null,
-        tagIds: List<UUID>? = null,
-        keyword: String? = null,
-    ): CursorPageResponse<PostContentListItemResponse> {
-        val postPage =
-            getPostPage(
-                cursor = cursor,
-                size = size,
-                period = period,
-                sortType = sortType,
-                currentUserId = null,
-                authorId = authorId,
-                categoryId = categoryId,
-                tagIds = tagIds,
-                keyword = keyword,
-            )
-
-        return CursorPageResponse(
-            content = postPage.content.map(PostContentListItemResponse::from),
-            nextCursor = postPage.nextCursor,
-            hasNext = postPage.hasNext,
-            size = postPage.size,
-        )
-    }
-
     private fun getPostPage(
         cursor: String?,
         size: Int,
@@ -157,7 +123,7 @@ class PostListReadService(
         authorId: UUID?,
         categoryId: UUID?,
         tagIds: List<UUID>?,
-        keyword: String? = null,
+        keyword: String?,
     ): CursorPageResponse<Post> {
         val postCursor = cursor?.let { PostCursor.decode(it) }
         val normalizedTagIds = normalizeTagIds(tagIds)

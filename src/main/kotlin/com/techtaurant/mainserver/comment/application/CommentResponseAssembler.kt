@@ -1,6 +1,5 @@
 package com.techtaurant.mainserver.comment.application
 
-import com.techtaurant.mainserver.comment.dto.CommentContentListResponse
 import com.techtaurant.mainserver.comment.dto.CommentListResponse
 import com.techtaurant.mainserver.comment.entity.Comment
 import com.techtaurant.mainserver.common.enums.LikeStatus
@@ -17,14 +16,6 @@ class CommentResponseAssembler(
     private val bannedUserMaskingService: BannedUserMaskingService,
     private val userProfileImageResolver: UserProfileImageResolver,
 ) {
-    fun assembleContents(comments: List<Comment>): List<CommentContentListResponse> {
-        if (comments.isEmpty()) {
-            return emptyList()
-        }
-
-        return comments.map(CommentContentListResponse::from)
-    }
-
     fun assemble(
         comments: List<Comment>,
         likeStatusMap: Map<UUID, LikeStatus>,

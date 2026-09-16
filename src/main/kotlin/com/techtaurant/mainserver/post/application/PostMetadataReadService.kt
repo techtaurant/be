@@ -6,7 +6,6 @@ import com.techtaurant.mainserver.attachment.enums.AttachmentReferenceType
 import com.techtaurant.mainserver.post.dto.PostDetailAttachmentPresignedUrlResponse
 import com.techtaurant.mainserver.post.dto.PostMetadataResponse
 import com.techtaurant.mainserver.post.entity.Post
-import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -15,7 +14,6 @@ import java.util.UUID
 @Service
 @Transactional(readOnly = true)
 class PostMetadataReadService(
-    private val postRepository: PostRepository,
     private val attachmentService: AttachmentService,
     private val postThumbnailResolver: PostThumbnailResolver,
     @param:Value("\${app.default-post-thumbnail-url}")
@@ -23,12 +21,6 @@ class PostMetadataReadService(
     @param:Value("\${swagger.base-url}")
     private val baseUrl: String,
 ) {
-    fun getPostMetadata(postIds: List<UUID>): List<PostMetadataResponse> {
-        val posts = getPublishedPostsByIds(postIds)
-
-        return getPostMetadataForPosts(posts)
-    }
-
     fun getPostMetadataForPosts(posts: List<Post>): List<PostMetadataResponse> {
         val loadedPostIds = posts.mapNotNull { it.id }
         if (loadedPostIds.isEmpty()) {
@@ -57,17 +49,6 @@ class PostMetadataReadService(
                 attachmentPresignedUrls = buildAttachmentPresignedUrls(attachments, presignedUrlByAttachmentId),
             )
         }
-    }
-
-    private fun getPublishedPostsByIds(postIds: List<UUID>): List<Post> {
-        val normalizedPostIds = postIds.distinct()
-        if (normalizedPostIds.isEmpty()) {
-            return emptyList()
-        }
-
-        val postById = postRepository.findPublishedPostsByIdIn(normalizedPostIds).associateBy { it.id!! }
-
-        return normalizedPostIds.mapNotNull { postById[it] }
     }
 
     private fun generatePresignedUrlByAttachmentId(attachmentsByPostId: Map<UUID, List<Attachment>>): Map<UUID, String> {

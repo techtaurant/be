@@ -413,19 +413,211 @@ class PostReadOpenApiControllerIntegrationTest : IntegrationTest() {
         assertThat(updatedPost.viewCount).isEqualTo(0)
     }
 
+    @Test
+    @DisplayName("게시물 목록은 제목과 본문에 포함된 검색어로 필터링한다")
+    fun getPosts_withKeyword_filtersByTitleAndContent() {
+        // given
+        val titleMatch = createPublishedPost(title = "전문검색엔진 구축기", daysAgo = 3)
+        val contentMatch = createPublishedPost(title = "캐시 전략", daysAgo = 2, content = "본문에서 검색 성능을 다룬다")
+        val unrelatedPost = createPublishedPost(title = "인덱스 튜닝", daysAgo = 1, content = "무관한 본문")
+
+        // when
+        val matchedIds =
+            given()
+                .queryParam("keyword", "검색")
+                .`when`()
+                .get("/open-api/posts")
+                .then()
+                .statusCode(HttpStatus.OK.value())
+                .extract()
+                .path<List<String>>("data.content.id")
+
+        // then
+        assertThat(matchedIds).containsExactlyInAnyOrder(
+            titleMatch.id.toString(),
+            contentMatch.id.toString(),
+        )
+        assertThat(matchedIds).doesNotContain(unrelatedPost.id.toString())
+    }
+
+    @Test
+    @DisplayName("게시물 목록의 한 글자 검색어는 400을 반환한다")
+    fun getPosts_withSingleCharacterKeyword_returnsBadRequest() {
+        given()
+            .queryParam("keyword", "검")
+            .`when`()
+            .get("/open-api/posts")
+            .then()
+            .statusCode(HttpStatus.BAD_REQUEST.value())
+    }
+
+    @Test
+    @DisplayName("게시물 목록의 101자 검색어는 400을 반환한다")
+    fun getPosts_withTooLongKeyword_returnsBadRequest() {
+        given()
+            .queryParam("keyword", "가".repeat(101))
+            .`when`()
+            .get("/open-api/posts")
+            .then()
+            .statusCode(HttpStatus.BAD_REQUEST.value())
+    }
+
+    @Test
+    @DisplayName("게시물 목록 검색은 대소문자를 구분하지 않는다")
+    fun getPosts_withKeyword_ignoresCase() {
+        // given
+        val matchingPost = createPublishedPost(title = "spring boot 입문", daysAgo = 1)
+
+        // when & then
+        given()
+            .queryParam("keyword", "SPRING")
+            .`when`()
+            .get("/open-api/posts")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data.content.id", hasItem(matchingPost.id.toString()))
+    }
+
+    @Test
+    @DisplayName("게시물 목록 검색은 퍼센트 기호를 일반 문자로 취급한다")
+    fun getPosts_withPercentInKeyword_treatsItAsLiteral() {
+        // given
+        val literalMatch = createPublishedPost(title = "100% 할인 정보", daysAgo = 2)
+        val wildcardOnlyMatch = createPublishedPost(title = "1000원 할인 정보", daysAgo = 1)
+
+        // when
+        val matchedIds =
+            given()
+                .queryParam("keyword", "100%")
+                .`when`()
+                .get("/open-api/posts")
+                .then()
+                .statusCode(HttpStatus.OK.value())
+                .extract()
+                .path<List<String>>("data.content.id")
+
+        // then
+        assertThat(matchedIds).containsExactly(literalMatch.id.toString())
+        assertThat(matchedIds).doesNotContain(wildcardOnlyMatch.id.toString())
+    }
+
+    @Test
+    @DisplayName("비로그인 게시물 목록 검색은 PUBLISHED 게시물만 반환한다")
+    fun getPosts_withKeyword_returnsPublishedPostsOnlyForAnonymousUser() {
+        // given
+        val publishedPost = createPublishedPost(title = "검색 대상 공개글", daysAgo = 1)
+        val privatePost =
+            postRepository.saveAndFlush(
+                Post(
+                    title = "검색 대상 비공개글",
+                    content = "본문",
+                    author = testUser,
+                    status = PostStatusEnum.PRIVATE,
+                ),
+            )
+        val draftPost =
+            postRepository.saveAndFlush(
+                Post(
+                    title = "검색 대상 임시저장글",
+                    content = "본문",
+                    author = testUser,
+                    status = PostStatusEnum.DRAFT,
+                ),
+            )
+
+        // when
+        val matchedIds =
+            given()
+                .queryParam("keyword", "검색")
+                .`when`()
+                .get("/open-api/posts")
+                .then()
+                .statusCode(HttpStatus.OK.value())
+                .extract()
+                .path<List<String>>("data.content.id")
+
+        // then
+        assertThat(matchedIds).containsExactly(publishedPost.id.toString())
+        assertThat(matchedIds).doesNotContain(privatePost.id.toString(), draftPost.id.toString())
+    }
+
+    @Test
+    @DisplayName("게시물 목록 검색은 커서로 다음 페이지를 중복 없이 조회한다")
+    fun getPosts_withKeyword_paginatesWithoutDuplication() {
+        // given
+        val oldestPost = createPublishedPost(title = "검색 결과 1", daysAgo = 3)
+        val middlePost = createPublishedPost(title = "검색 결과 2", daysAgo = 2)
+        val newestPost = createPublishedPost(title = "검색 결과 3", daysAgo = 1)
+
+        // when
+        val firstPage =
+            given()
+                .queryParam("keyword", "검색")
+                .queryParam("size", 2)
+                .`when`()
+                .get("/open-api/posts")
+                .then()
+                .statusCode(HttpStatus.OK.value())
+                .extract()
+        val cursor = firstPage.path<String>("data.nextCursor")
+        val secondPage =
+            given()
+                .queryParam("keyword", "검색")
+                .queryParam("size", 2)
+                .queryParam("cursor", cursor)
+                .`when`()
+                .get("/open-api/posts")
+                .then()
+                .statusCode(HttpStatus.OK.value())
+                .extract()
+
+        // then
+        assertThat(firstPage.path<Boolean>("data.hasNext")).isTrue()
+        assertThat(cursor).isNotBlank()
+        assertThat(firstPage.path<List<String>>("data.content.id")).containsExactly(
+            newestPost.id.toString(),
+            middlePost.id.toString(),
+        )
+        assertThat(secondPage.path<List<String>>("data.content.id")).containsExactly(oldestPost.id.toString())
+        assertThat(secondPage.path<Boolean>("data.hasNext")).isFalse()
+    }
+
+    @Test
+    @DisplayName("게시물 목록 검색 결과가 없으면 빈 페이지를 반환한다")
+    fun getPosts_withUnmatchedKeyword_returnsEmptyPage() {
+        // given
+        createPublishedPost(title = "인덱스 튜닝", daysAgo = 1)
+
+        // when
+        val response =
+            given()
+                .queryParam("keyword", "존재하지않는키워드")
+                .`when`()
+                .get("/open-api/posts")
+                .then()
+                .statusCode(HttpStatus.OK.value())
+                .extract()
+
+        // then
+        assertThat(response.path<List<String>>("data.content")).isEmpty()
+        assertThat(response.path<Boolean>("data.hasNext")).isFalse()
+        assertThat(response.path<String>("data.nextCursor")).isNull()
+    }
+
     private fun createPublishedPost(
         title: String,
         daysAgo: Long,
         viewCount: Long = 0,
         likeCount: Long = 0,
         commentCount: Long = 0,
+        content: String = "본문",
     ): Post {
         val createdAt = Instant.now().minus(daysAgo, ChronoUnit.DAYS)
         val post =
             postRepository.saveAndFlush(
                 Post(
                     title = title,
-                    content = "본문",
+                    content = content,
                     author = testUser,
                     viewCount = viewCount,
                     likeCount = likeCount,
