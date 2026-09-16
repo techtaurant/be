@@ -620,6 +620,53 @@ class LinkBatchRunServiceTest {
         verify(exactly = 0) { linkCrawlFailedJobRepository.save(any()) }
     }
 
+    @Test
+    @DisplayName("수동 재시도 대상 조회 후 다른 경로가 해소한 실패 잡은 상세 페이지를 조회하지 않는다")
+    fun retryRunFailedJobsSkipsFetchWhenJobResolvedAfterCandidateLookup() {
+        val now = Instant.parse("2026-07-02T10:00:00Z")
+        val runId = UUID.randomUUID()
+        val batch = createBatch(createdAtSelectors = ".created-date")
+        val run =
+            LinkCrawlRun(
+                batch = batch,
+                triggerType = LinkCrawlRunTriggerType.MANUAL,
+                status = LinkCrawlRunStatus.UNRESOLVED,
+                failedJobCount = 1,
+                startedAt = now.minus(Duration.ofHours(1)),
+                finishedAt = now.minus(Duration.ofHours(1)),
+            ).apply { id = runId }
+        val articleUrl = "https://example.com/article/resolved-elsewhere"
+        // 후보 목록을 뽑은 뒤 정기 수집이나 수동 등록이 같은 URL을 먼저 해소한 상태를 나타낸다.
+        val resolvedJob =
+            LinkCrawlFailedJob(
+                batch = batch,
+                lastRun = run,
+                articleUrl = articleUrl,
+                errorStatusCode = LinkStatus.LINK_CRAWL_BATCH_CREATED_AT_REQUIRED.getCustomStatusCode(),
+                errorMessage = "생성일 없음",
+                failureCount = 1,
+                resolvedAt = now,
+                lastFailedAt = now.minus(Duration.ofHours(1)),
+            ).apply { id = UUID.randomUUID() }
+        val pageable = PageRequest.of(0, 50)
+        every { linkCrawlRunRepository.existsById(runId) } returns true
+        every { linkCrawlRunRepository.findById(runId) } returns Optional.of(run)
+        every {
+            linkCrawlFailedJobRepository.findAllByLastRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId, pageable)
+        } returns listOf(resolvedJob)
+        every { linkCrawlFailedJobRepository.findById(resolvedJob.id!!) } returns Optional.of(resolvedJob)
+        every { linkCrawlFailedJobRepository.existsByLastRunIdAndResolvedAtIsNull(runId) } returns false
+        every { linkCrawlFailedJobRepository.countByLastRunIdAndResolvedAtIsNull(runId) } returns 0L
+
+        val response = linkBatchRunService.retryRunFailedJobs(runId)
+
+        assertEquals(0, linkDocumentFetcher.fetchCount(articleUrl))
+        assertEquals(1, response.retriedCount)
+        assertEquals(0, response.resolvedCount)
+        assertEquals(0, response.stillUnresolvedCount)
+        verify(exactly = 0) { linkCrawlFailedJobRepository.save(any()) }
+    }
+
     private fun createBatch(
         createdAtSelectors: String,
         endPage: Int = 1,

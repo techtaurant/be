@@ -64,24 +64,46 @@ class LinkCrawlFailedJobRetryService(
         failedJobId: UUID,
         automaticRetryAt: Instant? = null,
     ): Boolean {
-        val retryContext =
-            transactionOperations.execute<LinkFailedJobRetryContext?> {
-                val failedJob = linkCrawlFailedJobRepository.findById(failedJobId).orElse(null) ?: return@execute null
-                if (automaticRetryAt != null && !LinkCrawlFailedJobRetryPolicy.canRetryAutomatically(failedJob, automaticRetryAt)) {
-                    return@execute null
-                }
-
-                LinkFailedJobRetryContext.from(failedJob)
-            } ?: return false
-
+        val retryContext = loadRetryContextIfRetryable(failedJobId, automaticRetryAt) ?: return false
         val snapshotResult = runCatching { resolveSnapshotForFailedJob(retryContext) }
+
+        return applyRetryResult(failedJobId, automaticRetryAt, snapshotResult)
+    }
+
+    /**
+     * 외부 페이지를 가져오기 전에 재시도할 값어치가 있는 잡인지 확인한다.
+     * 목록을 뽑은 뒤 다른 경로가 먼저 해소했을 수 있어, 여기서 걸러내지 않으면 이미 끝난 URL을 한 번 더 크롤하게 된다.
+     */
+    private fun loadRetryContextIfRetryable(
+        failedJobId: UUID,
+        automaticRetryAt: Instant?,
+    ): LinkFailedJobRetryContext? {
+        return transactionOperations.execute<LinkFailedJobRetryContext?> {
+            val failedJob = linkCrawlFailedJobRepository.findById(failedJobId).orElse(null) ?: return@execute null
+            if (!isRetryable(failedJob, automaticRetryAt)) {
+                return@execute null
+            }
+
+            LinkFailedJobRetryContext.from(failedJob)
+        }
+    }
+
+    /**
+     * 외부 fetch가 끝난 뒤 잡 상태를 다시 읽어 결과를 반영한다.
+     * fetch 동안 상태가 바뀌었을 수 있으므로 저장 직전에 재시도 조건을 한 번 더 확인한다.
+     */
+    private fun applyRetryResult(
+        failedJobId: UUID,
+        automaticRetryAt: Instant?,
+        snapshotResult: Result<LinkSnapshot>,
+    ): Boolean {
         return transactionOperations.execute<Boolean> {
             val failedJob = linkCrawlFailedJobRepository.findById(failedJobId).orElse(null) ?: return@execute false
             if (failedJob.resolvedAt != null) {
                 failedJob.lastRun?.let(::refreshRunStatus)
                 return@execute false
             }
-            if (automaticRetryAt != null && !LinkCrawlFailedJobRetryPolicy.canRetryAutomatically(failedJob, automaticRetryAt)) {
+            if (!isRetryable(failedJob, automaticRetryAt)) {
                 return@execute false
             }
 
@@ -96,6 +118,21 @@ class LinkCrawlFailedJobRetryService(
             failedJob.lastRun?.let(::refreshRunStatus)
             succeeded
         } ?: false
+    }
+
+    /**
+     * 이미 해소된 잡은 경로와 무관하게 재시도 대상이 아니다.
+     * 배치 활성 여부와 재시도 상한·backoff는 자동 재시도에만 적용된다. 관리자가 직접 누른 재시도는 그 조건을 넘어서 시도한다.
+     */
+    private fun isRetryable(
+        failedJob: LinkCrawlFailedJob,
+        automaticRetryAt: Instant?,
+    ): Boolean {
+        if (failedJob.resolvedAt != null) {
+            return false
+        }
+
+        return automaticRetryAt == null || LinkCrawlFailedJobRetryPolicy.canRetryAutomatically(failedJob, automaticRetryAt)
     }
 
     private fun retryFailedJobWithSnapshot(
