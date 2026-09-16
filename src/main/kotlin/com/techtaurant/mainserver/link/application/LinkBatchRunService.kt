@@ -69,7 +69,20 @@ class LinkBatchRunService(
             throw ApiException(LinkStatus.LINK_CRAWL_RUN_NOT_FOUND)
         }
 
-        return linkCrawlFailedJobRepository.findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId)
+        return linkCrawlFailedJobRepository.findAllByLastRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId)
+            .map(LinkCrawlFailedJobResponse::from)
+    }
+
+    @Transactional(readOnly = true)
+    fun getBatchFailedJobs(
+        batchId: UUID,
+        resolved: Boolean?,
+    ): List<LinkCrawlFailedJobResponse> {
+        if (!linkCrawlBatchRepository.existsById(batchId)) {
+            throw ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_FOUND)
+        }
+
+        return linkCrawlFailedJobRepository.findAllByBatchIdOrderByCreatedAtAsc(batchId, resolved)
             .map(LinkCrawlFailedJobResponse::from)
     }
 

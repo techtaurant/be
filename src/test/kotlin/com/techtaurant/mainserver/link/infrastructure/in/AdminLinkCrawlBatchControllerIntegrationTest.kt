@@ -19,6 +19,7 @@ import com.techtaurant.mainserver.user.enums.UserRole
 import com.techtaurant.mainserver.user.infrastructure.out.UserRepository
 import io.restassured.RestAssured.given
 import org.hamcrest.Matchers.equalTo
+import org.hamcrest.Matchers.hasItem
 import org.hamcrest.Matchers.hasKey
 import org.hamcrest.Matchers.hasSize
 import org.hamcrest.Matchers.not
@@ -325,7 +326,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
         assertEquals("$crawlerBaseUrl/article/valid-after-long-title", savedLinks.single().url)
 
         val savedRun = linkCrawlRunRepository.findAllByBatchIdOrderByStartedAtDesc(batch.id!!).single()
-        val failedJobs = linkCrawlFailedJobRepository.findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(savedRun.id!!)
+        val failedJobs = linkCrawlFailedJobRepository.findAllByLastRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(savedRun.id!!)
         assertEquals(2, failedJobs.size)
         assertTrue(failedJobs.any { it.articleUrl == "$crawlerBaseUrl/article/too-long-title" })
         assertTrue(failedJobs.any { it.articleUrl.length == 2048 })
@@ -586,6 +587,198 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
         assertEquals(1, pageRequestCount(2))
         assertEquals(3, userLinkRepository.findByUserIdAndLinkIdIn(companyUser.id!!, existingLinkIds).size)
         assertEquals(3, userLinkRepository.findByUserIdAndLinkIdIn(anotherCompany.id!!, existingLinkIds).size)
+    }
+
+    @Test
+    @DisplayName("같은 URL이 여러 실행에서 실패해도 배치 실패 잡은 한 건으로 누적되고 이후 수집에 성공하면 해소된다")
+    fun batchFailedJobsAccumulateAcrossRunsAndResolveOnSuccessfulCrawl() {
+        val batch = saveFailingDateSelectorBatch()
+
+        repeat(2) {
+            given()
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
+                .`when`()
+                .post("/admin/link-crawl-batches/${batch.id}/runs")
+                .then()
+                .statusCode(HttpStatus.OK.value())
+                .body("data.failedJobCount", equalTo(3))
+        }
+
+        assertEquals(2, linkCrawlRunRepository.findAllByBatchIdOrderByStartedAtDesc(batch.id!!).size)
+
+        given()
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
+            .`when`()
+            .get("/admin/link-crawl-batches/${batch.id}/failed-jobs?resolved=false")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data", hasSize<Any>(3))
+            .body("data[0].failureCount", equalTo(2))
+            .body("data[0].batchId", equalTo(batch.id.toString()))
+
+        batch.createdAtSelectors = "div.o6bzluc"
+        linkCrawlBatchRepository.saveAndFlush(batch)
+
+        given()
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
+            .`when`()
+            .post("/admin/link-crawl-batches/${batch.id}/runs")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data.failedJobCount", equalTo(0))
+
+        given()
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
+            .`when`()
+            .get("/admin/link-crawl-batches/${batch.id}/failed-jobs?resolved=false")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data", hasSize<Any>(0))
+
+        given()
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
+            .`when`()
+            .get("/admin/link-crawl-batches/${batch.id}/failed-jobs?resolved=true")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data", hasSize<Any>(3))
+
+        given()
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
+            .`when`()
+            .get("/admin/link-crawl-batches/${batch.id}/failed-jobs")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data", hasSize<Any>(3))
+    }
+
+    @Test
+    @DisplayName("수동으로 링크를 등록하면 링크가 생성되고 같은 URL의 실패 잡이 해소된다")
+    fun manualLinkRegistrationCreatesLinkAndResolvesFailedJob() {
+        val batch = saveFailingDateSelectorBatch()
+
+        given()
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
+            .`when`()
+            .post("/admin/link-crawl-batches/${batch.id}/runs")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data.failedJobCount", equalTo(3))
+
+        val failedArticleUrl = "$crawlerBaseUrl/article/metric-review"
+
+        given()
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
+            .contentType("application/json")
+            .body(
+                """
+                {
+                  "url": "$failedArticleUrl",
+                  "title": "관리자가 직접 입력한 제목",
+                  "summary": "관리자가 직접 입력한 요약",
+                  "createdAt": "2026-04-20T00:00:00Z"
+                }
+                """.trimIndent(),
+            )
+            .`when`()
+            .post("/admin/link-crawl-batches/${batch.id}/links")
+            .then()
+            .statusCode(HttpStatus.CREATED.value())
+
+        val registeredLink = linkRepository.findByUrl(failedArticleUrl)
+        assertEquals("관리자가 직접 입력한 제목", registeredLink?.title)
+        assertEquals(Instant.parse("2026-04-20T00:00:00Z"), registeredLink?.createdAt)
+        assertEquals(1, userLinkRepository.findByUserIdAndLinkIdIn(companyUser.id!!, listOf(registeredLink!!.id!!)).size)
+
+        given()
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
+            .`when`()
+            .get("/admin/link-crawl-batches/${batch.id}/failed-jobs?resolved=false")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data", hasSize<Any>(2))
+            .body("data.articleUrl", not(hasItem(failedArticleUrl)))
+    }
+
+    @Test
+    @DisplayName("이미 있는 URL을 수동 등록하면 링크를 중복 생성하지 않고 입력한 내용으로 갱신한다")
+    fun manualLinkRegistrationUpdatesExistingLinkInsteadOfDuplicating() {
+        val batch = saveFailingDateSelectorBatch()
+        val existingUrl = "$crawlerBaseUrl/article/manual-existing"
+        linkRepository.save(
+            Link(
+                title = "기존 제목",
+                url = existingUrl,
+                summary = "기존 요약",
+                createdAt = Instant.parse("2026-01-01T00:00:00Z"),
+            ),
+        )
+
+        given()
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
+            .contentType("application/json")
+            .body(
+                """
+                {
+                  "url": "$existingUrl",
+                  "title": "갱신된 제목",
+                  "summary": "갱신된 요약",
+                  "createdAt": "2026-05-05T00:00:00Z"
+                }
+                """.trimIndent(),
+            )
+            .`when`()
+            .post("/admin/link-crawl-batches/${batch.id}/links")
+            .then()
+            .statusCode(HttpStatus.CREATED.value())
+
+        val links = linkRepository.findAll().filter { it.url == existingUrl }
+        assertEquals(1, links.size)
+        assertEquals("갱신된 제목", links.single().title)
+        assertEquals("갱신된 요약", links.single().summary)
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 배치에 링크를 수동 등록하면 배치를 찾을 수 없다는 응답을 준다")
+    fun manualLinkRegistrationRejectsUnknownBatch() {
+        given()
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
+            .contentType("application/json")
+            .body(
+                """
+                {
+                  "url": "https://example.com/article/unknown-batch",
+                  "title": "제목",
+                  "summary": "요약",
+                  "createdAt": "2026-04-20T00:00:00Z"
+                }
+                """.trimIndent(),
+            )
+            .`when`()
+            .post("/admin/link-crawl-batches/${UUID.randomUUID()}/links")
+            .then()
+            .statusCode(HttpStatus.NOT_FOUND.value())
+    }
+
+    private fun saveFailingDateSelectorBatch(): LinkCrawlBatch {
+        return linkCrawlBatchRepository.save(
+            LinkCrawlBatch(
+                companyUser = companyUser,
+                name = "날짜 selector 오류 배치",
+                baseUrl = crawlerBaseUrl,
+                pageUriTemplate = "/category/engineering?page={page}",
+                itemSelector = ".article-card",
+                articleLinkSelector = "a.article-link",
+                titleSelector = ".title",
+                summarySelector = ".summary",
+                createdAtSelectors = ".missing-date",
+                cronExpression = "0 0 * * * *",
+                startPage = 1,
+                endPage = 2,
+                active = true,
+                tagNames = "engineering",
+            ),
+        )
     }
 
     private fun resolvePage(query: String?): Int {

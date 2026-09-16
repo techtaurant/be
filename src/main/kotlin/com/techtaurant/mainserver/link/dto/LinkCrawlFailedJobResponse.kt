@@ -9,8 +9,8 @@ import java.util.UUID
 data class LinkCrawlFailedJobResponse(
     @field:Schema(description = "실패 잡 ID")
     val id: UUID,
-    @field:Schema(description = "실행 이력 ID")
-    val runId: UUID,
+    @field:Schema(description = "마지막으로 이 URL을 실패시킨 실행 이력 ID. 관리자가 직접 등록한 실패 URL에는 값이 없습니다", nullable = true)
+    val runId: UUID?,
     @field:Schema(description = "배치 ID")
     val batchId: UUID,
     @field:Schema(description = "처리에 실패한 아티클 URL")
@@ -32,11 +32,10 @@ data class LinkCrawlFailedJobResponse(
 ) {
     companion object {
         fun from(failedJob: LinkCrawlFailedJob): LinkCrawlFailedJobResponse {
-            val run = failedJob.run
             return LinkCrawlFailedJobResponse(
                 id = failedJob.id!!,
-                runId = run.id!!,
-                batchId = run.batch.id!!,
+                runId = failedJob.lastRun?.id,
+                batchId = failedJob.batch.id!!,
                 articleUrl = failedJob.articleUrl,
                 errorStatusCode = failedJob.errorStatusCode,
                 errorMessage = failedJob.errorMessage,

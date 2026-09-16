@@ -11,12 +11,17 @@ interface LinkCrawlFailedJobRepository : Repository<LinkCrawlFailedJob, UUID>, L
 
     override fun findById(id: UUID): Optional<LinkCrawlFailedJob>
 
-    override fun findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId: UUID): List<LinkCrawlFailedJob>
+    override fun findAllByLastRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId: UUID): List<LinkCrawlFailedJob>
 
-    override fun findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(
+    override fun findAllByLastRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(
         runId: UUID,
         pageable: Pageable,
     ): List<LinkCrawlFailedJob>
 
-    override fun countByRunIdAndResolvedAtIsNull(runId: UUID): Long
+    override fun countByLastRunIdAndResolvedAtIsNull(runId: UUID): Long
+
+    override fun findAllByBatchIdOrderByCreatedAtAsc(
+        batchId: UUID,
+        resolved: Boolean?,
+    ): List<LinkCrawlFailedJob>
 }

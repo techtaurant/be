@@ -55,6 +55,7 @@ class LinkBatchRunServiceTest {
             linkRepository = linkRepository,
             userLinkRepository = userLinkRepository,
             tagWriteService = tagWriteService,
+            linkCrawlFailedJobRepository = linkCrawlFailedJobRepository,
         )
     private val linkCrawlRunExecutor =
         LinkCrawlRunExecutor(
@@ -390,7 +391,7 @@ class LinkBatchRunServiceTest {
         linkDocumentFetcher.setHtml("https://example.com/article/missing-date", articleDetailWithoutCreatedAt())
         val savedRun = captureSavedRun()
         every { linkCrawlBatchRepository.findById(batchId) } returns Optional.of(batch)
-        every { linkCrawlFailedJobRepository.findByRunIdAndArticleUrl(any(), any()) } returns null
+        every { linkCrawlFailedJobRepository.findByBatchIdAndArticleUrl(any(), any()) } returns null
         every { linkCrawlFailedJobRepository.save(any()) } answers { invocation.args[0] as LinkCrawlFailedJob }
         every { tagWriteService.resolveTags(any()) } returns emptySet()
         every { linkRepository.findByUrl("https://example.com/article/valid") } returns null
@@ -413,7 +414,7 @@ class LinkBatchRunServiceTest {
         verify(exactly = 1) {
             linkCrawlFailedJobRepository.save(
                 match {
-                    it.run.batch.id == batchId &&
+                    it.batch.id == batchId &&
                         it.articleUrl == "https://example.com/article/missing-date" &&
                         it.resolvedAt == null &&
                         it.errorStatusCode == LinkStatus.LINK_CRAWL_BATCH_CREATED_AT_REQUIRED.getCustomStatusCode()
@@ -434,7 +435,7 @@ class LinkBatchRunServiceTest {
         linkDocumentFetcher.setHtml(secondPageUrl, crawlableHtml())
         captureSavedRun()
         every { linkCrawlBatchRepository.findById(batchId) } returns Optional.of(batch)
-        every { linkCrawlFailedJobRepository.findByRunIdAndArticleUrl(any(), any()) } returns null
+        every { linkCrawlFailedJobRepository.findByBatchIdAndArticleUrl(any(), any()) } returns null
         every { linkCrawlFailedJobRepository.save(any()) } answers { invocation.args[0] as LinkCrawlFailedJob }
         every { linkRepository.findByUrl("https://example.com/article/metric-review") } returns null
         every { linkRepository.save(any<Link>()) } answers {
@@ -462,7 +463,7 @@ class LinkBatchRunServiceTest {
         linkDocumentFetcher.setHtml("https://example.com/article/missing-date", articleDetailWithoutCreatedAt())
         captureSavedRun()
         every { linkCrawlBatchRepository.findById(batchId) } returns Optional.of(batch)
-        every { linkCrawlFailedJobRepository.findByRunIdAndArticleUrl(any(), any()) } returns null
+        every { linkCrawlFailedJobRepository.findByBatchIdAndArticleUrl(any(), any()) } returns null
         every { linkCrawlFailedJobRepository.save(any()) } answers { invocation.args[0] as LinkCrawlFailedJob }
         every { linkRepository.findByUrl("https://example.com/article/metric-review") } returns null
         every { linkRepository.save(any<Link>()) } answers {
@@ -570,10 +571,10 @@ class LinkBatchRunServiceTest {
         every { linkCrawlRunRepository.existsById(runId) } returns true
         every { linkCrawlRunRepository.findById(runId) } returns Optional.of(run)
         every {
-            linkCrawlFailedJobRepository.findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId, pageable)
+            linkCrawlFailedJobRepository.findAllByLastRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId, pageable)
         } returns emptyList()
-        every { linkCrawlFailedJobRepository.existsByRunIdAndResolvedAtIsNull(runId) } returns false
-        every { linkCrawlFailedJobRepository.countByRunIdAndResolvedAtIsNull(runId) } returns 0L
+        every { linkCrawlFailedJobRepository.existsByLastRunIdAndResolvedAtIsNull(runId) } returns false
+        every { linkCrawlFailedJobRepository.countByLastRunIdAndResolvedAtIsNull(runId) } returns 0L
 
         val response = linkBatchRunService.retryRunFailedJobs(runId)
 
@@ -582,7 +583,7 @@ class LinkBatchRunServiceTest {
         assertEquals(0, response.stillUnresolvedCount)
         assertEquals(LinkCrawlRunStatus.RESOLVED, response.runStatus)
         verify(exactly = 1) {
-            linkCrawlFailedJobRepository.findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId, pageable)
+            linkCrawlFailedJobRepository.findAllByLastRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId, pageable)
         }
     }
 
@@ -602,7 +603,8 @@ class LinkBatchRunServiceTest {
             ).apply { id = UUID.randomUUID() }
         val failedJob =
             LinkCrawlFailedJob(
-                run = run,
+                batch = batch,
+                lastRun = run,
                 articleUrl = "https://example.com/article/retry",
                 errorStatusCode = LinkStatus.LINK_CRAWL_BATCH_CREATED_AT_REQUIRED.getCustomStatusCode(),
                 errorMessage = "생성일 없음",

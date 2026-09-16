@@ -11,6 +11,7 @@ import com.techtaurant.mainserver.link.dto.LinkCrawlBatchResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobRetryResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlRunResponse
+import com.techtaurant.mainserver.link.dto.RegisterLinkManuallyRequest
 import com.techtaurant.mainserver.link.enums.LinkStatus
 import com.techtaurant.mainserver.security.jwt.JwtStatus
 import com.techtaurant.mainserver.user.enums.UserStatus
@@ -154,8 +155,44 @@ interface AdminLinkCrawlBatchControllerDocs {
     ): ApiResponse<List<LinkCrawlRunResponse>>
 
     @Operation(
+        summary = "배치의 실패 잡 조회",
+        description =
+            "관리자가 배치 단위로 실패 잡을 조회합니다. 실패 잡은 배치와 URL 단위로 하나씩 존재하므로 같은 URL이 여러 번 실패해도 한 건으로 묶입니다. " +
+                "resolved를 생략하면 전체, false면 미해소, true면 해소된 실패 잡만 반환합니다",
+    )
+    @ApiErrorCodeResponses(
+        [
+            ApiErrorCodeResponse(JwtStatus::class, ["AUTHENTICATION_REQUIRED", "ACCESS_DENIED"]),
+            ApiErrorCodeResponse(LinkStatus::class, ["LINK_CRAWL_BATCH_NOT_FOUND"]),
+            ApiErrorCodeResponse(DefaultStatus::class, ["UNKNOWN_EXCEPTION"]),
+        ],
+    )
+    fun getBatchFailedJobs(
+        @Parameter(description = "배치 ID") batchId: UUID,
+        @Parameter(description = "해소 여부 필터. 생략하면 전체를 반환합니다") resolved: Boolean?,
+    ): ApiResponse<List<LinkCrawlFailedJobResponse>>
+
+    @Operation(
+        summary = "링크 수동 등록",
+        description =
+            "크롤러가 수집하지 못한 아티클을 관리자가 직접 입력해 등록합니다. 등록에 성공하면 해당 URL의 실패 잡도 해소 처리됩니다. " +
+                "이미 같은 URL의 링크가 있으면 입력한 내용으로 갱신합니다",
+    )
+    @ApiErrorCodeResponses(
+        [
+            ApiErrorCodeResponse(JwtStatus::class, ["AUTHENTICATION_REQUIRED", "ACCESS_DENIED"]),
+            ApiErrorCodeResponse(LinkStatus::class, ["LINK_CRAWL_BATCH_NOT_FOUND"]),
+            ApiErrorCodeResponse(DefaultStatus::class, ["UNKNOWN_EXCEPTION"]),
+        ],
+    )
+    fun registerLinkManually(
+        @Parameter(description = "배치 ID") batchId: UUID,
+        request: RegisterLinkManuallyRequest,
+    ): ApiResponse<Unit>
+
+    @Operation(
         summary = "실행 이력의 미해소 실패 잡 조회",
-        description = "관리자가 특정 실행 이력에서 아직 해소되지 않은 실패 잡을 조회합니다",
+        description = "관리자가 특정 실행 이력에서 아직 해소되지 않은 실패 잡을 조회합니다. 실패 잡은 마지막으로 실패한 실행을 기준으로 묶입니다",
     )
     @ApiErrorCodeResponses(
         [

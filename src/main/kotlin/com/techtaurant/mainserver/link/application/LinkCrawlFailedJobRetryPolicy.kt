@@ -19,7 +19,7 @@ object LinkCrawlFailedJobRetryPolicy {
         now: Instant,
     ): Boolean {
         return failedJob.resolvedAt == null &&
-            failedJob.run.batch.active &&
+            failedJob.batch.active &&
             failedJob.failureCount < MAX_FAILURE_COUNT &&
             !failedJob.lastFailedAt.plus(BACKOFF).isAfter(now)
     }

@@ -4,6 +4,7 @@ import com.techtaurant.mainserver.common.dto.ApiResponse
 import com.techtaurant.mainserver.common.swagger.ApiErrorResponses
 import com.techtaurant.mainserver.link.application.LinkBatchRunService
 import com.techtaurant.mainserver.link.application.LinkCrawlBatchAdminService
+import com.techtaurant.mainserver.link.application.LinkManualRegistrationService
 import com.techtaurant.mainserver.link.dto.CreateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.link.dto.LinkBatchRunResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlBatchListItemResponse
@@ -11,6 +12,7 @@ import com.techtaurant.mainserver.link.dto.LinkCrawlBatchResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobRetryResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlRunResponse
+import com.techtaurant.mainserver.link.dto.RegisterLinkManuallyRequest
 import com.techtaurant.mainserver.security.SecurityConstants
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
@@ -26,6 +29,7 @@ import java.util.UUID
 class AdminLinkCrawlBatchController(
     private val linkCrawlBatchAdminService: LinkCrawlBatchAdminService,
     private val linkBatchRunService: LinkBatchRunService,
+    private val linkManualRegistrationService: LinkManualRegistrationService,
 ) : AdminLinkCrawlBatchControllerDocs {
     @ApiErrorResponses(includeAuthenticationErrors = true, includeValidationError = true)
     @PostMapping("${SecurityConstants.ADMIN_API_PREFIX}/companies/{companyUserId}/link-crawl-batches")
@@ -59,6 +63,26 @@ class AdminLinkCrawlBatchController(
         @PathVariable batchId: UUID,
     ): ApiResponse<List<LinkCrawlRunResponse>> {
         return ApiResponse.ok(linkBatchRunService.getRuns(batchId))
+    }
+
+    @ApiErrorResponses(includeAuthenticationErrors = true)
+    @GetMapping("${SecurityConstants.ADMIN_API_PREFIX}/link-crawl-batches/{batchId}/failed-jobs")
+    override fun getBatchFailedJobs(
+        @PathVariable batchId: UUID,
+        @RequestParam(required = false) resolved: Boolean?,
+    ): ApiResponse<List<LinkCrawlFailedJobResponse>> {
+        return ApiResponse.ok(linkBatchRunService.getBatchFailedJobs(batchId, resolved))
+    }
+
+    @ApiErrorResponses(includeAuthenticationErrors = true, includeValidationError = true)
+    @PostMapping("${SecurityConstants.ADMIN_API_PREFIX}/link-crawl-batches/{batchId}/links")
+    @ResponseStatus(HttpStatus.CREATED)
+    override fun registerLinkManually(
+        @PathVariable batchId: UUID,
+        @Valid @RequestBody request: RegisterLinkManuallyRequest,
+    ): ApiResponse<Unit> {
+        linkManualRegistrationService.registerLink(batchId, request)
+        return ApiResponse.created(Unit)
     }
 
     @ApiErrorResponses(includeAuthenticationErrors = true)

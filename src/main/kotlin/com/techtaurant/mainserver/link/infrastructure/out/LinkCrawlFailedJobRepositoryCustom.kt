@@ -10,14 +10,14 @@ interface LinkCrawlFailedJobRepositoryCustom {
 
     fun findById(id: UUID): java.util.Optional<LinkCrawlFailedJob>
 
-    fun findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId: UUID): List<LinkCrawlFailedJob>
+    fun findAllByLastRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId: UUID): List<LinkCrawlFailedJob>
 
-    fun findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(
+    fun findAllByLastRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(
         runId: UUID,
         pageable: Pageable,
     ): List<LinkCrawlFailedJob>
 
-    fun countByRunIdAndResolvedAtIsNull(runId: UUID): Long
+    fun countByLastRunIdAndResolvedAtIsNull(runId: UUID): Long
 
     fun findRetryableAutomaticJobs(
         maxFailureCount: Int,
@@ -25,10 +25,16 @@ interface LinkCrawlFailedJobRepositoryCustom {
         pageable: Pageable,
     ): List<LinkCrawlFailedJob>
 
-    fun existsByRunIdAndResolvedAtIsNull(runId: UUID): Boolean
+    fun existsByLastRunIdAndResolvedAtIsNull(runId: UUID): Boolean
 
-    fun findByRunIdAndArticleUrl(
-        runId: UUID,
+    /** resolved가 null이면 해소 여부를 가리지 않고 모두 반환한다. */
+    fun findAllByBatchIdOrderByCreatedAtAsc(
+        batchId: UUID,
+        resolved: Boolean?,
+    ): List<LinkCrawlFailedJob>
+
+    fun findByBatchIdAndArticleUrl(
+        batchId: UUID,
         articleUrl: String,
     ): LinkCrawlFailedJob?
 

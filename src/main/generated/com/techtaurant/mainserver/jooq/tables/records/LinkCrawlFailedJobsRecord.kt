@@ -23,7 +23,7 @@ open class LinkCrawlFailedJobsRecord() : UpdatableRecordImpl<LinkCrawlFailedJobs
         set(value): Unit = set(0, value)
         get(): UUID? = get(0) as UUID?
 
-    open var runId: UUID?
+    open var lastRunId: UUID?
         set(value): Unit = set(1, value)
         get(): UUID? = get(1) as UUID?
 
@@ -59,6 +59,10 @@ open class LinkCrawlFailedJobsRecord() : UpdatableRecordImpl<LinkCrawlFailedJobs
         set(value): Unit = set(9, value)
         get(): OffsetDateTime? = get(9) as OffsetDateTime?
 
+    open var batchId: UUID?
+        set(value): Unit = set(10, value)
+        get(): UUID? = get(10) as UUID?
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -68,9 +72,9 @@ open class LinkCrawlFailedJobsRecord() : UpdatableRecordImpl<LinkCrawlFailedJobs
     /**
      * Create a detached, initialised LinkCrawlFailedJobsRecord
      */
-    constructor(id: UUID? = null, runId: UUID? = null, articleUrl: String? = null, errorStatusCode: Int? = null, errorMessage: String? = null, failureCount: Int? = null, resolvedAtUtc: OffsetDateTime? = null, lastFailedAtUtc: OffsetDateTime? = null, createdAtUtc: OffsetDateTime? = null, updatedAtUtc: OffsetDateTime? = null): this() {
+    constructor(id: UUID? = null, lastRunId: UUID? = null, articleUrl: String? = null, errorStatusCode: Int? = null, errorMessage: String? = null, failureCount: Int? = null, resolvedAtUtc: OffsetDateTime? = null, lastFailedAtUtc: OffsetDateTime? = null, createdAtUtc: OffsetDateTime? = null, updatedAtUtc: OffsetDateTime? = null, batchId: UUID? = null): this() {
         this.id = id
-        this.runId = runId
+        this.lastRunId = lastRunId
         this.articleUrl = articleUrl
         this.errorStatusCode = errorStatusCode
         this.errorMessage = errorMessage
@@ -79,6 +83,7 @@ open class LinkCrawlFailedJobsRecord() : UpdatableRecordImpl<LinkCrawlFailedJobs
         this.lastFailedAtUtc = lastFailedAtUtc
         this.createdAtUtc = createdAtUtc
         this.updatedAtUtc = updatedAtUtc
+        this.batchId = batchId
         resetChangedOnNotNull()
     }
 }

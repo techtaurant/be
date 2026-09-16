@@ -7,6 +7,7 @@ package com.techtaurant.mainserver.jooq.tables
 import com.techtaurant.mainserver.jooq.Public
 import com.techtaurant.mainserver.jooq.indexes.IDX_ATTACHMENTS_REFERENCE
 import com.techtaurant.mainserver.jooq.indexes.IDX_ATTACHMENTS_STATUS
+import com.techtaurant.mainserver.jooq.indexes.IDX_ATTACHMENTS_UNCLAIMED_STATUS_CREATED_AT
 import com.techtaurant.mainserver.jooq.keys.ATTACHMENTS_PKEY
 import com.techtaurant.mainserver.jooq.tables.records.AttachmentsRecord
 
@@ -155,7 +156,7 @@ open class Attachments(
      */
     constructor(): this(DSL.name("attachments"), null)
     override fun getSchema(): Schema? = if (aliased()) null else Public.PUBLIC
-    override fun getIndexes(): List<Index> = listOf(IDX_ATTACHMENTS_REFERENCE, IDX_ATTACHMENTS_STATUS)
+    override fun getIndexes(): List<Index> = listOf(IDX_ATTACHMENTS_REFERENCE, IDX_ATTACHMENTS_STATUS, IDX_ATTACHMENTS_UNCLAIMED_STATUS_CREATED_AT)
     override fun getPrimaryKey(): UniqueKey<AttachmentsRecord> = ATTACHMENTS_PKEY
     override fun `as`(alias: String): Attachments = Attachments(DSL.name(alias), this)
     override fun `as`(alias: Name): Attachments = Attachments(alias, this)

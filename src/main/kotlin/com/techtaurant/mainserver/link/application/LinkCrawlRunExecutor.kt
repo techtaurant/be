@@ -267,25 +267,29 @@ class LinkCrawlRunExecutor(
         run: LinkCrawlRun,
         failedJobRecord: LinkFailedJobRecord,
     ) {
-        val runId = run.id ?: throw ApiException(DefaultStatus.SERVER_ERROR, "실행 ID가 없습니다")
+        val batchId = run.batch.id ?: throw ApiException(DefaultStatus.SERVER_ERROR, "배치 ID가 없습니다")
         val now = Instant.now()
         val failedJobDraft = failedJobRecord.draft.toPersistableFailedJobDraft()
         val errorStatusCode = failedJobRecord.exception.toLinkCrawlErrorStatusCode()
         val errorMessage = failedJobRecord.exception.toLinkCrawlErrorMessage()
         val failedJob =
-            linkCrawlFailedJobRepository.findByRunIdAndArticleUrl(runId, failedJobDraft.articleUrl)
+            linkCrawlFailedJobRepository.findByBatchIdAndArticleUrl(batchId, failedJobDraft.articleUrl)
                 ?.apply {
+                    // 해소됐던 URL이 다시 깨진 것은 이전 실패와 별개 사건이라 재시도 상한을 처음부터 다시 준다.
+                    this.failureCount = if (this.resolvedAt == null) this.failureCount + 1 else 1
+                    this.resolvedAt = null
                     this.errorStatusCode = errorStatusCode
                     this.errorMessage = errorMessage
-                    this.failureCount += 1
                     this.lastFailedAt = now
+                    this.lastRun = run
                 }
                 ?: LinkCrawlFailedJob(
-                    run = run,
+                    batch = run.batch,
                     articleUrl = failedJobDraft.articleUrl,
                     errorStatusCode = errorStatusCode,
                     errorMessage = errorMessage,
                     lastFailedAt = now,
+                    lastRun = run,
                 )
 
         linkCrawlFailedJobRepository.save(failedJob)
