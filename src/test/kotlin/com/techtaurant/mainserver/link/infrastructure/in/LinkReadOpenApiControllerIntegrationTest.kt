@@ -378,7 +378,7 @@ class LinkReadOpenApiControllerIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.NOT_FOUND.value())
             .body("status", equalTo(1010))
-            .body("message", equalTo("회사를 찾을 수 없습니다"))
+            .body("message", equalTo("Company not found"))
     }
 
     @Test
@@ -422,7 +422,7 @@ class LinkReadOpenApiControllerIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.BAD_REQUEST.value())
             .body("status", equalTo(6005))
-            .body("message", equalTo("유효한 링크 커서가 아닙니다"))
+            .body("message", equalTo("Invalid link cursor"))
     }
 
     @Test
@@ -490,7 +490,7 @@ class LinkReadOpenApiControllerIntegrationTest : IntegrationTest() {
             .statusCode(HttpStatus.NOT_FOUND.value())
             .body("status", equalTo(6001))
             .body("data", nullValue())
-            .body("message", equalTo("링크를 찾을 수 없습니다"))
+            .body("message", equalTo("Link not found"))
     }
 
     @Test
@@ -597,7 +597,7 @@ class LinkReadOpenApiControllerIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.BAD_REQUEST.value())
             .body("status", equalTo(6005))
-            .body("message", equalTo("유효한 링크 커서가 아닙니다"))
+            .body("message", equalTo("Invalid link cursor"))
     }
 
     private fun saveLink(

@@ -178,7 +178,7 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.FORBIDDEN.value())
             .body("status", org.hamcrest.Matchers.equalTo(7004))
-            .body("message", org.hamcrest.Matchers.equalTo("댓글 작성자만 수행할 수 있습니다"))
+            .body("message", org.hamcrest.Matchers.equalTo("Only the comment author can perform this action"))
 
         // then
         val persistedComment = commentRepository.findById(comment.id!!).orElseThrow()
@@ -207,7 +207,7 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.GONE.value())
             .body("status", org.hamcrest.Matchers.equalTo(7005))
-            .body("message", org.hamcrest.Matchers.equalTo("이미 삭제된 댓글입니다"))
+            .body("message", org.hamcrest.Matchers.equalTo("The comment has already been deleted"))
     }
 
     @Test
@@ -224,7 +224,7 @@ class CommentDeleteIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.NOT_FOUND.value())
             .body("status", org.hamcrest.Matchers.equalTo(7001))
-            .body("message", org.hamcrest.Matchers.equalTo("댓글을 찾을 수 없습니다"))
+            .body("message", org.hamcrest.Matchers.equalTo("Comment not found"))
     }
 
     private fun createUser(identifierPrefix: String): User {
