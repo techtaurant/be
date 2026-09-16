@@ -158,7 +158,7 @@ class ApiErrorCodeOperationCustomizer : OperationCustomizer {
             .addProperty("message", StringSchema().description("에러 메시지").example("Wrong Request"))
 
     private fun buildErrorExampleValue(status: StatusIfs): Map<String, Any?> {
-        val errorResponse = ApiResponse.error<Any>(status)
+        val errorResponse = ApiResponse.error<Any>(status, status.getDescription())
         return linkedMapOf(
             "status" to errorResponse.status,
             "data" to errorResponse.data,
@@ -168,7 +168,7 @@ class ApiErrorCodeOperationCustomizer : OperationCustomizer {
 
     private fun addValidationErrorExample(mediaType: MediaType) {
         val validationData = ValidationErrorResponse(mapOf("field" to "에러 메시지"))
-        val validationResponse = ApiResponse.error(DefaultStatus.BAD_REQUEST, validationData)
+        val validationResponse = ApiResponse.error(DefaultStatus.BAD_REQUEST, DefaultStatus.BAD_REQUEST.getDescription(), validationData)
         val example =
             SwaggerExample().apply {
                 value =
