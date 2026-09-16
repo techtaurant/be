@@ -656,15 +656,15 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    @DisplayName("실패 잡을 수동 해소하면 그 URL로 배치 태그가 붙은 링크가 회사 소유로 등록되고 실패 잡이 해소된다")
-    fun manualResolutionRegistersCompanyOwnedLinkAndResolvesFailedJob() {
+    @DisplayName("실패 잡에 링크를 직접 등록하면 그 URL로 배치 태그가 붙은 링크가 회사 소유로 등록되고 실패 잡이 해소된다")
+    fun registeringFailedJobLinkCreatesCompanyOwnedLinkAndResolvesFailedJob() {
         val batch = saveFailingDateSelectorBatch()
         runBatchExpectingFailedJobs(batch, 3)
         val failedArticleUrl = "$crawlerBaseUrl/article/metric-review"
         val failedJob = linkCrawlFailedJobRepository.findByBatchIdAndArticleUrl(batch.id!!, failedArticleUrl)!!
 
-        resolveFailedJobManually(failedJob.id!!, title = "관리자가 직접 입력한 제목")
-            .statusCode(HttpStatus.OK.value())
+        registerFailedJobLink(failedJob.id!!, title = "관리자가 직접 입력한 제목")
+            .statusCode(HttpStatus.CREATED.value())
 
         val registeredLink = linkRepository.findByIdWithTags(linkRepository.findByUrl(failedArticleUrl)!!.id!!)!!
         assertEquals("관리자가 직접 입력한 제목", registeredLink.title)
@@ -686,34 +686,34 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    @DisplayName("실행의 마지막 미해소 실패 잡까지 수동 해소하면 실행 이력 상태가 RESOLVED로 전환된다")
-    fun manualResolutionOfLastUnresolvedFailedJobMarksRunResolved() {
+    @DisplayName("실행의 마지막 미해소 실패 잡까지 링크를 직접 등록하면 실행 이력 상태가 RESOLVED로 전환된다")
+    fun registeringLinkForLastUnresolvedFailedJobMarksRunResolved() {
         val batch = saveFailingDateSelectorBatch()
         runBatchExpectingFailedJobs(batch, 3)
         val failedJobIds = linkCrawlFailedJobRepository.findAllByBatchIdOrderByCreatedAtAsc(batch.id!!, resolved = false).map { it.id!! }
 
         failedJobIds.dropLast(1).forEach { failedJobId ->
-            resolveFailedJobManually(failedJobId, title = "관리자가 직접 입력한 제목 $failedJobId")
-                .statusCode(HttpStatus.OK.value())
+            registerFailedJobLink(failedJobId, title = "관리자가 직접 입력한 제목 $failedJobId")
+                .statusCode(HttpStatus.CREATED.value())
         }
         assertRunStatus(batch, "UNRESOLVED")
 
-        resolveFailedJobManually(failedJobIds.last(), title = "관리자가 직접 입력한 마지막 제목")
-            .statusCode(HttpStatus.OK.value())
+        registerFailedJobLink(failedJobIds.last(), title = "관리자가 직접 입력한 마지막 제목")
+            .statusCode(HttpStatus.CREATED.value())
         assertRunStatus(batch, "RESOLVED")
     }
 
     @Test
-    @DisplayName("이미 해소된 실패 잡을 수동 해소하면 409를 주고 링크를 바꾸지 않는다")
-    fun manualResolutionRejectsAlreadyResolvedFailedJob() {
+    @DisplayName("이미 해소된 실패 잡에 링크를 직접 등록하면 409를 주고 링크를 바꾸지 않는다")
+    fun registeringFailedJobLinkRejectsAlreadyResolvedFailedJob() {
         val batch = saveFailingDateSelectorBatch()
         runBatchExpectingFailedJobs(batch, 3)
         val failedArticleUrl = "$crawlerBaseUrl/article/metric-review"
         val failedJobId = linkCrawlFailedJobRepository.findByBatchIdAndArticleUrl(batch.id!!, failedArticleUrl)!!.id!!
-        resolveFailedJobManually(failedJobId, title = "처음 입력한 제목")
-            .statusCode(HttpStatus.OK.value())
+        registerFailedJobLink(failedJobId, title = "처음 입력한 제목")
+            .statusCode(HttpStatus.CREATED.value())
 
-        resolveFailedJobManually(failedJobId, title = "다시 입력한 제목")
+        registerFailedJobLink(failedJobId, title = "다시 입력한 제목")
             .statusCode(HttpStatus.CONFLICT.value())
             .body("status", equalTo(6010))
 
@@ -721,21 +721,21 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    @DisplayName("존재하지 않는 실패 잡을 수동 해소하면 실패 잡을 찾을 수 없다는 응답을 준다")
-    fun manualResolutionRejectsUnknownFailedJob() {
-        resolveFailedJobManually(UUID.randomUUID(), title = "제목")
+    @DisplayName("존재하지 않는 실패 잡에 링크를 직접 등록하면 실패 잡을 찾을 수 없다는 응답을 준다")
+    fun registeringFailedJobLinkRejectsUnknownFailedJob() {
+        registerFailedJobLink(UUID.randomUUID(), title = "제목")
             .statusCode(HttpStatus.NOT_FOUND.value())
             .body("status", equalTo(6009))
     }
 
     @Test
-    @DisplayName("제목 없이 실패 잡을 수동 해소하면 검증에 실패하고 실패 잡은 미해소로 남는다")
-    fun manualResolutionRequiresTitle() {
+    @DisplayName("제목 없이 실패 잡에 링크를 직접 등록하면 검증에 실패하고 실패 잡은 미해소로 남는다")
+    fun registeringFailedJobLinkRequiresTitle() {
         val batch = saveFailingDateSelectorBatch()
         runBatchExpectingFailedJobs(batch, 3)
         val failedJobId = linkCrawlFailedJobRepository.findAllByBatchIdOrderByCreatedAtAsc(batch.id!!, resolved = false).first().id!!
 
-        resolveFailedJobManually(failedJobId, title = " ")
+        registerFailedJobLink(failedJobId, title = " ")
             .statusCode(HttpStatus.BAD_REQUEST.value())
 
         assertNull(linkCrawlFailedJobRepository.findById(failedJobId).get().resolvedAt)
@@ -754,7 +754,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             .body("data.failedJobCount", equalTo(failedJobCount))
     }
 
-    private fun resolveFailedJobManually(
+    private fun registerFailedJobLink(
         failedJobId: UUID,
         title: String,
     ): ValidatableResponse {
@@ -771,7 +771,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
                 """.trimIndent(),
             )
             .`when`()
-            .post("/admin/link-crawl-failed-jobs/$failedJobId/manual-resolution")
+            .post("/admin/link-crawl-failed-jobs/$failedJobId/links")
             .then()
     }
 

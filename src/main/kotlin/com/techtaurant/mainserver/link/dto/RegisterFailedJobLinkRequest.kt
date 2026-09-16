@@ -7,8 +7,8 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import java.time.Instant
 
-@Schema(description = "실패 잡 수동 해소 요청. URL은 실패 잡에 기록된 아티클 URL을 사용합니다")
-data class ResolveFailedJobManuallyRequest(
+@Schema(description = "실패 잡 링크 직접 등록 요청. URL은 실패 잡에 기록된 아티클 URL을 사용합니다")
+data class RegisterFailedJobLinkRequest(
     @field:NotBlank(message = "title은 필수입니다")
     @field:Size(max = Link.TITLE_MAX_LENGTH, message = "title은 최대 ${Link.TITLE_MAX_LENGTH}자까지 가능합니다")
     @field:Schema(description = "링크 제목", example = "수동으로 등록한 아티클")

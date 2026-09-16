@@ -4,7 +4,7 @@ import com.techtaurant.mainserver.common.dto.ApiResponse
 import com.techtaurant.mainserver.common.swagger.ApiErrorResponses
 import com.techtaurant.mainserver.link.application.LinkBatchRunService
 import com.techtaurant.mainserver.link.application.LinkCrawlBatchAdminService
-import com.techtaurant.mainserver.link.application.LinkCrawlFailedJobManualResolutionService
+import com.techtaurant.mainserver.link.application.LinkCrawlFailedJobLinkRegistrationService
 import com.techtaurant.mainserver.link.dto.CreateLinkCrawlBatchRequest
 import com.techtaurant.mainserver.link.dto.LinkBatchRunResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlBatchListItemResponse
@@ -12,7 +12,7 @@ import com.techtaurant.mainserver.link.dto.LinkCrawlBatchResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobRetryResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlRunResponse
-import com.techtaurant.mainserver.link.dto.ResolveFailedJobManuallyRequest
+import com.techtaurant.mainserver.link.dto.RegisterFailedJobLinkRequest
 import com.techtaurant.mainserver.security.SecurityConstants
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
@@ -29,7 +29,7 @@ import java.util.UUID
 class AdminLinkCrawlBatchController(
     private val linkCrawlBatchAdminService: LinkCrawlBatchAdminService,
     private val linkBatchRunService: LinkBatchRunService,
-    private val linkCrawlFailedJobManualResolutionService: LinkCrawlFailedJobManualResolutionService,
+    private val linkCrawlFailedJobLinkRegistrationService: LinkCrawlFailedJobLinkRegistrationService,
 ) : AdminLinkCrawlBatchControllerDocs {
     @ApiErrorResponses(includeAuthenticationErrors = true, includeValidationError = true)
     @PostMapping("${SecurityConstants.ADMIN_API_PREFIX}/companies/{companyUserId}/link-crawl-batches")
@@ -75,13 +75,14 @@ class AdminLinkCrawlBatchController(
     }
 
     @ApiErrorResponses(includeAuthenticationErrors = true, includeValidationError = true)
-    @PostMapping("${SecurityConstants.ADMIN_API_PREFIX}/link-crawl-failed-jobs/{failedJobId}/manual-resolution")
-    override fun resolveFailedJobManually(
+    @PostMapping("${SecurityConstants.ADMIN_API_PREFIX}/link-crawl-failed-jobs/{failedJobId}/links")
+    @ResponseStatus(HttpStatus.CREATED)
+    override fun registerFailedJobLink(
         @PathVariable failedJobId: UUID,
-        @Valid @RequestBody request: ResolveFailedJobManuallyRequest,
+        @Valid @RequestBody request: RegisterFailedJobLinkRequest,
     ): ApiResponse<Unit> {
-        linkCrawlFailedJobManualResolutionService.resolveFailedJob(failedJobId, request)
-        return ApiResponse.ok(Unit)
+        linkCrawlFailedJobLinkRegistrationService.registerLink(failedJobId, request)
+        return ApiResponse.created(Unit)
     }
 
     @ApiErrorResponses(includeAuthenticationErrors = true)
