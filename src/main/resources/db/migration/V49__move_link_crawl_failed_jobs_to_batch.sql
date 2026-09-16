@@ -1,9 +1,8 @@
 -- 실패한 아티클 URL의 소유자를 실행(run)에서 배치로 옮긴다.
 -- 실행별 소유에서는 같은 URL이 실행 횟수만큼 별개 행으로 쌓여 failure_count가 매번 1부터 다시 세어졌고,
 -- 그 탓에 MAX_FAILURE_COUNT 상한을 소진한 URL도 다음 실행에서 새 행이 되어 자동 재시도가 끝없이 반복됐다.
--- 배치 소유로 옮기면 URL 하나가 행 하나에 대응하므로 재시도 횟수가 누적되고, 관리자가 손으로 등록하는
--- 실패 URL처럼 소속시킬 실행이 없는 행도 담을 수 있다.
--- 기존 run_id는 last_run_id로 남겨 실행별 화면이 마지막으로 실패한 실행 기준으로 계속 동작하게 한다.
+-- 배치 소유로 옮기면 URL 하나가 행 하나에 대응하므로 재시도 횟수가 누적된다.
+-- 기존 run_id는 last_run_id로 남기고, 실행 이력이 삭제돼도 실패 URL은 배치에 남도록 nullable로 둔다.
 
 ALTER TABLE link_crawl_failed_jobs ADD COLUMN batch_id UUID;
 ALTER TABLE link_crawl_failed_jobs RENAME COLUMN run_id TO last_run_id;
@@ -17,7 +16,9 @@ WHERE r.id = j.last_run_id;
 DELETE FROM link_crawl_failed_jobs WHERE batch_id IS NULL;
 
 -- 같은 배치에서 같은 URL을 가리키던 실행별 중복 행을 대표 행 하나로 합친다.
--- 대표는 가장 최근에 실패한 행이고, 재시도 횟수는 합산하며, 그룹 전체가 해소된 경우에만 해소로 본다.
+-- 대표는 가장 최근에 실패한 행이고, 그룹 전체가 해소된 경우에만 해소로 본다.
+-- 재시도 횟수는 미해소 행의 것만 합산한다. 해소됐던 URL이 다시 실패하면 1부터 세는 애플리케이션 규칙과 맞추기 위해서다.
+-- 그룹 전체가 해소됐으면 합산할 미해소 행이 없어 전체 합을 남긴다. 다시 실패하면 어차피 1로 초기화된다.
 UPDATE link_crawl_failed_jobs j
 SET failure_count = merged.total_failure_count,
     last_failed_at_utc = merged.latest_failed_at,
@@ -27,7 +28,7 @@ SET failure_count = merged.total_failure_count,
 FROM (
     SELECT batch_id,
            article_url,
-           SUM(failure_count) AS total_failure_count,
+           COALESCE(SUM(failure_count) FILTER (WHERE resolved_at_utc IS NULL), SUM(failure_count)) AS total_failure_count,
            MAX(last_failed_at_utc) AS latest_failed_at,
            bool_and(resolved_at_utc IS NOT NULL) AS is_all_resolved,
            MAX(resolved_at_utc) AS latest_resolved_at,
@@ -55,6 +56,18 @@ WHERE j.id <> (
     ORDER BY candidate.last_failed_at_utc DESC, candidate.id DESC
     LIMIT 1
 );
+
+-- 병합 전에는 UNRESOLVED 실행마다 미해소 행이 연결돼 있었다. 병합 뒤 연결된 미해소 행이 없는 UNRESOLVED 실행은
+-- 자기 미해소 행을 대표 행에 넘겨준 실행이므로, 해소가 아니라 이후 실행으로의 이월로 기록한다.
+UPDATE link_crawl_runs r
+SET status = 'CARRIED_OVER'
+WHERE r.status = 'UNRESOLVED'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM link_crawl_failed_jobs j
+      WHERE j.last_run_id = r.id
+        AND j.resolved_at_utc IS NULL
+  );
 
 ALTER TABLE link_crawl_failed_jobs ALTER COLUMN batch_id SET NOT NULL;
 ALTER TABLE link_crawl_failed_jobs ALTER COLUMN last_run_id DROP NOT NULL;

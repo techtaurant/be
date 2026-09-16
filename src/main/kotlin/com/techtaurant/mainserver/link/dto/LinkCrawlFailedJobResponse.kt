@@ -10,7 +10,7 @@ data class LinkCrawlFailedJobResponse(
     @field:Schema(description = "실패 잡 ID")
     val id: UUID,
     @field:Schema(description = "마지막으로 이 URL을 실패시킨 실행 이력 ID. 실행 이력이 삭제되면 값이 없습니다", nullable = true)
-    val runId: UUID?,
+    val lastRunId: UUID?,
     @field:Schema(description = "배치 ID")
     val batchId: UUID,
     @field:Schema(description = "처리에 실패한 아티클 URL")
@@ -34,7 +34,7 @@ data class LinkCrawlFailedJobResponse(
         fun from(failedJob: LinkCrawlFailedJob): LinkCrawlFailedJobResponse {
             return LinkCrawlFailedJobResponse(
                 id = failedJob.id!!,
-                runId = failedJob.lastRun?.id,
+                lastRunId = failedJob.lastRun?.id,
                 batchId = failedJob.batch.id!!,
                 articleUrl = failedJob.articleUrl,
                 errorStatusCode = failedJob.errorStatusCode,

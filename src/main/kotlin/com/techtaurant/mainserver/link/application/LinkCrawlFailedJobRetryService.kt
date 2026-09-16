@@ -99,24 +99,17 @@ class LinkCrawlFailedJobRetryService(
     ): Boolean {
         return transactionOperations.execute<Boolean> {
             val failedJob = linkCrawlFailedJobRepository.findById(failedJobId).orElse(null) ?: return@execute false
-            if (failedJob.resolvedAt != null) {
-                failedJob.lastRun?.let(::refreshRunStatus)
-                return@execute false
-            }
             if (!isRetryable(failedJob, automaticRetryAt)) {
                 return@execute false
             }
 
-            val succeeded =
-                snapshotResult.fold(
-                    onSuccess = { snapshot -> retryFailedJobWithSnapshot(failedJob, snapshot) },
-                    onFailure = { exception ->
-                        markRetryFailure(failedJob, exception)
-                        false
-                    },
-                )
-            failedJob.lastRun?.let(::refreshRunStatus)
-            succeeded
+            snapshotResult.fold(
+                onSuccess = { snapshot -> retryFailedJobWithSnapshot(failedJob, snapshot) },
+                onFailure = { exception ->
+                    markRetryFailure(failedJob, exception)
+                    false
+                },
+            )
         } ?: false
     }
 
@@ -143,8 +136,7 @@ class LinkCrawlFailedJobRetryService(
         val tagResolver = linkCrawlLinkCollector.tagResolverFor(batch)
 
         return try {
-            linkCrawlLinkCollector.collect(snapshot, batch, tagResolver)
-            markResolved(failedJob)
+            linkCrawlLinkCollector.saveLinkAndResolveFailedJob(snapshot, batch, tagResolver)
             true
         } catch (exception: Exception) {
             markRetryFailure(failedJob, exception)
@@ -152,41 +144,25 @@ class LinkCrawlFailedJobRetryService(
         }
     }
 
-    private fun markResolved(failedJob: LinkCrawlFailedJob) {
-        failedJob.resolvedAt = Instant.now()
-        linkCrawlFailedJobRepository.save(failedJob)
-    }
-
     private fun markRetryFailure(
         failedJob: LinkCrawlFailedJob,
         exception: Throwable,
     ) {
-        failedJob.failureCount += 1
-        failedJob.errorStatusCode = exception.toLinkCrawlErrorStatusCode()
-        failedJob.errorMessage = exception.toLinkCrawlErrorMessage()
-        failedJob.lastFailedAt = Instant.now()
-        linkCrawlFailedJobRepository.save(failedJob)
-    }
-
-    internal fun refreshRunStatus(run: LinkCrawlRun) {
-        val runId = run.id ?: return
-        run.status =
-            when {
-                run.status == LinkCrawlRunStatus.FAILED -> LinkCrawlRunStatus.FAILED
-                linkCrawlFailedJobRepository.existsByLastRunIdAndResolvedAtIsNull(runId) -> LinkCrawlRunStatus.UNRESOLVED
-                run.failedJobCount > 0 -> LinkCrawlRunStatus.RESOLVED
-                else -> LinkCrawlRunStatus.COMPLETED
-            }
-        linkCrawlRunRepository.save(run)
+        linkCrawlFailedJobRepository.recordRetryFailureIfUnresolved(
+            failedJobId = requireNotNull(failedJob.id),
+            errorStatusCode = exception.toLinkCrawlErrorStatusCode(),
+            errorMessage = exception.toLinkCrawlErrorMessage(),
+            failedAt = Instant.now(),
+        )
     }
 
     private fun summarizeRetryRun(runId: UUID): LinkFailedJobRetrySummary {
         return transactionOperations.execute<LinkFailedJobRetrySummary> {
             val run = findRunOrThrow(runId)
-            refreshRunStatus(run)
+            val stillUnresolvedCount = linkCrawlFailedJobRepository.countByLastRunIdAndResolvedAtIsNull(runId).toInt()
             LinkFailedJobRetrySummary(
-                stillUnresolvedCount = linkCrawlFailedJobRepository.countByLastRunIdAndResolvedAtIsNull(runId).toInt(),
-                runStatus = run.status,
+                stillUnresolvedCount = stillUnresolvedCount,
+                runStatus = run.currentStatus(hasUnresolvedFailedJobs = stillUnresolvedCount > 0),
             )
         } ?: throw ApiException(DefaultStatus.SERVER_ERROR, "실패 잡 재시도 결과를 요약하지 못했습니다")
     }

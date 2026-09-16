@@ -26,13 +26,13 @@ class LinkCrawlLinkCollector(
         return LinkTagResolver(resolveLinkTagNames(batch.tagNames), tagWriteService::resolveTags)
     }
 
-    internal fun collect(
+    internal fun saveLinkAndResolveFailedJob(
         snapshot: LinkSnapshot,
         batch: LinkCrawlBatch,
         tagResolver: LinkTagResolver,
     ): LinkCrawlLinkCollectResult {
         val collectResult = saveOrRefreshLink(snapshot, batch, tagResolver)
-        resolveFailedArticleUrl(batch, snapshot.url)
+        markFailedJobResolvedByArticleUrl(batch, snapshot.url)
         return collectResult
     }
 
@@ -61,19 +61,12 @@ class LinkCrawlLinkCollector(
      * 수집에 성공했다는 것은 그 URL이 더 이상 실패 상태가 아니라는 뜻이므로 남아 있던 실패 기록을 닫는다.
      * 정기 실행, 재시도, 관리자 직접 등록이 모두 이 경로를 지나므로 해소 규칙이 경로별로 갈라지지 않는다.
      */
-    private fun resolveFailedArticleUrl(
+    private fun markFailedJobResolvedByArticleUrl(
         batch: LinkCrawlBatch,
-        url: String,
+        articleUrl: String,
     ) {
         val batchId = batch.id ?: return
-        val failedJob =
-            linkCrawlFailedJobRepository.findByBatchIdAndArticleUrl(batchId, LinkCrawlFailedJob.truncateUrl(url)) ?: return
-        if (failedJob.resolvedAt != null) {
-            return
-        }
-
-        failedJob.resolvedAt = Instant.now()
-        linkCrawlFailedJobRepository.save(failedJob)
+        linkCrawlFailedJobRepository.markResolvedIfUnresolved(batchId, LinkCrawlFailedJob.truncateUrl(articleUrl), Instant.now())
     }
 
     private fun saveNewLink(

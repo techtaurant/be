@@ -4,7 +4,6 @@ import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.common.status.DefaultStatus
 import com.techtaurant.mainserver.link.dto.LinkBatchRunResponse
 import com.techtaurant.mainserver.link.entity.LinkCrawlBatch
-import com.techtaurant.mainserver.link.entity.LinkCrawlFailedJob
 import com.techtaurant.mainserver.link.entity.LinkCrawlRun
 import com.techtaurant.mainserver.link.enums.LinkCrawlRunStatus
 import com.techtaurant.mainserver.link.enums.LinkCrawlRunTriggerType
@@ -224,7 +223,7 @@ class LinkCrawlRunExecutor(
             }
 
         return try {
-            when (linkCrawlLinkCollector.collect(snapshot, batch, tagResolver)) {
+            when (linkCrawlLinkCollector.saveLinkAndResolveFailedJob(snapshot, batch, tagResolver)) {
                 LinkCrawlLinkCollectResult.CREATED_NEW_LINK -> LinkCollectionResult.CreatedNewLink
                 LinkCrawlLinkCollectResult.CONNECTED_EXISTING_LINK -> LinkCollectionResult.ConnectedExistingLink
                 LinkCrawlLinkCollectResult.UPDATED_EXISTING_LINK -> LinkCollectionResult.UpdatedExistingLink
@@ -268,31 +267,38 @@ class LinkCrawlRunExecutor(
         failedJobRecord: LinkFailedJobRecord,
     ) {
         val batchId = run.batch.id ?: throw ApiException(DefaultStatus.SERVER_ERROR, "배치 ID가 없습니다")
-        val now = Instant.now()
-        val failedJobDraft = failedJobRecord.draft.toPersistableFailedJobDraft()
-        val errorStatusCode = failedJobRecord.exception.toLinkCrawlErrorStatusCode()
-        val errorMessage = failedJobRecord.exception.toLinkCrawlErrorMessage()
-        val failedJob =
-            linkCrawlFailedJobRepository.findByBatchIdAndArticleUrl(batchId, failedJobDraft.articleUrl)
-                ?.apply {
-                    // 해소됐던 URL이 다시 깨진 것은 이전 실패와 별개 사건이라 재시도 상한을 처음부터 다시 준다.
-                    this.failureCount = if (this.resolvedAt == null) this.failureCount + 1 else 1
-                    this.resolvedAt = null
-                    this.errorStatusCode = errorStatusCode
-                    this.errorMessage = errorMessage
-                    this.lastFailedAt = now
-                    this.lastRun = run
-                }
-                ?: LinkCrawlFailedJob(
-                    batch = run.batch,
-                    articleUrl = failedJobDraft.articleUrl,
-                    errorStatusCode = errorStatusCode,
-                    errorMessage = errorMessage,
-                    lastFailedAt = now,
-                    lastRun = run,
-                )
+        val runId = run.id ?: throw ApiException(DefaultStatus.SERVER_ERROR, "실행 ID가 없습니다")
+        val articleUrl = failedJobRecord.draft.toPersistableFailedJobDraft().articleUrl
 
-        linkCrawlFailedJobRepository.save(failedJob)
+        markPreviousRunCarriedOver(batchId, articleUrl, runId)
+        linkCrawlFailedJobRepository.recordFailure(
+            batchId = batchId,
+            articleUrl = articleUrl,
+            lastRunId = runId,
+            errorStatusCode = failedJobRecord.exception.toLinkCrawlErrorStatusCode(),
+            errorMessage = failedJobRecord.exception.toLinkCrawlErrorMessage(),
+            failedAt = Instant.now(),
+        )
+    }
+
+    /**
+     * 미해소 실패 잡이 이번 실행으로 넘어오면 직전 실행에는 그 잡이 더 이상 연결되지 않아 거기서는 처리할 수 없다.
+     * 해소로 보이지 않도록 직전 실행을 이월로 남긴다. 이미 해소된 잡이 다시 실패한 경우는 직전 실행이 이미 끝난 상태라 건드리지 않는다.
+     */
+    private fun markPreviousRunCarriedOver(
+        batchId: UUID,
+        articleUrl: String,
+        runId: UUID,
+    ) {
+        val existingFailedJob = linkCrawlFailedJobRepository.findByBatchIdAndArticleUrl(batchId, articleUrl) ?: return
+        if (existingFailedJob.resolvedAt != null) {
+            return
+        }
+
+        val previousRunId = existingFailedJob.lastRun?.id ?: return
+        if (previousRunId != runId) {
+            linkCrawlRunRepository.markCarriedOver(previousRunId)
+        }
     }
 
     private fun isRedirectedPage(

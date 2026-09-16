@@ -6,8 +6,6 @@ import java.time.Instant
 import java.util.UUID
 
 interface LinkCrawlFailedJobRepositoryCustom {
-    fun save(job: LinkCrawlFailedJob): LinkCrawlFailedJob
-
     fun findById(id: UUID): java.util.Optional<LinkCrawlFailedJob>
 
     fun findAllByLastRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId: UUID): List<LinkCrawlFailedJob>
@@ -25,10 +23,7 @@ interface LinkCrawlFailedJobRepositoryCustom {
         pageable: Pageable,
     ): List<LinkCrawlFailedJob>
 
-    fun existsByLastRunIdAndResolvedAtIsNull(runId: UUID): Boolean
-
-    /** resolved가 null이면 해소 여부를 가리지 않고 모두 반환한다. */
-    fun findAllByBatchIdOrderByCreatedAtAsc(
+    fun findAllByBatchIdFilteredByResolution(
         batchId: UUID,
         resolved: Boolean?,
     ): List<LinkCrawlFailedJob>
@@ -39,4 +34,26 @@ interface LinkCrawlFailedJobRepositoryCustom {
     ): LinkCrawlFailedJob?
 
     fun findRunIdsWithUnresolvedJobs(runIds: Collection<UUID>): Set<UUID>
+
+    fun recordFailure(
+        batchId: UUID,
+        articleUrl: String,
+        lastRunId: UUID,
+        errorStatusCode: Int,
+        errorMessage: String,
+        failedAt: Instant,
+    )
+
+    fun markResolvedIfUnresolved(
+        batchId: UUID,
+        articleUrl: String,
+        resolvedAt: Instant,
+    ): Boolean
+
+    fun recordRetryFailureIfUnresolved(
+        failedJobId: UUID,
+        errorStatusCode: Int,
+        errorMessage: String,
+        failedAt: Instant,
+    )
 }

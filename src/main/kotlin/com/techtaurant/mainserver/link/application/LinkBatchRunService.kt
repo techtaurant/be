@@ -82,7 +82,7 @@ class LinkBatchRunService(
             throw ApiException(LinkStatus.LINK_CRAWL_BATCH_NOT_FOUND)
         }
 
-        return linkCrawlFailedJobRepository.findAllByBatchIdOrderByCreatedAtAsc(batchId, resolved)
+        return linkCrawlFailedJobRepository.findAllByBatchIdFilteredByResolution(batchId, resolved)
             .map(LinkCrawlFailedJobResponse::from)
     }
 

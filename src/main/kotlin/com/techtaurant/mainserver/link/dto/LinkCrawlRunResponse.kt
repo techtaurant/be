@@ -15,7 +15,12 @@ data class LinkCrawlRunResponse(
     val batchId: UUID,
     @field:Schema(description = "실행 트리거 유형")
     val triggerType: LinkCrawlRunTriggerType,
-    @field:Schema(description = "실행 상태 (COMPLETED: 실패 없음, UNRESOLVED: 미해소 실패 잡 존재, RESOLVED: 재시도로 모두 해소, FAILED: 실행 자체 실패)")
+    @field:Schema(
+        description =
+            "실행 상태 (COMPLETED: 실패 없음, UNRESOLVED: 이 실행에 미해소 실패 잡 존재, " +
+                "RESOLVED: 실패 잡이 재시도·정기 실행·링크 직접 등록으로 모두 해소, " +
+                "CARRIED_OVER: 미해소 실패 잡이 같은 URL을 다시 실패시킨 이후 실행으로 넘어가 이 실행에서는 처리할 잡이 없음, FAILED: 실행 자체 실패)",
+    )
     val status: LinkCrawlRunStatus,
     @field:Schema(description = "정상 파싱된 링크 수")
     val collectedCount: Int,
@@ -49,7 +54,7 @@ data class LinkCrawlRunResponse(
                 id = run.id!!,
                 batchId = run.batch.id!!,
                 triggerType = run.triggerType,
-                status = if (hasUnresolvedFailedJobs) LinkCrawlRunStatus.UNRESOLVED else run.status,
+                status = run.currentStatus(hasUnresolvedFailedJobs),
                 collectedCount = run.collectedCount,
                 newLinkCount = run.newLinkCount,
                 existingLinkCount = run.existingLinkCount,

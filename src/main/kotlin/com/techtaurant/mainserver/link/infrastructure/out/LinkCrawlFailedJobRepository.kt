@@ -7,8 +7,6 @@ import java.util.Optional
 import java.util.UUID
 
 interface LinkCrawlFailedJobRepository : Repository<LinkCrawlFailedJob, UUID>, LinkCrawlFailedJobRepositoryCustom {
-    override fun save(job: LinkCrawlFailedJob): LinkCrawlFailedJob
-
     override fun findById(id: UUID): Optional<LinkCrawlFailedJob>
 
     override fun findAllByLastRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId: UUID): List<LinkCrawlFailedJob>
@@ -20,7 +18,7 @@ interface LinkCrawlFailedJobRepository : Repository<LinkCrawlFailedJob, UUID>, L
 
     override fun countByLastRunIdAndResolvedAtIsNull(runId: UUID): Long
 
-    override fun findAllByBatchIdOrderByCreatedAtAsc(
+    override fun findAllByBatchIdFilteredByResolution(
         batchId: UUID,
         resolved: Boolean?,
     ): List<LinkCrawlFailedJob>

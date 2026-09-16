@@ -491,7 +491,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.OK.value())
             .body("data", hasSize<Any>(3))
-            .body("data[0].runId", equalTo(runId.toString()))
+            .body("data[0].lastRunId", equalTo(runId.toString()))
             .body("data[0].batchId", equalTo(batch.id.toString()))
             .body("data[0]", not(hasKey("resolved")))
             .body("data[0].resolvedAt", equalTo(null))
@@ -593,7 +593,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    @DisplayName("같은 URL이 여러 실행에서 실패해도 배치 실패 잡은 한 건으로 누적되고 이후 수집에 성공하면 해소된다")
+    @DisplayName("같은 URL이 여러 실행에서 실패하면 배치 실패 잡은 한 건으로 누적되고 이전 실행은 이월되며, 이후 수집에 성공하면 마지막 실패 실행이 해소된다")
     fun batchFailedJobsAccumulateAcrossRunsAndResolveOnSuccessfulCrawl() {
         val batch = saveFailingDateSelectorBatch()
 
@@ -607,7 +607,17 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
                 .body("data.failedJobCount", equalTo(3))
         }
 
-        assertEquals(2, linkCrawlRunRepository.findAllByBatchIdOrderByStartedAtDesc(batch.id!!).size)
+        val (secondRunId, firstRunId) = linkCrawlRunRepository.findAllByBatchIdOrderByStartedAtDesc(batch.id!!).map { it.id!! }
+        assertRunStatuses(batch, listOf(secondRunId to "UNRESOLVED", firstRunId to "CARRIED_OVER"))
+
+        given()
+            .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
+            .`when`()
+            .post("/admin/link-crawl-runs/$firstRunId/failed-job-retries")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data.retriedCount", equalTo(0))
+            .body("data.runStatus", equalTo("CARRIED_OVER"))
 
         given()
             .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
@@ -629,6 +639,9 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.OK.value())
             .body("data.failedJobCount", equalTo(0))
+
+        val thirdRunId = linkCrawlRunRepository.findAllByBatchIdOrderByStartedAtDesc(batch.id!!).first().id!!
+        assertRunStatuses(batch, listOf(thirdRunId to "COMPLETED", secondRunId to "RESOLVED", firstRunId to "CARRIED_OVER"))
 
         given()
             .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
@@ -690,7 +703,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
     fun registeringLinkForLastUnresolvedFailedJobMarksRunResolved() {
         val batch = saveFailingDateSelectorBatch()
         runBatchExpectingFailedJobs(batch, 3)
-        val failedJobIds = linkCrawlFailedJobRepository.findAllByBatchIdOrderByCreatedAtAsc(batch.id!!, resolved = false).map { it.id!! }
+        val failedJobIds = linkCrawlFailedJobRepository.findAllByBatchIdFilteredByResolution(batch.id!!, resolved = false).map { it.id!! }
 
         failedJobIds.dropLast(1).forEach { failedJobId ->
             registerFailedJobLink(failedJobId, title = "관리자가 직접 입력한 제목 $failedJobId")
@@ -733,7 +746,7 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
     fun registeringFailedJobLinkRequiresTitle() {
         val batch = saveFailingDateSelectorBatch()
         runBatchExpectingFailedJobs(batch, 3)
-        val failedJobId = linkCrawlFailedJobRepository.findAllByBatchIdOrderByCreatedAtAsc(batch.id!!, resolved = false).first().id!!
+        val failedJobId = linkCrawlFailedJobRepository.findAllByBatchIdFilteredByResolution(batch.id!!, resolved = false).first().id!!
 
         registerFailedJobLink(failedJobId, title = " ")
             .statusCode(HttpStatus.BAD_REQUEST.value())
@@ -786,6 +799,27 @@ class AdminLinkCrawlBatchControllerIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.OK.value())
             .body("data[0].status", equalTo(expectedStatus))
+    }
+
+    private fun assertRunStatuses(
+        batch: LinkCrawlBatch,
+        expectedStatusesByRunId: List<Pair<UUID, String>>,
+    ) {
+        val response =
+            given()
+                .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, adminAccessToken)
+                .`when`()
+                .get("/admin/link-crawl-batches/${batch.id}/runs")
+                .then()
+                .statusCode(HttpStatus.OK.value())
+                .body("data", hasSize<Any>(expectedStatusesByRunId.size))
+
+        expectedStatusesByRunId.forEachIndexed { index, (runId, expectedStatus) ->
+            response
+                .body("data[$index].id", equalTo(runId.toString()))
+                .body("data[$index].status", equalTo(expectedStatus))
+                .body("data[$index].hasUnresolvedFailedJobs", equalTo(expectedStatus == "UNRESOLVED"))
+        }
     }
 
     private fun saveFailingDateSelectorBatch(): LinkCrawlBatch {
