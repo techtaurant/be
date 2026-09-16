@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
 @ConditionalOnExpression("!'\${app.environment:dev}'.trim().equalsIgnoreCase('prod')")
 @RequestMapping("${SecurityConstants.OPEN_API_PREFIX}/docs")
 class NotificationRoutingGuideController : NotificationRoutingGuideControllerDocs {
-    // static/ 아래에 두면 prod에서도 정적 리소스로 공개되므로 classpath의 dev/ 경로에 둔다.
+    // static/ 아래에 두면 prod에서도 정적 리소스로 공개되므로 classpath의 docs/ 경로에 둔다.
     private val routingGuideHtml: String =
         ClassPathResource(ROUTING_GUIDE_HTML_PATH).getContentAsString(StandardCharsets.UTF_8)
 
@@ -32,6 +32,6 @@ class NotificationRoutingGuideController : NotificationRoutingGuideControllerDoc
             .body(routingGuideHtml)
 
     private companion object {
-        const val ROUTING_GUIDE_HTML_PATH = "dev/notification-routing-guide.html"
+        const val ROUTING_GUIDE_HTML_PATH = "docs/notification-routing-guide.html"
     }
 }
