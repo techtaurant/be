@@ -18,15 +18,19 @@ class ApiResponse<T>(val status: Int, val data: T?, val message: String) {
             return ApiResponse(HttpStatus.CREATED.value(), data, DefaultStatus.CREATED.getDescription())
         }
 
-        fun <T> error(status: StatusIfs): ApiResponse<T?> {
-            return ApiResponse(status.getCustomStatusCode(), null, status.getDescription())
+        fun <T> error(
+            status: StatusIfs,
+            message: String,
+        ): ApiResponse<T?> {
+            return ApiResponse(status.getCustomStatusCode(), null, message)
         }
 
         fun <T> error(
             status: StatusIfs,
+            message: String,
             data: T?,
         ): ApiResponse<T> {
-            return ApiResponse(status.getCustomStatusCode(), data, status.getDescription())
+            return ApiResponse(status.getCustomStatusCode(), data, message)
         }
     }
 }

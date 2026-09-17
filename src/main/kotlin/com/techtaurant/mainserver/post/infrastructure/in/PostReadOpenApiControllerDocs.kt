@@ -16,6 +16,8 @@ import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.Pattern
+import jakarta.validation.constraints.Size
 import java.util.UUID
 import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 
@@ -24,12 +26,12 @@ interface PostReadOpenApiControllerDocs {
     @Operation(
         summary = "게시물 목록 조회",
         description =
-            "[Deprecated] 이 API는 정적 콘텐츠, 공개 동적 메타데이터, 로그인 사용자 상태가 하나의 응답에 섞여 있습니다. " +
-                "정적 콘텐츠 목록은 GET /open-api/v2/posts, 공개 동적 메타데이터는 GET /open-api/posts/metadatas?postIds=..., " +
-                "작성자 이름과 프로필 이미지는 GET /open-api/users/profile-images?userIds=..., 로그인 사용자 상태는 " +
-                "GET /api/posts/me/states?postIds=... API로 대체되었습니다. " +
-                "기존 호환을 위해 커서 기반 페이지네이션과 로그인 시 본인의 PRIVATE 게시물 포함 동작은 유지됩니다.",
-        deprecated = true,
+            "게시물 목록을 커서 기반 페이지네이션으로 조회합니다. " +
+                "정적 콘텐츠와 함께 조회수/좋아요수/댓글수, 작성자 프로필 이미지, 썸네일을 한 응답에 담아 반환하며, " +
+                "로그인 사용자에게는 읽음/좋아요/차단 상태가 함께 포함됩니다. " +
+                "로그인 시 본인의 PRIVATE 게시물도 함께 조회됩니다. " +
+                "keyword를 지정하면 제목 또는 본문에 검색어가 포함된 게시물만 대소문자 구분 없이 조회하며, " +
+                "검색어의 `%`와 `_`는 와일드카드가 아닌 일반 문자로 취급합니다.",
     )
     @SwaggerApiResponse(
         responseCode = "200",
@@ -41,21 +43,23 @@ interface PostReadOpenApiControllerDocs {
         @Parameter(description = "페이지 크기 (1-100, 기본값 20)") @Min(1) @Max(100) size: Int,
         @Parameter(description = "기간 필터 (WEEK: 7일, MONTH: 30일, YEAR: 365일, ALL: 전체)") period: PostPeriod,
         @Parameter(description = "정렬 기준 (LATEST: 최신순, VIEW: 조회순, LIKE: 추천순, COMMENT: 댓글순)") sort: PostSortType,
-        @Parameter(description = "작성자 ID 필터 (생략 시 전체 조회, 본인 조회 시 DRAFT/PRIVATE 포함)") authorId: UUID?,
+        @Parameter(description = "작성자 ID 필터 (생략 시 전체 조회, 본인 조회 시 PRIVATE 포함)") authorId: UUID?,
         @Parameter(description = "카테고리 ID 필터 (authorId 지정 시에만 적용, 생략 시 전체)") categoryId: UUID?,
         @Parameter(description = "태그 UUID 필터 (여러 개 전달 시 OR 조건으로 조회)") tagIds: List<UUID>?,
+        @Parameter(description = "검색어 (2-100자, 제목·본문 부분 일치)")
+        @Size(min = 2, max = 100)
+        @Pattern(regexp = "(?s).*\\S.*")
+        keyword: String?,
         currentUserId: UUID?,
     ): ApiResponse<CursorPageResponse<PostListItemResponse>>
 
     @Operation(
         summary = "게시물 상세 조회",
         description =
-            "[Deprecated] 이 API는 정적 콘텐츠, 공개 동적 메타데이터, 로그인 사용자 상태가 하나의 응답에 섞여 있습니다. " +
-                "정적 상세 콘텐츠는 GET /open-api/v2/posts/{postId}, 공개 동적 메타데이터는 GET /open-api/posts/metadatas?postIds=..., " +
-                "작성자 이름과 프로필 이미지는 GET /open-api/users/profile-images?userIds=..., 로그인 사용자 상태는 " +
-                "GET /api/posts/me/states?postIds=... API로 대체되었습니다. " +
-                "조회 로그는 이 API에서 더 이상 기록하지 않으며, POST /open-api/posts/{postId}/view-logs API로 분리되었습니다.",
-        deprecated = true,
+            "게시물 상세 정보를 조회합니다. " +
+                "정적 콘텐츠와 함께 카운트, 작성자 프로필 이미지, 첨부 presigned URL, 로그인 사용자의 읽음/좋아요 상태를 반환합니다. " +
+                "DRAFT/PRIVATE 게시물은 작성자만 조회할 수 있습니다. " +
+                "조회 로그는 이 API에서 기록하지 않으며, POST /open-api/posts/{postId}/view-logs API가 담당합니다.",
     )
     @SwaggerApiResponse(
         responseCode = "200",

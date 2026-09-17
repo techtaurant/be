@@ -6,6 +6,8 @@ import com.techtaurant.mainserver.common.swagger.ApiErrorResponses
 import com.techtaurant.mainserver.link.application.LinkReadService
 import com.techtaurant.mainserver.link.dto.LinkContentDetailResponse
 import com.techtaurant.mainserver.link.dto.LinkContentListItemResponse
+import com.techtaurant.mainserver.link.enums.LinkPeriod
+import com.techtaurant.mainserver.link.enums.LinkSortType
 import com.techtaurant.mainserver.security.SecurityConstants
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
@@ -28,6 +30,8 @@ class LinkReadOpenApiController(
     override fun getLinkContents(
         @RequestParam(required = false) cursor: String?,
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
+        @RequestParam(defaultValue = "PUBLISHED") sort: LinkSortType,
+        @RequestParam(defaultValue = "ALL") period: LinkPeriod,
         @RequestParam(required = false) sourceCompanyUserId: UUID?,
         @RequestParam(required = false) tag: String?,
     ): ApiResponse<CursorPageResponse<LinkContentListItemResponse>> {
@@ -35,6 +39,8 @@ class LinkReadOpenApiController(
             linkReadService.getPublicLinkContents(
                 cursor = cursor,
                 size = size,
+                sortType = sort,
+                period = period,
                 sourceCompanyUserId = sourceCompanyUserId,
                 tag = tag,
             ),

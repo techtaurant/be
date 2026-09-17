@@ -5,7 +5,7 @@ import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.link.dto.LinkContentDetailResponse
 import com.techtaurant.mainserver.link.dto.LinkContentListItemResponse
 import com.techtaurant.mainserver.link.dto.LinkCursor
-import com.techtaurant.mainserver.link.dto.LinkCursorV1
+import com.techtaurant.mainserver.link.dto.LinkStatsResponse
 import com.techtaurant.mainserver.link.entity.Link
 import com.techtaurant.mainserver.link.enums.LinkPeriod
 import com.techtaurant.mainserver.link.enums.LinkSortType
@@ -26,45 +26,17 @@ class LinkReadService(
     private val linkRepository: LinkRepository,
     private val userLinkRepository: UserLinkRepository,
     private val userRepository: UserRepository,
+    private val linkStatsReadService: LinkStatsReadService,
 ) {
-    fun getPublicLinkContents(
-        cursor: String?,
-        size: Int,
-        sourceCompanyUserId: UUID?,
-        tag: String?,
-    ): CursorPageResponse<LinkContentListItemResponse> {
-        val linkPage =
-            getLinkPage(
-                cursor = cursor,
-                size = size,
-                sourceCompanyUserId = sourceCompanyUserId,
-                tag = tag,
-            )
-        val sourceCompanyUserIdByLinkId = findSourceCompanyUserIdByLinkId(linkPage.content)
-
-        return CursorPageResponse(
-            content =
-                linkPage.content.map { link ->
-                    LinkContentListItemResponse.from(
-                        link = link,
-                        sourceCompanyUserId = sourceCompanyUserIdByLinkId[link.id],
-                    )
-                },
-            nextCursor = linkPage.nextCursor,
-            hasNext = linkPage.hasNext,
-            size = linkPage.size,
-        )
-    }
-
     /**
-     * 공개 링크 정적 콘텐츠 목록을 명시적 정렬/기간과 함께 커서 기반으로 조회합니다 (v1).
+     * 공개 링크 정적 콘텐츠 목록을 명시적 정렬/기간과 함께 커서 기반으로 조회합니다.
      *
      * - PUBLISHED: 기간(period) 내 링크 생성일 최신순
      * - LIKE/SAVE: 기간(period) 윈도우 내 일별 좋아요/저장 집계 합 기준 (period=ALL이면 전체 누적)
      *
      * 커서는 정렬 타입을 포함하며, 요청 sort와 커서의 정렬 타입이 다르면 INVALID_LINK_CURSOR를 반환합니다.
      */
-    fun getPublicLinkContentsV1(
+    fun getPublicLinkContents(
         cursor: String?,
         size: Int,
         sortType: LinkSortType,
@@ -73,7 +45,7 @@ class LinkReadService(
         tag: String?,
     ): CursorPageResponse<LinkContentListItemResponse> {
         val linkPage =
-            getLinkPageV1(
+            getLinkPage(
                 cursor = cursor,
                 size = size,
                 sortType = sortType,
@@ -82,6 +54,7 @@ class LinkReadService(
                 tag = tag,
             )
         val sourceCompanyUserIdByLinkId = findSourceCompanyUserIdByLinkId(linkPage.content)
+        val statsByLinkId = findStatsByLinkId(linkPage.content)
 
         return CursorPageResponse(
             content =
@@ -89,6 +62,7 @@ class LinkReadService(
                     LinkContentListItemResponse.from(
                         link = link,
                         sourceCompanyUserId = sourceCompanyUserIdByLinkId[link.id],
+                        stats = statsByLinkId[link.id],
                     )
                 },
             nextCursor = linkPage.nextCursor,
@@ -107,6 +81,8 @@ class LinkReadService(
         return getPublicLinkContents(
             cursor = cursor,
             size = size,
+            sortType = LinkSortType.PUBLISHED,
+            period = LinkPeriod.ALL,
             sourceCompanyUserId = companyUserId,
             tag = null,
         )
@@ -120,67 +96,11 @@ class LinkReadService(
         return LinkContentDetailResponse.from(
             link = link,
             sourceCompanyUserId = findSourceCompanyUserIdByLinkId(listOf(link))[link.id],
+            stats = findStatsByLinkId(listOf(link))[link.id],
         )
     }
 
     private fun getLinkPage(
-        cursor: String?,
-        size: Int,
-        sourceCompanyUserId: UUID?,
-        tag: String?,
-    ): CursorPageResponse<Link> {
-        val linkCursor = cursor?.let { LinkCursor.decode(it) }
-
-        if (cursor != null && linkCursor == null) {
-            throw ApiException(LinkStatus.INVALID_LINK_CURSOR)
-        }
-
-        val normalizedTag = tag?.takeIf { it.isNotBlank() }
-        val pageable = PageRequest.of(0, size + 1)
-        val linkIds =
-            when {
-                linkCursor == null ->
-                    linkRepository.findFirstPageIds(
-                        sourceCompanyUserId = sourceCompanyUserId,
-                        tag = normalizedTag,
-                        pageable = pageable,
-                    )
-
-                else ->
-                    linkRepository.findNextPageIds(
-                        sourceCompanyUserId = sourceCompanyUserId,
-                        tag = normalizedTag,
-                        cursorCreatedAt = linkCursor.createdAt,
-                        cursorId = linkCursor.id,
-                        pageable = pageable,
-                    )
-            }
-        val hasNext = linkIds.size > size
-        val contentLinkIds = linkIds.take(size)
-        val linksById =
-            if (contentLinkIds.isEmpty()) {
-                emptyMap()
-            } else {
-                linkRepository.findAllByIdInWithTags(contentLinkIds).associateBy { it.id }
-            }
-        val contentLinks = contentLinkIds.mapNotNull(linksById::get)
-
-        val nextCursor =
-            if (hasNext && contentLinks.isNotEmpty()) {
-                LinkCursor.from(contentLinks.last()).encode()
-            } else {
-                null
-            }
-
-        return CursorPageResponse(
-            content = contentLinks,
-            nextCursor = nextCursor,
-            hasNext = hasNext,
-            size = contentLinks.size,
-        )
-    }
-
-    private fun getLinkPageV1(
         cursor: String?,
         size: Int,
         sortType: LinkSortType,
@@ -188,7 +108,7 @@ class LinkReadService(
         sourceCompanyUserId: UUID?,
         tag: String?,
     ): CursorPageResponse<Link> {
-        val linkCursor = cursor?.let { LinkCursorV1.decode(it) }
+        val linkCursor = cursor?.let { LinkCursor.decode(it) }
 
         if (cursor != null && !isValidCursor(linkCursor, sortType)) {
             throw ApiException(LinkStatus.INVALID_LINK_CURSOR)
@@ -217,7 +137,7 @@ class LinkReadService(
         val lastRankedLinkId = pageRankedLinkIds.lastOrNull()
         val nextCursor =
             if (hasNext && contentLinks.isNotEmpty() && lastRankedLinkId != null) {
-                LinkCursorV1.from(
+                LinkCursor.from(
                     link = linksById.getValue(lastRankedLinkId.linkId),
                     sortType = sortType,
                     sortValue = lastRankedLinkId.sortValue,
@@ -235,7 +155,7 @@ class LinkReadService(
     }
 
     private fun isValidCursor(
-        linkCursor: LinkCursorV1?,
+        linkCursor: LinkCursor?,
         sortType: LinkSortType,
     ): Boolean = linkCursor != null && linkCursor.sortType == sortType
 
@@ -248,6 +168,15 @@ class LinkReadService(
         if (company.role != UserRole.COMPANY) {
             throw ApiException(UserStatus.COMPANY_NOT_FOUND)
         }
+    }
+
+    private fun findStatsByLinkId(links: List<Link>): Map<UUID, LinkStatsResponse> {
+        val linkIds = links.mapNotNull { it.id }
+        if (linkIds.isEmpty()) {
+            return emptyMap()
+        }
+
+        return linkStatsReadService.getLinkStats(linkIds).associateBy { it.linkId }
     }
 
     private fun findSourceCompanyUserIdByLinkId(links: List<Link>): Map<UUID, UUID> {

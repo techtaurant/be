@@ -2,6 +2,7 @@ package com.techtaurant.mainserver.security.handler
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.techtaurant.mainserver.common.dto.ApiResponse
+import com.techtaurant.mainserver.common.status.StatusMessageResolver
 import com.techtaurant.mainserver.security.jwt.JwtStatus
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Component
 @Component
 class CustomAccessDeniedHandler(
     private val objectMapper: ObjectMapper,
+    private val statusMessageResolver: StatusMessageResolver,
 ) : AccessDeniedHandler {
     override fun handle(
         request: HttpServletRequest,
@@ -24,7 +26,7 @@ class CustomAccessDeniedHandler(
         accessDeniedException: AccessDeniedException,
     ) {
         val jwtStatus = JwtStatus.ACCESS_DENIED
-        val errorResponse = ApiResponse.error<Any>(jwtStatus)
+        val errorResponse = ApiResponse.error<Any>(jwtStatus, statusMessageResolver.resolve(jwtStatus, request))
 
         response.status = jwtStatus.getHttpStatusCode()
         response.contentType = MediaType.APPLICATION_JSON_VALUE

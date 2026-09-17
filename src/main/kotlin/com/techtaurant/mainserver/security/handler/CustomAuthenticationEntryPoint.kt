@@ -2,6 +2,7 @@ package com.techtaurant.mainserver.security.handler
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.techtaurant.mainserver.common.dto.ApiResponse
+import com.techtaurant.mainserver.common.status.StatusMessageResolver
 import com.techtaurant.mainserver.security.SecurityConstants
 import com.techtaurant.mainserver.security.jwt.JwtStatus
 import jakarta.servlet.http.HttpServletRequest
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component
 @Component
 class CustomAuthenticationEntryPoint(
     private val objectMapper: ObjectMapper,
+    private val statusMessageResolver: StatusMessageResolver,
 ) : AuthenticationEntryPoint {
     override fun commence(
         request: HttpServletRequest,
@@ -29,7 +31,7 @@ class CustomAuthenticationEntryPoint(
             request.getAttribute(SecurityConstants.ERROR_ATTRIBUTE) as? JwtStatus
                 ?: JwtStatus.AUTHENTICATION_REQUIRED
 
-        writeError(response, jwtStatus)
+        writeError(request, response, jwtStatus)
     }
 
     /**
@@ -37,10 +39,11 @@ class CustomAuthenticationEntryPoint(
      * 인가 계층이 요청을 통과시켜 이 핸들러까지 오지 않는 경로에서도 같은 응답 형식을 쓰기 위해 분리했습니다.
      */
     fun writeError(
+        request: HttpServletRequest,
         response: HttpServletResponse,
         jwtStatus: JwtStatus,
     ) {
-        val errorResponse = ApiResponse.error<Any>(jwtStatus)
+        val errorResponse = ApiResponse.error<Any>(jwtStatus, statusMessageResolver.resolve(jwtStatus, request))
 
         response.status = jwtStatus.getHttpStatusCode()
         response.contentType = MediaType.APPLICATION_JSON_VALUE

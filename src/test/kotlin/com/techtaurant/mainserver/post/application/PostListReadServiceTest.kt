@@ -42,7 +42,6 @@ class PostListReadServiceTest {
     private val userProfileImageResolver = UserProfileImageResolver(attachmentService)
     private val postMetadataReadService =
         PostMetadataReadService(
-            postRepository = postRepository,
             attachmentService = attachmentService,
             postThumbnailResolver = PostThumbnailResolver(),
             defaultThumbnailUrl = defaultThumbnailUrl,
@@ -375,44 +374,6 @@ class PostListReadServiceTest {
 
             // then
             assertThat(result.content.single().thumbnailUrl).isEqualTo("https://cdn.example.com/thumbnail.jpg")
-        }
-    }
-
-    @Nested
-    @DisplayName("getPostContents")
-    inner class GetPostContents {
-        @Test
-        @DisplayName("정적 콘텐츠 목록은 동적 필드 계산 없이 콘텐츠 필드만 반환한다")
-        fun getPostContents_returnsStaticContentOnly() {
-            // given
-            val category = createCategory(testUser, name = "Kotlin", path = "backend/kotlin", depth = 2)
-            val post = createPost(testUser, category = category)
-            every {
-                postRepository.findPostsWithConditions(
-                    cursor = null,
-                    size = 21,
-                    period = PostPeriod.ALL,
-                    sortType = PostSortType.LATEST,
-                    visibleToUserId = null,
-                    tagIds = null,
-                    viewerId = null,
-                )
-            } returns listOf(post).withSortValues()
-
-            // when
-            val result = postListReadService.getPostContents(cursor = null, size = 20)
-
-            // then
-            val content = result.content.single()
-            assertThat(content.id).isEqualTo(post.id)
-            assertThat(content.title).isEqualTo(post.title)
-            assertThat(content.authorId).isEqualTo(testUser.id)
-            assertThat(content.category?.id).isEqualTo(category.id)
-            assertThat(result.hasNext).isFalse()
-            verify(exactly = 0) {
-                postReadLogRepository.findByUserIdAndPostIdIn(any(), any())
-                attachmentService.generatePresignedDownloadUrlMapByAttachments(any())
-            }
         }
     }
 

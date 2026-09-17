@@ -44,7 +44,7 @@ class JwtAuthenticationFilter(
             }
 
             if (requiresEndedSessionResponse(request, authentication.status)) {
-                authenticationEntryPoint.writeError(response, authentication.status)
+                authenticationEntryPoint.writeError(request, response, authentication.status)
                 return
             }
         }

@@ -18,12 +18,10 @@ interface CommentReadControllerDocs {
     @Operation(
         summary = "부모 댓글 목록 조회",
         description =
-            "[Deprecated] 이 API는 공개 콘텐츠, 공개 동적 메타데이터, 로그인 사용자 상태가 하나의 응답에 섞여 있습니다. " +
-                "공개 콘텐츠 목록은 GET /open-api/v2/posts/{postId}/comments, 공개 동적 메타데이터는 " +
-                "GET /open-api/comments/metadatas?commentIds=..., 작성자 이름과 프로필 이미지는 " +
-                "GET /open-api/users/profile-images?userIds=..., 로그인 사용자 상태는 " +
-                "GET /api/comments/me/states?commentIds=... API로 대체되었습니다.",
-        deprecated = true,
+            "게시물의 부모 댓글 목록을 커서 기반 페이지네이션으로 조회합니다. " +
+                "댓글 본문과 함께 좋아요수/대댓글수/삭제 여부, 작성자 이름과 프로필 이미지를 한 응답에 담아 반환하며, " +
+                "로그인 사용자에게는 좋아요 상태와 차단 여부가 함께 포함됩니다. " +
+                "차단한 사용자의 댓글은 마스킹되어 반환됩니다.",
     )
     @SwaggerApiResponse(
         responseCode = "200",
@@ -41,12 +39,10 @@ interface CommentReadControllerDocs {
     @Operation(
         summary = "대댓글 목록 조회",
         description =
-            "[Deprecated] 이 API는 공개 콘텐츠, 공개 동적 메타데이터, 로그인 사용자 상태가 하나의 응답에 섞여 있습니다. " +
-                "공개 콘텐츠 목록은 GET /open-api/v2/comments/{commentId}/replies, 공개 동적 메타데이터는 " +
-                "GET /open-api/comments/metadatas?commentIds=..., 작성자 이름과 프로필 이미지는 " +
-                "GET /open-api/users/profile-images?userIds=..., 로그인 사용자 상태는 " +
-                "GET /api/comments/me/states?commentIds=... API로 대체되었습니다.",
-        deprecated = true,
+            "부모 댓글의 대댓글 목록을 커서 기반 페이지네이션으로 조회합니다. " +
+                "댓글 본문과 함께 좋아요수/대댓글수/삭제 여부, 작성자 이름과 프로필 이미지를 한 응답에 담아 반환하며, " +
+                "로그인 사용자에게는 좋아요 상태와 차단 여부가 함께 포함됩니다. " +
+                "차단한 사용자의 댓글은 마스킹되어 반환됩니다.",
     )
     @SwaggerApiResponse(
         responseCode = "200",

@@ -1,7 +1,7 @@
 package com.techtaurant.mainserver.link.infrastructure.out
 
 import com.techtaurant.mainserver.base.IntegrationTest
-import com.techtaurant.mainserver.link.dto.LinkCursorV1
+import com.techtaurant.mainserver.link.dto.LinkCursor
 import com.techtaurant.mainserver.link.entity.Link
 import com.techtaurant.mainserver.link.entity.LinkDailyStats
 import com.techtaurant.mainserver.link.entity.UserLink
@@ -115,7 +115,7 @@ class LinkRepositoryCustomImplTest : IntegrationTest() {
         val oldest = createLink(createdAt = Instant.parse("2026-04-01T00:00:00Z"))
 
         val cursor =
-            LinkCursorV1(
+            LinkCursor(
                 sortType = LinkSortType.PUBLISHED,
                 sortValue = 0,
                 sortInstant = middle.createdAt,
@@ -178,7 +178,7 @@ class LinkRepositoryCustomImplTest : IntegrationTest() {
         createDailyStats(secondPageSecond, daysAgo = 0, likeCount = 1)
 
         val cursor =
-            LinkCursorV1(
+            LinkCursor(
                 sortType = LinkSortType.LIKE,
                 sortValue = 10,
                 sortInstant = firstPageLast.createdAt,

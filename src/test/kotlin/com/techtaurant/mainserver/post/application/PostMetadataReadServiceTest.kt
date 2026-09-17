@@ -5,7 +5,6 @@ import com.techtaurant.mainserver.attachment.entity.Attachment
 import com.techtaurant.mainserver.attachment.enums.AttachmentReferenceType
 import com.techtaurant.mainserver.attachment.enums.AttachmentStatus
 import com.techtaurant.mainserver.post.entity.Post
-import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
@@ -19,12 +18,10 @@ import java.time.Instant
 import java.util.UUID
 
 class PostMetadataReadServiceTest {
-    private val postRepository: PostRepository = mockk()
     private val attachmentService: AttachmentService = mockk()
 
     private val postMetadataReadService =
         PostMetadataReadService(
-            postRepository = postRepository,
             attachmentService = attachmentService,
             postThumbnailResolver = PostThumbnailResolver(),
             defaultThumbnailUrl = "/static/images/post-thumbnail.png",
@@ -47,8 +44,8 @@ class PostMetadataReadServiceTest {
     }
 
     @Test
-    @DisplayName("metadata는 카운트와 presigned URL 데이터를 게시물 ID 순서대로 반환한다")
-    fun getPostMetadata_returnsCountsAndPresignedUrlsInRequestOrder() {
+    @DisplayName("metadata는 카운트와 presigned URL 데이터를 전달한 게시물 순서대로 반환한다")
+    fun getPostMetadataForPosts_returnsCountsAndPresignedUrlsInGivenOrder() {
         // given
         val firstPost = createPost(title = "첫 번째 게시물", viewCount = 10, likeCount = 2, commentCount = 1)
         val secondPost = createPost(title = "두 번째 게시물", viewCount = 20, likeCount = 5, commentCount = 3)
@@ -56,7 +53,6 @@ class PostMetadataReadServiceTest {
         val bodyAttachment = createAttachment(firstPost.id!!, "posts/${firstPost.id}/body.jpg", Instant.ofEpochMilli(2_000L))
         firstPost.thumbnailImage = thumbnailAttachment.id
 
-        every { postRepository.findPublishedPostsByIdIn(listOf(secondPost.id!!, firstPost.id!!)) } returns listOf(firstPost, secondPost)
         every {
             attachmentService.getConfirmedAttachmentsByReferenceIds(
                 listOf(secondPost.id!!, firstPost.id!!),
@@ -72,7 +68,7 @@ class PostMetadataReadServiceTest {
             )
 
         // when
-        val result = postMetadataReadService.getPostMetadata(listOf(secondPost.id!!, firstPost.id!!))
+        val result = postMetadataReadService.getPostMetadataForPosts(listOf(secondPost, firstPost))
 
         // then
         assertThat(result.map { it.postId }).containsExactly(secondPost.id, firstPost.id)

@@ -384,48 +384,8 @@ class CommentReadControllerTest : IntegrationTest() {
     }
 
     @Test
-    @DisplayName("v2 부모 댓글 목록은 공개 콘텐츠만 반환하고 사용자 상태와 동적 메타데이터를 제외한다")
-    fun getParentCommentContents_excludesViewerStateAndMetadataFields() {
-        // given
-        val deletedComment =
-            parentComments[0].apply {
-                content = sha256(content)
-                deletedAt = Instant.now()
-            }
-        commentRepository.save(deletedComment)
-
-        // when
-        val response =
-            RestAssured
-                .given()
-                .queryParam("size", 10)
-                .`when`()
-                .get("/open-api/v2/posts/${testPost.id}/comments")
-                .then()
-                .statusCode(200)
-                .extract()
-                .response()
-
-        // then
-        val firstComment = response.jsonPath().getMap<String, Any?>("data.content[0]")
-        assertThat(firstComment.keys)
-            .contains(
-                "id",
-                "content",
-                "postId",
-                "authorId",
-                "parentId",
-                "depth",
-                "createdAt",
-                "updatedAt",
-            )
-        assertThat(firstComment.keys)
-            .doesNotContain("authorName", "authorProfileImageUrl", "likeCount", "replyCount", "isDeleted", "likeStatus", "isBanned")
-    }
-
-    @Test
-    @DisplayName("v2 부모 댓글 목록은 잘못된 커서가 전달되면 빈 페이지를 반환한다")
-    fun getParentCommentContents_withMalformedCursor_returnsEmptyPage() {
+    @DisplayName("부모 댓글 목록은 잘못된 커서가 전달되면 빈 페이지를 반환한다")
+    fun getParentComments_withMalformedCursor_returnsEmptyPage() {
         // when
         val response =
             RestAssured
@@ -433,7 +393,7 @@ class CommentReadControllerTest : IntegrationTest() {
                 .queryParam("cursor", "not-base64-cursor")
                 .queryParam("size", 10)
                 .`when`()
-                .get("/open-api/v2/posts/${testPost.id}/comments")
+                .get("/open-api/comments/posts/${testPost.id}")
                 .then()
                 .statusCode(200)
                 .extract()
@@ -446,8 +406,8 @@ class CommentReadControllerTest : IntegrationTest() {
     }
 
     @Test
-    @DisplayName("v2 대댓글 목록은 잘못된 커서가 전달되면 빈 페이지를 반환한다")
-    fun getReplyContents_withMalformedCursor_returnsEmptyPage() {
+    @DisplayName("대댓글 목록은 잘못된 커서가 전달되면 빈 페이지를 반환한다")
+    fun getReplies_withMalformedCursor_returnsEmptyPage() {
         // given
         val parentComment = parentComments[0]
         createTestReplies(parentComment)
@@ -459,7 +419,7 @@ class CommentReadControllerTest : IntegrationTest() {
                 .queryParam("cursor", "not-base64-cursor")
                 .queryParam("size", 10)
                 .`when`()
-                .get("/open-api/v2/comments/${parentComment.id}/replies")
+                .get("/open-api/comments/${parentComment.id}/replies")
                 .then()
                 .statusCode(200)
                 .extract()
@@ -469,47 +429,6 @@ class CommentReadControllerTest : IntegrationTest() {
         assertThat(response.jsonPath().getList<Any>("data.content")).isEmpty()
         assertThat(response.jsonPath().getBoolean("data.hasNext")).isFalse()
         assertThat(response.jsonPath().getInt("data.size")).isZero()
-    }
-
-    @Test
-    @DisplayName("댓글 metadatas는 좋아요수, 대댓글수, 삭제 여부를 댓글 ID 순서대로 반환한다")
-    fun getCommentMetadata_returnsLikeCountAndDeletedStateInRequestOrder() {
-        // given
-        val deletedComment =
-            parentComments[0].apply {
-                content = sha256(content)
-                deletedAt = Instant.now()
-            }
-        commentRepository.save(deletedComment)
-        val activeComment = parentComments[2]
-
-        // when
-        val response =
-            RestAssured
-                .given()
-                .queryParam("commentIds", activeComment.id, deletedComment.id)
-                .`when`()
-                .get("/open-api/comments/metadatas")
-                .then()
-                .statusCode(200)
-                .extract()
-                .response()
-
-        // then
-        assertThat(response.jsonPath().getList<String>("data.commentId"))
-            .containsExactly(activeComment.id.toString(), deletedComment.id.toString())
-        assertThat(response.jsonPath().getInt("data.find { it.commentId == '${activeComment.id}' }.likeCount"))
-            .isEqualTo(activeComment.likeCount.toInt())
-        assertThat(response.jsonPath().getInt("data.find { it.commentId == '${activeComment.id}' }.replyCount"))
-            .isEqualTo(activeComment.replyCount.toInt())
-        assertThat(response.jsonPath().getBoolean("data.find { it.commentId == '${activeComment.id}' }.isDeleted"))
-            .isFalse()
-        assertThat(response.jsonPath().getInt("data.find { it.commentId == '${deletedComment.id}' }.likeCount"))
-            .isEqualTo(deletedComment.likeCount.toInt())
-        assertThat(response.jsonPath().getInt("data.find { it.commentId == '${deletedComment.id}' }.replyCount"))
-            .isEqualTo(deletedComment.replyCount.toInt())
-        assertThat(response.jsonPath().getBoolean("data.find { it.commentId == '${deletedComment.id}' }.isDeleted"))
-            .isTrue()
     }
 
     @Test
