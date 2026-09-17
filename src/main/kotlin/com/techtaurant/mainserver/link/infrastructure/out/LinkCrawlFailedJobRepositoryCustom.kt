@@ -6,18 +6,16 @@ import java.time.Instant
 import java.util.UUID
 
 interface LinkCrawlFailedJobRepositoryCustom {
-    fun save(job: LinkCrawlFailedJob): LinkCrawlFailedJob
-
     fun findById(id: UUID): java.util.Optional<LinkCrawlFailedJob>
 
-    fun findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId: UUID): List<LinkCrawlFailedJob>
+    fun findAllByLastRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(runId: UUID): List<LinkCrawlFailedJob>
 
-    fun findAllByRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(
+    fun findAllByLastRunIdAndResolvedAtIsNullOrderByCreatedAtAsc(
         runId: UUID,
         pageable: Pageable,
     ): List<LinkCrawlFailedJob>
 
-    fun countByRunIdAndResolvedAtIsNull(runId: UUID): Long
+    fun countByLastRunIdAndResolvedAtIsNull(runId: UUID): Long
 
     fun findRetryableAutomaticJobs(
         maxFailureCount: Int,
@@ -25,12 +23,37 @@ interface LinkCrawlFailedJobRepositoryCustom {
         pageable: Pageable,
     ): List<LinkCrawlFailedJob>
 
-    fun existsByRunIdAndResolvedAtIsNull(runId: UUID): Boolean
+    fun findAllByBatchIdFilteredByResolution(
+        batchId: UUID,
+        resolved: Boolean?,
+    ): List<LinkCrawlFailedJob>
 
-    fun findByRunIdAndArticleUrl(
-        runId: UUID,
+    fun findByBatchIdAndArticleUrl(
+        batchId: UUID,
         articleUrl: String,
     ): LinkCrawlFailedJob?
 
     fun findRunIdsWithUnresolvedJobs(runIds: Collection<UUID>): Set<UUID>
+
+    fun recordFailure(
+        batchId: UUID,
+        articleUrl: String,
+        lastRunId: UUID,
+        errorStatusCode: Int,
+        errorMessage: String,
+        failedAt: Instant,
+    )
+
+    fun markResolvedIfUnresolved(
+        batchId: UUID,
+        articleUrl: String,
+        resolvedAt: Instant,
+    ): Boolean
+
+    fun recordRetryFailureIfUnresolved(
+        failedJobId: UUID,
+        errorStatusCode: Int,
+        errorMessage: String,
+        failedAt: Instant,
+    )
 }

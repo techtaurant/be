@@ -11,6 +11,7 @@ import com.techtaurant.mainserver.link.dto.LinkCrawlBatchResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlFailedJobRetryResponse
 import com.techtaurant.mainserver.link.dto.LinkCrawlRunResponse
+import com.techtaurant.mainserver.link.dto.RegisterFailedJobLinkRequest
 import com.techtaurant.mainserver.link.enums.LinkStatus
 import com.techtaurant.mainserver.security.jwt.JwtStatus
 import com.techtaurant.mainserver.user.enums.UserStatus
@@ -154,8 +155,45 @@ interface AdminLinkCrawlBatchControllerDocs {
     ): ApiResponse<List<LinkCrawlRunResponse>>
 
     @Operation(
+        summary = "배치의 실패 잡 조회",
+        description =
+            "관리자가 배치 단위로 실패 잡을 조회합니다. 실패 잡은 배치와 URL 단위로 하나씩 존재하므로 같은 URL이 여러 번 실패해도 한 건으로 묶입니다. " +
+                "resolved를 생략하면 전체, false면 미해소, true면 해소된 실패 잡만 반환합니다",
+    )
+    @ApiErrorCodeResponses(
+        [
+            ApiErrorCodeResponse(JwtStatus::class, ["AUTHENTICATION_REQUIRED", "ACCESS_DENIED"]),
+            ApiErrorCodeResponse(LinkStatus::class, ["LINK_CRAWL_BATCH_NOT_FOUND"]),
+            ApiErrorCodeResponse(DefaultStatus::class, ["UNKNOWN_EXCEPTION"]),
+        ],
+    )
+    fun getBatchFailedJobs(
+        @Parameter(description = "배치 ID") batchId: UUID,
+        @Parameter(description = "해소 여부 필터. 생략하면 전체를 반환합니다") resolved: Boolean?,
+    ): ApiResponse<List<LinkCrawlFailedJobResponse>>
+
+    @Operation(
+        summary = "실패 잡 링크 직접 등록",
+        description =
+            "크롤러가 수집하지 못한 실패 잡의 링크를 관리자가 아티클 내용을 직접 입력해 등록하고, 그 실패 잡을 해소합니다. " +
+                "링크는 실패 잡의 아티클 URL로 등록되고, 배치의 태그가 붙으며, 관리자가 아니라 배치를 소유한 회사에 연결됩니다. " +
+                "이미 같은 URL의 링크가 있으면 입력한 내용으로 갱신합니다. 등록 후 마지막 실행 이력의 미해소 실패 잡이 없으면 실행 이력 상태가 RESOLVED로 전환됩니다",
+    )
+    @ApiErrorCodeResponses(
+        [
+            ApiErrorCodeResponse(JwtStatus::class, ["AUTHENTICATION_REQUIRED", "ACCESS_DENIED"]),
+            ApiErrorCodeResponse(LinkStatus::class, ["LINK_CRAWL_FAILED_JOB_NOT_FOUND", "LINK_CRAWL_FAILED_JOB_ALREADY_RESOLVED"]),
+            ApiErrorCodeResponse(DefaultStatus::class, ["UNKNOWN_EXCEPTION"]),
+        ],
+    )
+    fun registerFailedJobLink(
+        @Parameter(description = "실패 잡 ID") failedJobId: UUID,
+        request: RegisterFailedJobLinkRequest,
+    ): ApiResponse<Unit>
+
+    @Operation(
         summary = "실행 이력의 미해소 실패 잡 조회",
-        description = "관리자가 특정 실행 이력에서 아직 해소되지 않은 실패 잡을 조회합니다",
+        description = "관리자가 특정 실행 이력에서 아직 해소되지 않은 실패 잡을 조회합니다. 실패 잡은 마지막으로 실패한 실행을 기준으로 묶입니다",
     )
     @ApiErrorCodeResponses(
         [

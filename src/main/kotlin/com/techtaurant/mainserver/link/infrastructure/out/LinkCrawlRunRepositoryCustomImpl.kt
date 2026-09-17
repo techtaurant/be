@@ -72,6 +72,27 @@ class LinkCrawlRunRepositoryCustomImpl(
             .fetch()
             .map { it.toLinkCrawlRun() }
 
+    override fun findAllByIdIn(ids: Collection<UUID>): List<LinkCrawlRun> =
+        if (ids.isEmpty()) {
+            emptyList()
+        } else {
+            dsl.selectFrom(LINK_CRAWL_RUNS)
+                .where(LINK_CRAWL_RUNS.ID.`in`(ids))
+                .fetch()
+                .map { it.toLinkCrawlRun() }
+        }
+
+    /**
+     * 다른 실행의 status만 바꾸므로 전체 행 저장(save)을 쓰지 않는다. save는 실행이 들고 있는 배치까지 함께 저장한다.
+     */
+    override fun markCarriedOver(runId: UUID) {
+        dsl.update(LINK_CRAWL_RUNS)
+            .set(LINK_CRAWL_RUNS.STATUS, LinkCrawlRunStatus.CARRIED_OVER.name)
+            .set(LINK_CRAWL_RUNS.UPDATED_AT_UTC, Instant.now().atOffset(ZoneOffset.UTC))
+            .where(LINK_CRAWL_RUNS.ID.eq(runId))
+            .execute()
+    }
+
     private fun LinkCrawlRunsRecord.toLinkCrawlRun(batch: LinkCrawlBatch = batchReference(requireNotNull(batchId))): LinkCrawlRun =
         LinkCrawlRun(
             batch = batch,

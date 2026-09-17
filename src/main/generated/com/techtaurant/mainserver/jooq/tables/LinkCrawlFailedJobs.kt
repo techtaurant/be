@@ -5,12 +5,14 @@ package com.techtaurant.mainserver.jooq.tables
 
 
 import com.techtaurant.mainserver.jooq.Public
+import com.techtaurant.mainserver.jooq.indexes.IDX_LINK_CRAWL_FAILED_JOBS_BATCH_ID
+import com.techtaurant.mainserver.jooq.indexes.IDX_LINK_CRAWL_FAILED_JOBS_BATCH_UNRESOLVED
 import com.techtaurant.mainserver.jooq.indexes.IDX_LINK_CRAWL_FAILED_JOBS_CREATED_AT
-import com.techtaurant.mainserver.jooq.indexes.IDX_LINK_CRAWL_FAILED_JOBS_RUN_ID
-import com.techtaurant.mainserver.jooq.indexes.IDX_LINK_CRAWL_FAILED_JOBS_UNRESOLVED
+import com.techtaurant.mainserver.jooq.indexes.IDX_LINK_CRAWL_FAILED_JOBS_LAST_RUN_ID
 import com.techtaurant.mainserver.jooq.keys.LINK_CRAWL_FAILED_JOBS_PKEY
-import com.techtaurant.mainserver.jooq.keys.LINK_CRAWL_FAILED_JOBS__LINK_CRAWL_FAILED_JOBS_RUN_ID_FKEY
-import com.techtaurant.mainserver.jooq.keys.UK_LINK_CRAWL_FAILED_JOBS_RUN_ARTICLE_URL
+import com.techtaurant.mainserver.jooq.keys.LINK_CRAWL_FAILED_JOBS__FK_LINK_CRAWL_FAILED_JOBS_BATCH
+import com.techtaurant.mainserver.jooq.keys.LINK_CRAWL_FAILED_JOBS__FK_LINK_CRAWL_FAILED_JOBS_LAST_RUN
+import com.techtaurant.mainserver.jooq.keys.UK_LINK_CRAWL_FAILED_JOBS_BATCH_ARTICLE_URL
 import com.techtaurant.mainserver.jooq.tables.records.LinkCrawlFailedJobsRecord
 
 import java.time.OffsetDateTime
@@ -84,9 +86,9 @@ open class LinkCrawlFailedJobs(
     val ID: TableField<LinkCrawlFailedJobsRecord, UUID?> = createField(DSL.name("id"), SQLDataType.UUID.nullable(false), this, "")
 
     /**
-     * The column <code>public.link_crawl_failed_jobs.run_id</code>.
+     * The column <code>public.link_crawl_failed_jobs.last_run_id</code>.
      */
-    val RUN_ID: TableField<LinkCrawlFailedJobsRecord, UUID?> = createField(DSL.name("run_id"), SQLDataType.UUID.nullable(false), this, "")
+    val LAST_RUN_ID: TableField<LinkCrawlFailedJobsRecord, UUID?> = createField(DSL.name("last_run_id"), SQLDataType.UUID, this, "")
 
     /**
      * The column <code>public.link_crawl_failed_jobs.article_url</code>.
@@ -128,6 +130,11 @@ open class LinkCrawlFailedJobs(
      */
     val UPDATED_AT_UTC: TableField<LinkCrawlFailedJobsRecord, OffsetDateTime?> = createField(DSL.name("updated_at_utc"), SQLDataType.TIMESTAMPWITHTIMEZONE(6).nullable(false), this, "")
 
+    /**
+     * The column <code>public.link_crawl_failed_jobs.batch_id</code>.
+     */
+    val BATCH_ID: TableField<LinkCrawlFailedJobsRecord, UUID?> = createField(DSL.name("batch_id"), SQLDataType.UUID.nullable(false), this, "")
+
     private constructor(alias: Name, aliased: Table<LinkCrawlFailedJobsRecord>?): this(alias, null, null, null, aliased, null, null)
     private constructor(alias: Name, aliased: Table<LinkCrawlFailedJobsRecord>?, parameters: Array<Field<*>?>?): this(alias, null, null, null, aliased, parameters, null)
     private constructor(alias: Name, aliased: Table<LinkCrawlFailedJobsRecord>?, where: Condition?): this(alias, null, null, null, aliased, null, where)
@@ -149,10 +156,10 @@ open class LinkCrawlFailedJobs(
      */
     constructor(): this(DSL.name("link_crawl_failed_jobs"), null)
     override fun getSchema(): Schema? = if (aliased()) null else Public.PUBLIC
-    override fun getIndexes(): List<Index> = listOf(IDX_LINK_CRAWL_FAILED_JOBS_CREATED_AT, IDX_LINK_CRAWL_FAILED_JOBS_RUN_ID, IDX_LINK_CRAWL_FAILED_JOBS_UNRESOLVED)
+    override fun getIndexes(): List<Index> = listOf(IDX_LINK_CRAWL_FAILED_JOBS_BATCH_ID, IDX_LINK_CRAWL_FAILED_JOBS_BATCH_UNRESOLVED, IDX_LINK_CRAWL_FAILED_JOBS_CREATED_AT, IDX_LINK_CRAWL_FAILED_JOBS_LAST_RUN_ID)
     override fun getPrimaryKey(): UniqueKey<LinkCrawlFailedJobsRecord> = LINK_CRAWL_FAILED_JOBS_PKEY
-    override fun getUniqueKeys(): List<UniqueKey<LinkCrawlFailedJobsRecord>> = listOf(UK_LINK_CRAWL_FAILED_JOBS_RUN_ARTICLE_URL)
-    override fun getReferences(): List<ForeignKey<LinkCrawlFailedJobsRecord, *>> = listOf(LINK_CRAWL_FAILED_JOBS__LINK_CRAWL_FAILED_JOBS_RUN_ID_FKEY)
+    override fun getUniqueKeys(): List<UniqueKey<LinkCrawlFailedJobsRecord>> = listOf(UK_LINK_CRAWL_FAILED_JOBS_BATCH_ARTICLE_URL)
+    override fun getReferences(): List<ForeignKey<LinkCrawlFailedJobsRecord, *>> = listOf(LINK_CRAWL_FAILED_JOBS__FK_LINK_CRAWL_FAILED_JOBS_BATCH, LINK_CRAWL_FAILED_JOBS__FK_LINK_CRAWL_FAILED_JOBS_LAST_RUN)
     override fun `as`(alias: String): LinkCrawlFailedJobs = LinkCrawlFailedJobs(DSL.name(alias), this)
     override fun `as`(alias: Name): LinkCrawlFailedJobs = LinkCrawlFailedJobs(alias, this)
     override fun `as`(alias: Table<*>): LinkCrawlFailedJobs = LinkCrawlFailedJobs(alias.qualifiedName, this)

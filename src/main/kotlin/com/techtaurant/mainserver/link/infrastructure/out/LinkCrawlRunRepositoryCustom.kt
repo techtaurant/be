@@ -11,4 +11,8 @@ interface LinkCrawlRunRepositoryCustom {
     fun existsById(id: UUID): Boolean
 
     fun findAllByBatchIdOrderByStartedAtDesc(batchId: UUID): List<LinkCrawlRun>
+
+    fun findAllByIdIn(ids: Collection<UUID>): List<LinkCrawlRun>
+
+    fun markCarriedOver(runId: UUID)
 }
