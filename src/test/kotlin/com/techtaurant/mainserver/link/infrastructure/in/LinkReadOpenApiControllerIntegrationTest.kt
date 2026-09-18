@@ -2,7 +2,9 @@ package com.techtaurant.mainserver.link.infrastructure.`in`
 
 import com.techtaurant.mainserver.base.IntegrationTest
 import com.techtaurant.mainserver.link.entity.Link
+import com.techtaurant.mainserver.link.entity.LinkDailyStats
 import com.techtaurant.mainserver.link.entity.UserLink
+import com.techtaurant.mainserver.link.infrastructure.out.LinkDailyStatsRepository
 import com.techtaurant.mainserver.link.infrastructure.out.LinkRepository
 import com.techtaurant.mainserver.link.infrastructure.out.UserLinkRepository
 import com.techtaurant.mainserver.post.entity.Tag
@@ -27,6 +29,9 @@ import org.springframework.http.HttpStatus
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @DisplayName("LinkReadOpenApiController 통합 테스트")
@@ -42,6 +47,9 @@ class LinkReadOpenApiControllerIntegrationTest : IntegrationTest() {
 
     @Autowired
     private lateinit var tagRepository: TagRepository
+
+    @Autowired
+    private lateinit var linkDailyStatsRepository: LinkDailyStatsRepository
 
     @Autowired
     private lateinit var transactionManager: PlatformTransactionManager
@@ -77,8 +85,8 @@ class LinkReadOpenApiControllerIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    @DisplayName("공개 링크 목록은 정적 링크 필드만 ApiResponse와 CursorPageResponse 형태로 반환한다")
-    fun getLinkContents_returnsStaticFieldsOnly() {
+    @DisplayName("공개 링크 목록은 정적 링크 필드와 누적 통계를 ApiResponse와 CursorPageResponse 형태로 반환한다")
+    fun getLinkContents_returnsStaticFieldsWithStats() {
         val linkTag = tagRepository.save(Tag(name = "Spring"))
         val anotherLinkTag = tagRepository.save(Tag(name = "Kotlin"))
         val createdAt = Instant.parse("2026-04-25T10:15:30Z")
@@ -114,6 +122,9 @@ class LinkReadOpenApiControllerIntegrationTest : IntegrationTest() {
                     "tags",
                     "createdAt",
                     "updatedAt",
+                    "viewCount",
+                    "likeCount",
+                    "saveCount",
                 ),
             )
             .body("data.content[0].id", equalTo(link.id.toString()))
@@ -124,6 +135,9 @@ class LinkReadOpenApiControllerIntegrationTest : IntegrationTest() {
             .body("data.content[0].tags", containsInAnyOrder("Kotlin", "Spring"))
             .body("data.content[0].createdAt", equalTo("2026-04-25T10:15:30Z"))
             .body("data.content[0].updatedAt", notNullValue())
+            .body("data.content[0].viewCount", equalTo(0))
+            .body("data.content[0].likeCount", equalTo(0))
+            .body("data.content[0].saveCount", equalTo(0))
             .body("data.content[0].isSaved", nullValue())
             .body("data.content[0].isRead", nullValue())
             .body("data.nextCursor", nullValue())
@@ -364,7 +378,7 @@ class LinkReadOpenApiControllerIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.NOT_FOUND.value())
             .body("status", equalTo(1010))
-            .body("message", equalTo("회사를 찾을 수 없습니다"))
+            .body("message", equalTo("Company not found"))
     }
 
     @Test
@@ -408,12 +422,12 @@ class LinkReadOpenApiControllerIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.BAD_REQUEST.value())
             .body("status", equalTo(6005))
-            .body("message", equalTo("유효한 링크 커서가 아닙니다"))
+            .body("message", equalTo("Invalid link cursor"))
     }
 
     @Test
-    @DisplayName("공개 링크 상세 조회는 정적 링크 필드를 반환한다")
-    fun getLinkContentDetail_returnsStaticFieldsOnly() {
+    @DisplayName("공개 링크 상세 조회는 정적 링크 필드와 누적 통계를 반환한다")
+    fun getLinkContentDetail_returnsStaticFieldsWithStats() {
         val linkTag = tagRepository.save(Tag(name = "Architecture"))
         val anotherLinkTag = tagRepository.save(Tag(name = "Kotlin"))
         val createdAt = Instant.parse("2026-04-26T11:20:30Z")
@@ -427,6 +441,7 @@ class LinkReadOpenApiControllerIntegrationTest : IntegrationTest() {
                 tags = mutableSetOf(linkTag, anotherLinkTag),
             )
         userLinkRepository.saveAndFlush(UserLink(user = secondCompany, link = link))
+        createDailyStats(link, daysAgo = 1, viewCount = 12, likeCount = 4, saveCount = 2)
 
         given()
             .`when`()
@@ -445,6 +460,9 @@ class LinkReadOpenApiControllerIntegrationTest : IntegrationTest() {
                     "tags",
                     "createdAt",
                     "updatedAt",
+                    "viewCount",
+                    "likeCount",
+                    "saveCount",
                 ),
             )
             .body("data.id", equalTo(link.id.toString()))
@@ -455,6 +473,9 @@ class LinkReadOpenApiControllerIntegrationTest : IntegrationTest() {
             .body("data.tags", containsInAnyOrder("Architecture", "Kotlin"))
             .body("data.createdAt", equalTo("2026-04-26T11:20:30Z"))
             .body("data.updatedAt", notNullValue())
+            .body("data.viewCount", equalTo(12))
+            .body("data.likeCount", equalTo(4))
+            .body("data.saveCount", equalTo(2))
             .body("data.isSaved", nullValue())
             .body("data.isRead", nullValue())
     }
@@ -469,7 +490,114 @@ class LinkReadOpenApiControllerIntegrationTest : IntegrationTest() {
             .statusCode(HttpStatus.NOT_FOUND.value())
             .body("status", equalTo(6001))
             .body("data", nullValue())
-            .body("message", equalTo("링크를 찾을 수 없습니다"))
+            .body("message", equalTo("Link not found"))
+    }
+
+    @Test
+    @DisplayName("공개 링크 목록은 PUBLISHED 정렬에서 period 기준 생성일 필터를 적용한다")
+    fun getLinkContents_published_filtersByPeriod() {
+        val recent =
+            saveLink(
+                title = "Recent",
+                url = "https://example.com/${UUID.randomUUID()}",
+                sourceCompanyUser = firstCompany,
+                createdAtMillis = 1_000,
+                createdAt = Instant.now().minus(1, ChronoUnit.DAYS),
+            )
+        saveLink(
+            title = "Stale",
+            url = "https://example.com/${UUID.randomUUID()}",
+            sourceCompanyUser = firstCompany,
+            createdAtMillis = 2_000,
+            createdAt = Instant.now().minus(8, ChronoUnit.DAYS),
+        )
+
+        given()
+            .queryParam("sort", "PUBLISHED")
+            .queryParam("period", "WEEK")
+            .queryParam("size", 10)
+            .`when`()
+            .get("/open-api/links")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data.content", hasSize<Any>(1))
+            .body("data.content[0].id", equalTo(recent.id.toString()))
+    }
+
+    @Test
+    @DisplayName("공개 링크 목록은 LIKE 정렬에서 기간 내 일별 좋아요 집계 합 기준으로 정렬한다")
+    fun getLinkContents_like_ranksByPeriodDailyStats() {
+        val mostLiked = saveLinkForRanking("Most Liked", 1_000)
+        val lessLiked = saveLinkForRanking("Less Liked", 2_000)
+        val notLikedInPeriod = saveLinkForRanking("Stale", 3_000)
+        createDailyStats(mostLiked, daysAgo = 0, likeCount = 5)
+        createDailyStats(lessLiked, daysAgo = 2, likeCount = 2)
+        createDailyStats(notLikedInPeriod, daysAgo = 40, likeCount = 99)
+
+        given()
+            .queryParam("sort", "LIKE")
+            .queryParam("period", "MONTH")
+            .queryParam("size", 10)
+            .`when`()
+            .get("/open-api/links")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data.content", hasSize<Any>(2))
+            .body("data.content[0].id", equalTo(mostLiked.id.toString()))
+            .body("data.content[0].likeCount", equalTo(5))
+            .body("data.content[1].id", equalTo(lessLiked.id.toString()))
+            .body("data.content[1].likeCount", equalTo(2))
+    }
+
+    @Test
+    @DisplayName("공개 링크 목록은 SAVE 정렬에서 기간 내 일별 저장 집계 합 기준으로 정렬한다")
+    fun getLinkContents_save_ranksByPeriodDailyStats() {
+        val mostSaved = saveLinkForRanking("Most Saved", 1_000)
+        val lessSaved = saveLinkForRanking("Less Saved", 2_000)
+        createDailyStats(mostSaved, daysAgo = 1, saveCount = 7)
+        createDailyStats(lessSaved, daysAgo = 2, saveCount = 3)
+
+        given()
+            .queryParam("sort", "SAVE")
+            .queryParam("period", "MONTH")
+            .queryParam("size", 10)
+            .`when`()
+            .get("/open-api/links")
+            .then()
+            .statusCode(HttpStatus.OK.value())
+            .body("data.content", hasSize<Any>(2))
+            .body("data.content[0].id", equalTo(mostSaved.id.toString()))
+            .body("data.content[0].saveCount", equalTo(7))
+            .body("data.content[1].id", equalTo(lessSaved.id.toString()))
+            .body("data.content[1].saveCount", equalTo(3))
+    }
+
+    @Test
+    @DisplayName("공개 링크 커서는 발급된 정렬과 다른 정렬로 요청하면 INVALID_LINK_CURSOR를 반환한다")
+    fun getLinkContents_rejectsCursorFromDifferentSort() {
+        saveLinkForRanking("First", 1_000, createdAt = Instant.parse("2026-04-02T00:00:00Z"))
+        saveLinkForRanking("Second", 2_000, createdAt = Instant.parse("2026-04-01T00:00:00Z"))
+
+        val publishedCursor =
+            given()
+                .queryParam("size", 1)
+                .`when`()
+                .get("/open-api/links")
+                .then()
+                .statusCode(HttpStatus.OK.value())
+                .body("data.nextCursor", notNullValue())
+                .extract()
+                .path<String>("data.nextCursor")
+
+        given()
+            .queryParam("sort", "LIKE")
+            .queryParam("cursor", publishedCursor)
+            .`when`()
+            .get("/open-api/links")
+            .then()
+            .statusCode(HttpStatus.BAD_REQUEST.value())
+            .body("status", equalTo(6005))
+            .body("message", equalTo("Invalid link cursor"))
     }
 
     private fun saveLink(
@@ -504,5 +632,39 @@ class LinkReadOpenApiControllerIntegrationTest : IntegrationTest() {
             link.updatedAt = createdAt
             linkRepository.saveAndFlush(link)
         } ?: throw IllegalStateException("링크 저장에 실패했습니다")
+    }
+
+    private fun saveLinkForRanking(
+        title: String,
+        createdAtMillis: Long,
+        createdAt: Instant = Instant.ofEpochMilli(createdAtMillis),
+    ): Link =
+        saveLink(
+            title = title,
+            url = "https://example.com/${UUID.randomUUID()}",
+            sourceCompanyUser = firstCompany,
+            createdAtMillis = createdAtMillis,
+            createdAt = createdAt,
+        )
+
+    private fun createDailyStats(
+        link: Link,
+        daysAgo: Long,
+        viewCount: Long = 0,
+        likeCount: Long = 0,
+        saveCount: Long = 0,
+    ) {
+        TransactionTemplate(transactionManager).execute {
+            val managedLink = linkRepository.findById(link.id!!).orElseThrow()
+            linkDailyStatsRepository.saveAndFlush(
+                LinkDailyStats(
+                    link = managedLink,
+                    statDate = LocalDate.now(ZoneOffset.UTC).minusDays(daysAgo),
+                    viewCount = viewCount,
+                    likeCount = likeCount,
+                    saveCount = saveCount,
+                ),
+            )
+        }
     }
 }

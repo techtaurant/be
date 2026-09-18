@@ -18,7 +18,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerApiResponse
 
 @Tag(name = "링크", description = "링크 API")
 interface CompanyLinkReadOpenApiControllerDocs {
-    @Operation(summary = "회사 링크 목록 조회", description = "회사가 수집한 링크 목록을 커서 기반으로 조회합니다")
+    @Operation(
+        summary = "회사 링크 목록 조회",
+        description =
+            "회사가 수집한 링크 목록을 생성일 최신순 커서 기반으로 조회합니다. " +
+                "누적 통계(조회수/좋아요수/저장수 합계)를 함께 반환하며, 통계 이력이 없는 링크는 0으로 채워집니다.",
+    )
     @SwaggerApiResponse(responseCode = "200", description = "회사 링크 목록 조회 성공")
     @ApiCommonBadRequestAndUnknown
     @ApiErrorCodeResponses(

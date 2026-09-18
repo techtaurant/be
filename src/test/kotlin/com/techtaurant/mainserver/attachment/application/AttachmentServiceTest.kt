@@ -15,7 +15,6 @@ import io.mockk.runs
 import io.mockk.slot
 import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
-import org.assertj.core.api.Assertions.assertThatCode
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -24,6 +23,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.transaction.support.TransactionSynchronizationManager
+import java.time.Instant
 import java.util.UUID
 
 class AttachmentServiceTest {
@@ -40,7 +40,7 @@ class AttachmentServiceTest {
 
     private val postId = UUID.randomUUID()
 
-    // 파괴적 S3 삭제는 커밋 이후로 미뤄지므로, 단위 테스트도 트랜잭션 동기화를 활성화해야 콜백이 등록된다.
+    // 파괴적 S3 삭제는 커밋 직전으로 미뤄지므로, 단위 테스트도 트랜잭션 동기화를 활성화해야 콜백이 등록된다.
     @BeforeEach
     fun initTransactionSynchronization() {
         TransactionSynchronizationManager.initSynchronization()
@@ -51,9 +51,9 @@ class AttachmentServiceTest {
         TransactionSynchronizationManager.clearSynchronization()
     }
 
-    /** 등록된 커밋 후 콜백을 실행해 커밋 시점을 재현한다. */
-    private fun triggerAfterCommit() {
-        TransactionSynchronizationManager.getSynchronizations().forEach { it.afterCommit() }
+    /** 등록된 커밋 직전 콜백을 실행해 커밋 시점을 재현한다. */
+    private fun triggerBeforeCommit() {
+        TransactionSynchronizationManager.getSynchronizations().forEach { it.beforeCommit(false) }
     }
 
     private fun makeAttachment(
@@ -82,14 +82,15 @@ class AttachmentServiceTest {
                 referenceType = AttachmentReferenceType.POST,
             )
 
+        private val attachmentSlot = slot<Attachment>()
+
         @BeforeEach
         fun setUp() {
-            val attachmentSlot = slot<Attachment>()
             every { attachmentRepository.save(capture(attachmentSlot)) } answers {
                 attachmentSlot.captured.apply { id = UUID.randomUUID() }
             }
             every {
-                s3StorageService.generatePresignedUploadUrl(any(), any(), any())
+                s3StorageService.generatePresignedUploadUrl(any(), any(), any(), any())
             } returns "https://s3.example.com/presigned"
         }
 
@@ -120,7 +121,7 @@ class AttachmentServiceTest {
         }
 
         @Test
-        @DisplayName("Presigned URL 생성 시 요청의 contentType과 만료 시간을 전달한다")
+        @DisplayName("Presigned URL 생성 시 요청의 contentType, 파일 크기, 만료 시간을 전달한다")
         fun issuePresignedUploadUrl_validRequest_passesCorrectParamsToS3() {
             // given & when
             attachmentService.issuePresignedUploadUrl(request)
@@ -130,7 +131,87 @@ class AttachmentServiceTest {
                 s3StorageService.generatePresignedUploadUrl(
                     objectKey = match { it.startsWith("tmp/") },
                     contentType = "image/jpeg",
+                    fileSize = 1024L,
                     expireMinutes = presignedUrlExpireMinutes,
+                )
+            }
+        }
+
+        @Test
+        @DisplayName("허용 목록에 없는 형식이면 400 예외를 던지고 Attachment를 저장하지 않는다")
+        fun issuePresignedUploadUrl_disallowedContentType_throwsBadRequest() {
+            // given
+            val pdfRequest = request.copy(fileName = "doc.pdf", contentType = "application/pdf")
+
+            // when & then
+            val exception = assertThrows<ApiException> { attachmentService.issuePresignedUploadUrl(pdfRequest) }
+
+            assertThat(exception.status).isEqualTo(DefaultStatus.BAD_REQUEST)
+            verify(exactly = 0) { attachmentRepository.save(any()) }
+        }
+
+        @Test
+        @DisplayName("SVG는 이미지여도 허용하지 않는다")
+        fun issuePresignedUploadUrl_svgContentType_throwsBadRequest() {
+            // given
+            val svgRequest = request.copy(fileName = "icon.svg", contentType = "image/svg+xml")
+
+            // when & then
+            val exception = assertThrows<ApiException> { attachmentService.issuePresignedUploadUrl(svgRequest) }
+
+            assertThat(exception.status).isEqualTo(DefaultStatus.BAD_REQUEST)
+        }
+
+        @Test
+        @DisplayName("본문에 표시되지 않는 비디오는 허용하지 않는다")
+        fun issuePresignedUploadUrl_videoContentType_throwsBadRequest() {
+            // given
+            val videoRequest = request.copy(fileName = "clip.mp4", contentType = "video/mp4")
+
+            // when & then
+            val exception = assertThrows<ApiException> { attachmentService.issuePresignedUploadUrl(videoRequest) }
+
+            assertThat(exception.status).isEqualTo(DefaultStatus.BAD_REQUEST)
+        }
+
+        @Test
+        @DisplayName("MIME 타입은 대소문자를 구분하지 않으며, 정규화한 값으로 저장하고 서명한다")
+        fun issuePresignedUploadUrl_upperCaseContentType_storesAndSignsNormalizedContentType() {
+            // given
+            val upperCaseRequest = request.copy(fileName = "photo.png", contentType = "IMAGE/PNG")
+
+            // when
+            attachmentService.issuePresignedUploadUrl(upperCaseRequest)
+
+            // then
+            assertThat(attachmentSlot.captured.contentType).isEqualTo("image/png")
+            verify {
+                s3StorageService.generatePresignedUploadUrl(
+                    objectKey = any(),
+                    contentType = "image/png",
+                    fileSize = any(),
+                    expireMinutes = any(),
+                )
+            }
+        }
+
+        @Test
+        @DisplayName("MIME 타입 앞뒤 공백은 제거한 값으로 저장하고 서명한다")
+        fun issuePresignedUploadUrl_paddedContentType_storesAndSignsTrimmedContentType() {
+            // given
+            val paddedRequest = request.copy(fileName = "photo.png", contentType = " image/png\r\n")
+
+            // when
+            attachmentService.issuePresignedUploadUrl(paddedRequest)
+
+            // then
+            assertThat(attachmentSlot.captured.contentType).isEqualTo("image/png")
+            verify {
+                s3StorageService.generatePresignedUploadUrl(
+                    objectKey = any(),
+                    contentType = "image/png",
+                    fileSize = any(),
+                    expireMinutes = any(),
                 )
             }
         }
@@ -225,6 +306,30 @@ class AttachmentServiceTest {
                         referenceId = postId,
                         referenceType = AttachmentReferenceType.POST,
                         attachmentIds = listOf(foreignAttachment.id!!),
+                    )
+                }
+
+            assertThat(exception.status).isEqualTo(DefaultStatus.BAD_REQUEST)
+            assertThat(exception).hasMessage("다른 대상에 연결된 첨부파일은 사용할 수 없습니다")
+            verify(exactly = 0) { s3StorageService.copyObject(any(), any()) }
+        }
+
+        @Test
+        @DisplayName("다른 게시물이 claim한 TMP Attachment를 요청하면 400 예외를 던진다")
+        fun confirmAttachmentsByIds_tmpAttachmentClaimedByOtherPost_throwsBadRequest() {
+            // given
+            val otherPostId = UUID.randomUUID()
+            val claimedTmpAttachment =
+                makeAttachment("tmp/${UUID.randomUUID()}/photo.jpg", AttachmentStatus.TMP, referenceId = otherPostId)
+            every { attachmentRepository.findAllById(listOf(claimedTmpAttachment.id!!)) } returns listOf(claimedTmpAttachment)
+
+            // when & then
+            val exception =
+                assertThrows<ApiException> {
+                    attachmentService.confirmAttachmentsByIds(
+                        referenceId = postId,
+                        referenceType = AttachmentReferenceType.POST,
+                        attachmentIds = listOf(claimedTmpAttachment.id!!),
                     )
                 }
 
@@ -414,6 +519,181 @@ class AttachmentServiceTest {
     }
 
     @Nested
+    @DisplayName("claimTmpAttachments")
+    inner class ClaimTmpAttachments {
+        @BeforeEach
+        fun setUp() {
+            every { attachmentRepository.findAllByIdForUpdate(any()) } answers {
+                attachmentRepository.findAllById(firstArg<List<UUID>>())
+            }
+            every { attachmentRepository.updateReferenceIdByIds(any(), any()) } just runs
+        }
+
+        @Test
+        @DisplayName("TMP 첨부의 소유 대상만 한 번의 UPDATE로 기록하고 상태와 tmp 경로는 그대로 둔다")
+        fun claimTmpAttachments_unclaimedTmpAttachment_recordsReferenceWithoutConfirming() {
+            // given
+            val tmpKey = "tmp/${UUID.randomUUID()}/photo.jpg"
+            val tmpAttachment = makeAttachment(tmpKey, AttachmentStatus.TMP, referenceId = null)
+            every { attachmentRepository.findAllById(listOf(tmpAttachment.id!!)) } returns listOf(tmpAttachment)
+
+            // when
+            attachmentService.claimTmpAttachments(
+                referenceId = postId,
+                referenceType = AttachmentReferenceType.POST,
+                attachmentIds = listOf(tmpAttachment.id!!),
+            )
+
+            // then
+            verify(exactly = 1) { attachmentRepository.updateReferenceIdByIds(postId, listOf(tmpAttachment.id!!)) }
+            assertThat(tmpAttachment.status).isEqualTo(AttachmentStatus.TMP)
+            assertThat(tmpAttachment.objectKey).isEqualTo(tmpKey)
+            verify(exactly = 0) { s3StorageService.copyObject(any(), any()) }
+        }
+
+        @Test
+        @DisplayName("빈 목록이면 조회조차 하지 않는다")
+        fun claimTmpAttachments_emptyIds_skipsLookup() {
+            // when
+            attachmentService.claimTmpAttachments(
+                referenceId = postId,
+                referenceType = AttachmentReferenceType.POST,
+                attachmentIds = emptyList(),
+            )
+
+            // then
+            verify(exactly = 0) { attachmentRepository.findAllByIdForUpdate(any()) }
+        }
+
+        @Test
+        @DisplayName("다른 게시물이 claim한 첨부를 요청하면 400 예외를 던진다")
+        fun claimTmpAttachments_attachmentClaimedByOtherPost_throwsBadRequest() {
+            // given
+            val otherPostId = UUID.randomUUID()
+            val claimedAttachment =
+                makeAttachment("tmp/${UUID.randomUUID()}/photo.jpg", AttachmentStatus.TMP, referenceId = otherPostId)
+            every { attachmentRepository.findAllById(listOf(claimedAttachment.id!!)) } returns listOf(claimedAttachment)
+
+            // when & then
+            val exception =
+                assertThrows<ApiException> {
+                    attachmentService.claimTmpAttachments(
+                        referenceId = postId,
+                        referenceType = AttachmentReferenceType.POST,
+                        attachmentIds = listOf(claimedAttachment.id!!),
+                    )
+                }
+
+            assertThat(exception.status).isEqualTo(DefaultStatus.BAD_REQUEST)
+            assertThat(exception).hasMessage("다른 대상에 연결된 첨부파일은 사용할 수 없습니다")
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 첨부를 요청하면 404 예외를 던진다")
+        fun claimTmpAttachments_unknownAttachment_throwsNotFound() {
+            // given
+            val unknownAttachmentId = UUID.randomUUID()
+            every { attachmentRepository.findAllById(listOf(unknownAttachmentId)) } returns emptyList()
+
+            // when & then
+            val exception =
+                assertThrows<ApiException> {
+                    attachmentService.claimTmpAttachments(
+                        referenceId = postId,
+                        referenceType = AttachmentReferenceType.POST,
+                        attachmentIds = listOf(unknownAttachmentId),
+                    )
+                }
+
+            assertThat(exception.status).isEqualTo(DefaultStatus.NOT_FOUND)
+            assertThat(exception).hasMessage("첨부파일을 찾을 수 없습니다")
+        }
+
+        @Test
+        @DisplayName("이미 이 게시물에 확정된 첨부는 그대로 통과시킨다")
+        fun claimTmpAttachments_alreadyConfirmedForSameReference_keepsConfirmed() {
+            // given
+            val confirmedAttachment = makeAttachment("posts/$postId/${UUID.randomUUID()}/photo.jpg")
+            every { attachmentRepository.findAllById(listOf(confirmedAttachment.id!!)) } returns listOf(confirmedAttachment)
+
+            // when
+            attachmentService.claimTmpAttachments(
+                referenceId = postId,
+                referenceType = AttachmentReferenceType.POST,
+                attachmentIds = listOf(confirmedAttachment.id!!),
+            )
+
+            // then
+            assertThat(confirmedAttachment.status).isEqualTo(AttachmentStatus.CONFIRMED)
+            assertThat(confirmedAttachment.referenceId).isEqualTo(postId)
+            verify(exactly = 0) { attachmentRepository.updateReferenceIdByIds(any(), any()) }
+        }
+    }
+
+    @Nested
+    @DisplayName("deleteExpiredTmpAttachments")
+    inner class DeleteExpiredTmpAttachments {
+        @Test
+        @DisplayName("보관 기간이 지난 TMP 첨부를 DB와 S3에서 삭제한다")
+        fun deleteExpiredTmpAttachments_expiredTmpAttachments_deletesRowsAndObjects() {
+            // given
+            val threshold = Instant.parse("2026-09-01T00:00:00Z")
+            val expired = makeAttachment("tmp/${UUID.randomUUID()}/old.jpg", AttachmentStatus.TMP, referenceId = null)
+            every {
+                attachmentRepository.findAllUnclaimedByStatusAndCreatedAtBefore(AttachmentStatus.TMP, threshold, 100)
+            } returns listOf(expired)
+            every { attachmentRepository.deleteAll(any<List<Attachment>>()) } just runs
+            every { s3StorageService.deleteObjects(any()) } returns emptyList()
+
+            // when
+            val deletedCount = attachmentService.deleteExpiredTmpAttachments(threshold, 100)
+
+            // then
+            assertThat(deletedCount).isEqualTo(1)
+            verify { attachmentRepository.deleteAll(listOf(expired)) }
+            verify { s3StorageService.deleteObjects(listOf(expired.objectKey)) }
+        }
+
+        @Test
+        @DisplayName("객체를 지우지 못한 첨부는 행을 남겨 다음 실행이 다시 시도하게 한다")
+        fun deleteExpiredTmpAttachments_objectLeftUndeleted_keepsAttachmentRow() {
+            // given - 두 건 중 한 건의 객체만 버킷에 남은 상황
+            val threshold = Instant.parse("2026-09-01T00:00:00Z")
+            val reclaimed = makeAttachment("tmp/${UUID.randomUUID()}/gone.jpg", AttachmentStatus.TMP, referenceId = null)
+            val undeletable = makeAttachment("tmp/${UUID.randomUUID()}/kept.jpg", AttachmentStatus.TMP, referenceId = null)
+            every {
+                attachmentRepository.findAllUnclaimedByStatusAndCreatedAtBefore(AttachmentStatus.TMP, threshold, 100)
+            } returns listOf(reclaimed, undeletable)
+            every { attachmentRepository.deleteAll(any<List<Attachment>>()) } just runs
+            every { s3StorageService.deleteObjects(any()) } returns listOf(undeletable.objectKey)
+
+            // when
+            val deletedCount = attachmentService.deleteExpiredTmpAttachments(threshold, 100)
+
+            // then - 남은 행이 없으면 그 객체를 다시 찾을 수단이 사라진다
+            assertThat(deletedCount).isEqualTo(1)
+            verify { attachmentRepository.deleteAll(listOf(reclaimed)) }
+        }
+
+        @Test
+        @DisplayName("대상이 없으면 삭제를 수행하지 않는다")
+        fun deleteExpiredTmpAttachments_noExpiredAttachments_skipsDeletion() {
+            // given
+            val threshold = Instant.parse("2026-09-01T00:00:00Z")
+            every {
+                attachmentRepository.findAllUnclaimedByStatusAndCreatedAtBefore(AttachmentStatus.TMP, threshold, 100)
+            } returns emptyList()
+
+            // when
+            val deletedCount = attachmentService.deleteExpiredTmpAttachments(threshold, 100)
+
+            // then
+            assertThat(deletedCount).isZero()
+            verify(exactly = 0) { attachmentRepository.deleteAll(any<List<Attachment>>()) }
+        }
+    }
+
+    @Nested
     @DisplayName("issueTmpPreviewUrl")
     inner class IssueTmpPreviewUrl {
         @Test
@@ -495,7 +775,7 @@ class AttachmentServiceTest {
             every {
                 attachmentRepository.findAllByReferenceIdAndReferenceType(postId, AttachmentReferenceType.POST)
             } returns listOf(attachment1, attachment2)
-            every { s3StorageService.deleteObjects(any()) } just runs
+            every { s3StorageService.deleteObjects(any()) } returns emptyList()
             every {
                 attachmentRepository.deleteAllByReferenceIdAndReferenceType(postId, AttachmentReferenceType.POST)
             } just runs
@@ -507,7 +787,7 @@ class AttachmentServiceTest {
             verify { attachmentRepository.deleteAllByReferenceIdAndReferenceType(postId, AttachmentReferenceType.POST) }
             verify(exactly = 0) { s3StorageService.deleteObjects(any()) }
 
-            triggerAfterCommit()
+            triggerBeforeCommit()
             verify {
                 s3StorageService.deleteObjects(
                     match { it.containsAll(listOf("posts/$postId/uuid1/a.jpg", "posts/$postId/uuid2/b.jpg")) },
@@ -551,7 +831,7 @@ class AttachmentServiceTest {
                     listOf(keepAttachment.id!!),
                 )
             } returns listOf(orphanAttachment)
-            every { s3StorageService.deleteObjects(any()) } just runs
+            every { s3StorageService.deleteObjects(any()) } returns emptyList()
             every { attachmentRepository.deleteAll(any<List<Attachment>>()) } just runs
 
             // when
@@ -565,7 +845,7 @@ class AttachmentServiceTest {
             verify { attachmentRepository.deleteAll(listOf(orphanAttachment)) }
             verify(exactly = 0) { s3StorageService.deleteObjects(any()) }
 
-            triggerAfterCommit()
+            triggerBeforeCommit()
             verify { s3StorageService.deleteObjects(listOf(orphanAttachment.objectKey)) }
         }
 
@@ -603,7 +883,7 @@ class AttachmentServiceTest {
             every {
                 attachmentRepository.findAllByReferenceIdAndReferenceType(postId, AttachmentReferenceType.POST)
             } returns listOf(orphanAttachment)
-            every { s3StorageService.deleteObjects(any()) } just runs
+            every { s3StorageService.deleteObjects(any()) } returns emptyList()
             every { attachmentRepository.deleteAll(any<List<Attachment>>()) } just runs
 
             // when
@@ -622,13 +902,13 @@ class AttachmentServiceTest {
             }
             verify { attachmentRepository.deleteAll(listOf(orphanAttachment)) }
 
-            triggerAfterCommit()
+            triggerBeforeCommit()
             verify { s3StorageService.deleteObjects(listOf(orphanAttachment.objectKey)) }
         }
 
         @Test
-        @DisplayName("커밋 후 S3 삭제가 실패해도 예외를 호출자에게 전파하지 않는다")
-        fun deleteOrphanedAttachmentsByIds_s3DeleteFailsAfterCommit_doesNotPropagateException() {
+        @DisplayName("커밋 직전 S3 삭제가 실패하면 예외를 전파해 트랜잭션을 롤백시킨다")
+        fun deleteOrphanedAttachmentsByIds_s3DeleteFailsBeforeCommit_propagatesException() {
             // given
             val orphanAttachment = makeAttachment("posts/$postId/uuid2/orphan.jpg")
 
@@ -646,8 +926,10 @@ class AttachmentServiceTest {
             )
 
             // then
-            // 전파되면 DB 커밋이 끝난 요청이 실패로 보이고 클라이언트가 반영된 상태에 재시도한다.
-            assertThatCode { triggerAfterCommit() }.doesNotThrowAnyException()
+            // 여기서 예외를 가두면 객체가 남은 채 첨부 행만 사라져 다음 요청이 같은 키를 재시도할 수 없다.
+            assertThatThrownBy { triggerBeforeCommit() }
+                .isInstanceOf(RuntimeException::class.java)
+                .hasMessage("S3 unavailable")
             verify { s3StorageService.deleteObjects(listOf(orphanAttachment.objectKey)) }
         }
     }

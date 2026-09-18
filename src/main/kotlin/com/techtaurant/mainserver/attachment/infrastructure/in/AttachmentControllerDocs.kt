@@ -45,7 +45,10 @@ interface AttachmentControllerDocs {
 
     @Operation(
         summary = "Presigned URL 발급",
-        description = "S3 직접 업로드를 위한 PUT Presigned URL을 발급합니다. 응답의 objectKey를 게시물 content에 삽입하세요.",
+        description =
+            "S3 직접 업로드를 위한 PUT Presigned URL을 발급합니다. " +
+                "업로드 후에는 응답의 attachmentId를 게시물 content에 삽입하세요. " +
+                "objectKey는 업로드 대상 S3 경로일 뿐이며, 확정 시점에 경로가 바뀌므로 content에 넣으면 안 됩니다.",
     )
     @SwaggerApiResponse(
         responseCode = "200",

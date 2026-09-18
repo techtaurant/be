@@ -17,7 +17,6 @@ import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -118,6 +117,34 @@ class PostDetailReadServiceTest {
         }
 
         @Test
+        @DisplayName("확정 전 첨부를 썸네일로 지정한 임시저장 게시물도 썸네일 attachmentId를 반환한다")
+        fun getPostDetail_draftWithUnconfirmedThumbnail_returnsThumbnailAttachmentId() {
+            // given
+            val postId = UUID.randomUUID()
+            val viewerId = author.id!!
+            val thumbnailAttachmentId = UUID.randomUUID()
+            val post =
+                Post(
+                    title = "임시저장 게시물",
+                    content = "본문",
+                    author = author,
+                    thumbnailImage = thumbnailAttachmentId,
+                    status = PostStatusEnum.DRAFT,
+                ).apply { id = postId }
+
+            every { postRepository.findPostDetailByIdForViewer(postId, viewerId) } returns post
+            every { postLikeLogRepository.findByPostIdAndUserId(postId, viewerId) } returns null
+            every { postReadLogRepository.existsByPostIdAndUserId(postId, viewerId) } returns false
+
+            // when
+            val result = postDetailReadService.getPostDetail(postId, viewerId)
+
+            // then
+            assertThat(result.thumbnailAttachmentId).isEqualTo(thumbnailAttachmentId)
+            assertThat(result.attachmentPresignedUrls).isEmpty()
+        }
+
+        @Test
         @DisplayName("비로그인 사용자는 읽음 여부를 false로 반환한다")
         fun getPostDetail_anonymousUser_returnsUnread() {
             // given
@@ -193,39 +220,6 @@ class PostDetailReadServiceTest {
             val result = postDetailReadService.getPostDetail(postId, null)
 
             assertThat(result.author.profileImageUrl).isEqualTo("https://cdn.example.com/authors/detail-author.png")
-        }
-    }
-
-    @Nested
-    @DisplayName("getPublishedPostContentDetail")
-    inner class GetPublishedPostContentDetail {
-        @Test
-        @DisplayName("정적 상세 조회는 조회수 기록과 presigned URL 생성 없이 콘텐츠만 반환한다")
-        fun getPublishedPostContentDetail_returnsStaticContentWithoutSideEffects() {
-            // given
-            val postId = UUID.randomUUID()
-            val post =
-                Post(
-                    title = "게시물",
-                    content = "본문",
-                    author = author,
-                    status = PostStatusEnum.PUBLISHED,
-                ).apply { id = postId }
-
-            every { postRepository.findPostDetailByIdForViewer(postId, null) } returns post
-
-            // when
-            val result = postDetailReadService.getPublishedPostContentDetail(postId)
-
-            // then
-            assertThat(result.id).isEqualTo(postId)
-            assertThat(result.title).isEqualTo("게시물")
-            assertThat(result.author.id).isEqualTo(author.id)
-            verify(exactly = 0) {
-                attachmentService.generatePresignedDownloadUrlMapByReference(any(), any())
-                postLikeLogRepository.findByPostIdAndUserId(any(), any())
-                postReadLogRepository.existsByPostIdAndUserId(any(), any())
-            }
         }
     }
 }

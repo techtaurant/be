@@ -4,6 +4,7 @@ import com.techtaurant.mainserver.attachment.infrastructure.out.AttachmentReposi
 import com.techtaurant.mainserver.base.IntegrationTest
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.security.jwt.JwtConstants
+import com.techtaurant.mainserver.security.jwt.JwtStatus
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
 import com.techtaurant.mainserver.user.dto.UpdateUserRequest
 import com.techtaurant.mainserver.user.entity.User
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import java.util.UUID
 
@@ -90,7 +92,7 @@ class UserControllerProfileIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    @DisplayName("중복 닉네임으로 수정하면 409와 중복 닉네임 에러를 반환한다")
+    @DisplayName("지원하지 않는 언어로 중복 닉네임 수정을 요청하면 409와 영어 중복 닉네임 에러를 반환한다")
     fun updateMe_duplicateName_returnsConflictResponse() {
         // given
         userRepository.save(
@@ -107,6 +109,7 @@ class UserControllerProfileIntegrationTest : IntegrationTest() {
         // when & then
         given()
             .contentType("application/json")
+            .header(HttpHeaders.ACCEPT_LANGUAGE, "fr-FR")
             .cookie(JwtConstants.ACCESS_TOKEN_COOKIE, accessToken)
             .body(UpdateUserRequest(name = "중복닉네임"))
             .`when`()
@@ -114,6 +117,20 @@ class UserControllerProfileIntegrationTest : IntegrationTest() {
             .then()
             .statusCode(HttpStatus.CONFLICT.value())
             .body("status", equalTo(UserStatus.USER_NAME_ALREADY_EXISTS.getCustomStatusCode()))
-            .body("message", equalTo(UserStatus.USER_NAME_ALREADY_EXISTS.getDescription()))
+            .body("message", equalTo("This nickname is already in use"))
+    }
+
+    @Test
+    @DisplayName("인증 없이 내 프로필을 조회하면 Accept-Language의 언어로 인증 필요 메시지를 반환한다")
+    fun getMyProfile_withoutAuthentication_returnsMessageInRequestedLanguage() {
+        // when & then
+        given()
+            .header(HttpHeaders.ACCEPT_LANGUAGE, "ja-JP")
+            .`when`()
+            .get("/api/users/me")
+            .then()
+            .statusCode(HttpStatus.UNAUTHORIZED.value())
+            .body("status", equalTo(JwtStatus.AUTHENTICATION_REQUIRED.getCustomStatusCode()))
+            .body("message", equalTo("認証が必要です"))
     }
 }

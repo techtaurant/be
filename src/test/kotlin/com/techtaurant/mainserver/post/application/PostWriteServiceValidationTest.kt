@@ -81,6 +81,7 @@ class PostWriteServiceValidationTest {
         every { userRepository.findById(author.id!!) } returns Optional.of(author)
         every { userFollowRepository.findFollowerIdsByFollowingId(author.id!!) } returns emptyList()
         every { tagWriteService.resolveTags(any()) } returns emptySet()
+        every { attachmentService.claimTmpAttachments(any(), any(), any()) } just runs
         every { attachmentService.confirmAttachmentsByIds(any(), any(), any()) } just runs
         every { attachmentService.deleteOrphanedAttachmentsByIds(any(), any(), any()) } just runs
         every { postRepository.findPostByIdWithAuthorForUpdate(any()) } answers {

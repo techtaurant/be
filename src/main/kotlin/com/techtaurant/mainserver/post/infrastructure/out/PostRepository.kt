@@ -145,14 +145,16 @@ interface PostRepository : Repository<Post, UUID>, PostRepositoryCustom {
     override fun decrementCommentCount(postId: UUID)
 
     /**
-     * 특정 사용자의 2주 이상 경과한 DRAFT 게시물 목록을 조회합니다.
+     * 보관 기간이 지난 DRAFT 게시물 목록을 조회합니다.
      *
-     * @param authorId 작성자 ID
-     * @param before 기준 날짜 (이 날짜 이전에 수정된 DRAFT 반환)
+     * @param before 기준 시각 (이 시각 이전에 수정된 DRAFT 반환)
+     * @param limit 조회 개수
+     * @param authorId 작성자 ID (null이면 작성자를 가리지 않음)
      * @return 만료된 DRAFT 게시물 리스트
      */
-    override fun findStaleDraftsByAuthor(
-        authorId: UUID,
+    override fun findStaleDrafts(
         before: Instant,
+        limit: Int,
+        authorId: UUID?,
     ): List<Post>
 }

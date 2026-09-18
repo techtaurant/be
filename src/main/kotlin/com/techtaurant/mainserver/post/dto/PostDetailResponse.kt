@@ -23,6 +23,7 @@ import java.util.UUID
  * @property likeStatus 현재 사용자의 좋아요 상태
  * @property status 게시물 상태 (DRAFT: 임시저장, PUBLISHED: 발행, PRIVATE: 비공개)
  * @property isRead 현재 사용자가 읽음 표시한 게시물인지 여부 (비회원은 항상 false)
+ * @property thumbnailAttachmentId 대표 썸네일로 지정된 첨부 ID
  * @property attachmentPresignedUrls attachmentId와 presigned URL 매핑 목록
  * @property createdAt 작성일
  * @property updatedAt 수정일
@@ -53,6 +54,14 @@ data class PostDetailResponse(
     val status: PostStatusEnum,
     @field:Schema(description = "현재 사용자가 읽음 표시한 게시물인지 여부")
     val isRead: Boolean,
+    @field:Schema(
+        description =
+            "대표 썸네일로 지정된 첨부 ID (지정하지 않았으면 null). " +
+                "확정된 첨부는 attachmentPresignedUrls에서 URL을 찾을 수 있고, " +
+                "임시저장 게시물의 미확정 첨부는 본문 이미지와 동일하게 TMP 미리보기 URL 발급 API를 사용한다",
+        example = "550e8400-e29b-41d4-a716-446655440000",
+    )
+    val thumbnailAttachmentId: UUID?,
     @field:Schema(description = "attachmentId와 presigned URL 매핑 목록")
     val attachmentPresignedUrls: List<PostDetailAttachmentPresignedUrlResponse>,
     @field:Schema(description = "작성일")
@@ -91,6 +100,7 @@ data class PostDetailResponse(
                 likeStatus = likeStatus,
                 status = post.status,
                 isRead = isRead,
+                thumbnailAttachmentId = post.thumbnailImage,
                 attachmentPresignedUrls = attachmentPresignedUrls,
                 createdAt = post.createdAt,
                 updatedAt = post.updatedAt,

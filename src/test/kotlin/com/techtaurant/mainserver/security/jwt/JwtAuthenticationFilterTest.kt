@@ -1,6 +1,8 @@
 package com.techtaurant.mainserver.security.jwt
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.techtaurant.mainserver.common.status.StatusMessageResolver
+import com.techtaurant.mainserver.config.MessageSourceConfig
 import com.techtaurant.mainserver.security.config.CookieProperties
 import com.techtaurant.mainserver.security.handler.CustomAuthenticationEntryPoint
 import com.techtaurant.mainserver.security.helper.CookieHelper
@@ -35,7 +37,7 @@ class JwtAuthenticationFilterTest {
             JwtAuthenticationFilter(
                 jwtTokenProvider,
                 userTokenRepository,
-                CustomAuthenticationEntryPoint(ObjectMapper()),
+                CustomAuthenticationEntryPoint(ObjectMapper(), StatusMessageResolver(MessageSourceConfig().messageSource())),
                 CookieHelper(CookieProperties(), JwtProperties(TEST_SECRET)),
             )
     }

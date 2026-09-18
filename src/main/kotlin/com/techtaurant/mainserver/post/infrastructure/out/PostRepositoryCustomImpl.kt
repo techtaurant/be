@@ -310,17 +310,26 @@ class PostRepositoryCustomImpl(
     override fun findPublishedPostsByIdIn(postIds: List<UUID>): List<Post> =
         fetchPosts(fetchPostIds(POSTS.ID.`in`(postIds).and(POSTS.STATUS.eq(PostStatusEnum.PUBLISHED.name))))
 
-    override fun findStaleDraftsByAuthor(
-        authorId: UUID,
+    override fun findStaleDrafts(
         before: Instant,
-    ): List<Post> =
-        fetchPosts(
-            fetchPostIds(
-                POSTS.AUTHOR_ID.eq(authorId)
-                    .and(POSTS.STATUS.eq(PostStatusEnum.DRAFT.name))
-                    .and(POSTS.UPDATED_AT_UTC.lt(before.atOffset(ZoneOffset.UTC))),
-            ),
-        )
+        limit: Int,
+        authorId: UUID?,
+    ): List<Post> {
+        val conditions = mutableListOf<Condition>()
+        conditions += POSTS.STATUS.eq(PostStatusEnum.DRAFT.name)
+        conditions += POSTS.UPDATED_AT_UTC.lt(before.atOffset(ZoneOffset.UTC))
+        authorId?.let { conditions += POSTS.AUTHOR_ID.eq(it) }
+
+        val staleDraftIds =
+            dsl.select(POSTS.ID)
+                .from(POSTS)
+                .where(DSL.and(conditions))
+                .limit(limit)
+                .fetch(POSTS.ID)
+                .filterNotNull()
+
+        return fetchPosts(staleDraftIds)
+    }
 
     private fun findLatestPostIds(
         cursor: PostCursor?,

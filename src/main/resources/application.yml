@@ -148,6 +148,7 @@ aws:
         region: ${AWS_REGION:ap-northeast-2}
         bucket-name: ${AWS_S3_BUCKET_NAME:techtaurant-media-dev}
         presigned-url-expire-minutes: ${AWS_S3_PRESIGNED_URL_EXPIRE_MINUTES:15}
+        tmp-retention-days: ${AWS_S3_TMP_RETENTION_DAYS:14}
 
 monitoring:
     metrics:
