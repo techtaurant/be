@@ -99,6 +99,33 @@ class PostControllerTest : IntegrationTest() {
         }
 
         @Test
+        @DisplayName("UPDATED - 최근 수정순으로 정렬된 게시물이 로딩되어야 한다")
+        fun whenSortByUpdated_thenPostsOrderedByUpdatedAtDesc() {
+            // Given: 가장 오래된 게시물을 다시 저장해 수정일만 가장 최신으로 만든다
+            postRepository.saveAndFlush(testPosts[0])
+
+            // When: 최근 수정순 조회
+            val response =
+                RestAssured
+                    .given()
+                    .queryParam("sort", "UPDATED")
+                    .queryParam("size", 10)
+                    .`when`()
+                    .get("/open-api/posts")
+                    .then()
+                    .statusCode(200)
+                    .extract()
+                    .`as`(object : TypeRef<ApiResponse<CursorPageResponse<PostListItemResponse>>>() {})
+
+            // Then: 방금 수정한 게시물이 작성일과 무관하게 첫 번째여야 함
+            val content = response.data!!.content
+            assertEquals(3, content.size)
+            assertEquals(testPosts[0].id, content[0].id, "방금 수정한 게시물이 첫 번째여야 함")
+            assertEquals(testPosts[2].id, content[1].id)
+            assertEquals(testPosts[1].id, content[2].id)
+        }
+
+        @Test
         @DisplayName("VIEW - 조회수 기준으로 정렬된 게시물이 로딩되어야 한다")
         fun whenSortByView_thenPostsOrderedByViewCountDesc() {
             // When: 조회수 기준 정렬 조회

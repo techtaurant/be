@@ -10,6 +10,7 @@ import com.techtaurant.mainserver.jooq.tables.Tags.Companion.TAGS
 import com.techtaurant.mainserver.jooq.tables.UserBans.Companion.USER_BANS
 import com.techtaurant.mainserver.jooq.tables.Users.Companion.USERS
 import com.techtaurant.mainserver.jooq.tables.records.CategoriesRecord
+import com.techtaurant.mainserver.jooq.tables.records.PostsRecord
 import com.techtaurant.mainserver.jooq.tables.records.TagsRecord
 import com.techtaurant.mainserver.jooq.tables.records.UsersRecord
 import com.techtaurant.mainserver.post.application.PostWithSortValue
@@ -28,10 +29,12 @@ import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.Field
 import org.jooq.Record
+import org.jooq.TableField
 import org.jooq.impl.DSL
 import org.springframework.stereotype.Repository
 import java.time.Instant
 import java.time.LocalDate
+import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.util.Optional
@@ -213,11 +216,12 @@ class PostRepositoryCustomImpl(
     ): List<PostWithSortValue> {
         val rankedPostIds =
             when (sortType) {
-                PostSortType.LATEST ->
+                PostSortType.LATEST, PostSortType.UPDATED ->
                     findLatestPostIds(
                         cursor,
                         size,
                         period,
+                        sortType,
                         authorId,
                         statuses,
                         categoryId,
@@ -335,6 +339,7 @@ class PostRepositoryCustomImpl(
         cursor: PostCursor?,
         size: Int,
         period: PostPeriod,
+        sortType: PostSortType,
         authorId: UUID?,
         statuses: List<PostStatusEnum>?,
         categoryId: UUID?,
@@ -343,22 +348,23 @@ class PostRepositoryCustomImpl(
         viewerId: UUID?,
         keyword: String?,
     ): List<RankedPostId> {
+        val sortField = temporalSortField(sortType)
         val conditions = baseConditions(authorId, statuses, categoryId, visibleToUserId, tagIds, viewerId, keyword).toMutableList()
         period.days?.let {
                 days ->
             conditions += POSTS.CREATED_AT_UTC.ge(Instant.now().minus(days.toLong(), ChronoUnit.DAYS).atOffset(ZoneOffset.UTC))
         }
-        cursor?.let { conditions += latestCursorCondition(it) }
+        cursor?.let { conditions += latestCursorCondition(it, sortField) }
 
-        return dsl.select(POSTS.ID, POSTS.UPDATED_AT_UTC)
+        return dsl.select(POSTS.ID, sortField)
             .from(POSTS)
             .where(conditions)
-            .orderBy(POSTS.UPDATED_AT_UTC.desc(), POSTS.ID.desc())
+            .orderBy(sortField.desc(), POSTS.ID.desc())
             .limit(size)
             .fetch { record ->
                 RankedPostId(
                     postId = requireNotNull(record[POSTS.ID]),
-                    sortValue = requireNotNull(record[POSTS.UPDATED_AT_UTC]).toInstant().toEpochMilli(),
+                    sortValue = requireNotNull(record[sortField]).toInstant().toEpochMilli(),
                 )
             }
     }
@@ -451,10 +457,13 @@ class PostRepositoryCustomImpl(
             .replace("%", "\\%")
             .replace("_", "\\_")
 
-    private fun latestCursorCondition(cursor: PostCursor): Condition {
+    private fun latestCursorCondition(
+        cursor: PostCursor,
+        sortField: TableField<PostsRecord, OffsetDateTime?>,
+    ): Condition {
         val cursorInstant = cursor.createdAt.atOffset(ZoneOffset.UTC)
-        return POSTS.UPDATED_AT_UTC.lt(cursorInstant)
-            .or(POSTS.UPDATED_AT_UTC.eq(cursorInstant).and(POSTS.ID.lt(cursor.id)))
+        return sortField.lt(cursorInstant)
+            .or(sortField.eq(cursorInstant).and(POSTS.ID.lt(cursor.id)))
     }
 
     private fun statsCursorCondition(
@@ -474,10 +483,17 @@ class PostRepositoryCustomImpl(
                 PostSortType.VIEW -> POST_DAILY_STATS.VIEW_COUNT
                 PostSortType.LIKE -> POST_DAILY_STATS.LIKE_COUNT
                 PostSortType.COMMENT -> POST_DAILY_STATS.COMMENT_COUNT
-                PostSortType.LATEST -> throw ApiException(PostStatus.INVALID_SORT_TYPE)
+                PostSortType.LATEST, PostSortType.UPDATED -> throw ApiException(PostStatus.INVALID_SORT_TYPE)
             }
         return DSL.coalesce(DSL.sum(countField).cast(Long::class.java), 0L)
     }
+
+    private fun temporalSortField(sortType: PostSortType): TableField<PostsRecord, OffsetDateTime?> =
+        when (sortType) {
+            PostSortType.LATEST -> POSTS.CREATED_AT_UTC
+            PostSortType.UPDATED -> POSTS.UPDATED_AT_UTC
+            PostSortType.VIEW, PostSortType.LIKE, PostSortType.COMMENT -> throw ApiException(PostStatus.INVALID_SORT_TYPE)
+        }
 
     private fun fetchPosts(
         postIds: List<UUID>,
