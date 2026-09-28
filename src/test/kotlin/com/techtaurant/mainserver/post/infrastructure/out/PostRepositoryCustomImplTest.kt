@@ -601,6 +601,132 @@ class PostRepositoryCustomImplTest : IntegrationTest() {
     }
 
     @Nested
+    @DisplayName("시간 정렬")
+    inner class TemporalSortTest {
+        private lateinit var olderCreatedRecentlyUpdatedPost: Post
+        private lateinit var newerCreatedPost: Post
+
+        // 작성일 순서와 수정일 순서가 서로 반대가 되도록, 먼저 작성된 글을 마지막에 다시 저장한다.
+        @BeforeEach
+        fun setUpPostsWithDivergingTimestamps() {
+            olderCreatedRecentlyUpdatedPost = movePostCreatedAt(createPost(userA), daysAgo = 2)
+            newerCreatedPost = movePostCreatedAt(createPost(userA), daysAgo = 1)
+            olderCreatedRecentlyUpdatedPost = postRepository.saveAndFlush(olderCreatedRecentlyUpdatedPost)
+        }
+
+        @Test
+        @DisplayName("최신순은 수정일이 아니라 작성일 내림차순으로 정렬한다")
+        fun findPostsWithConditions_latest_ordersByCreatedAtDesc() {
+            // when
+            val result =
+                postRepository.findPostsWithConditions(
+                    cursor = null,
+                    size = 10,
+                    period = PostPeriod.ALL,
+                    sortType = PostSortType.LATEST,
+                )
+
+            // then
+            assertThat(result).extracting("id").containsExactly(
+                newerCreatedPost.id,
+                olderCreatedRecentlyUpdatedPost.id,
+            )
+        }
+
+        @Test
+        @DisplayName("최근 수정순은 수정일 내림차순으로 정렬한다")
+        fun findPostsWithConditions_updated_ordersByUpdatedAtDesc() {
+            // when
+            val result =
+                postRepository.findPostsWithConditions(
+                    cursor = null,
+                    size = 10,
+                    period = PostPeriod.ALL,
+                    sortType = PostSortType.UPDATED,
+                )
+
+            // then
+            assertThat(result).extracting("id").containsExactly(
+                olderCreatedRecentlyUpdatedPost.id,
+                newerCreatedPost.id,
+            )
+        }
+
+        @Test
+        @DisplayName("최신순 커서는 작성일을 기준으로 다음 페이지를 조회한다")
+        fun findPostsWithConditions_latestCursor_continuesByCreatedAt() {
+            // given
+            val firstPage =
+                postRepository.findPostsWithConditions(
+                    cursor = null,
+                    size = 1,
+                    period = PostPeriod.ALL,
+                    sortType = PostSortType.LATEST,
+                )
+            val cursor = PostCursor.from(firstPage.single().post, PostSortType.LATEST, firstPage.single().sortValue)
+
+            // when
+            val secondPage =
+                postRepository.findPostsWithConditions(
+                    cursor = cursor,
+                    size = 1,
+                    period = PostPeriod.ALL,
+                    sortType = PostSortType.LATEST,
+                )
+
+            // then
+            assertThat(secondPage).extracting("id").containsExactly(olderCreatedRecentlyUpdatedPost.id)
+        }
+
+        @Test
+        @DisplayName("최근 수정순 커서는 수정일을 기준으로 다음 페이지를 조회한다")
+        fun findPostsWithConditions_updatedCursor_continuesByUpdatedAt() {
+            // given
+            val firstPage =
+                postRepository.findPostsWithConditions(
+                    cursor = null,
+                    size = 1,
+                    period = PostPeriod.ALL,
+                    sortType = PostSortType.UPDATED,
+                )
+            val cursor = PostCursor.from(firstPage.single().post, PostSortType.UPDATED, firstPage.single().sortValue)
+
+            // when
+            val secondPage =
+                postRepository.findPostsWithConditions(
+                    cursor = cursor,
+                    size = 1,
+                    period = PostPeriod.ALL,
+                    sortType = PostSortType.UPDATED,
+                )
+
+            // then
+            assertThat(secondPage).extracting("id").containsExactly(newerCreatedPost.id)
+        }
+
+        @Test
+        @DisplayName("최근 수정순 기간 필터도 수정일이 아니라 작성일 기준으로 동작한다")
+        fun findPostsWithConditions_updatedPeriod_keepsPostCreatedAtFilter() {
+            // given
+            val longAgoCreatedPost = movePostCreatedAt(createPost(userA), daysAgo = 500)
+            postRepository.saveAndFlush(longAgoCreatedPost)
+
+            // when
+            val result =
+                postRepository.findPostsWithConditions(
+                    cursor = null,
+                    size = 10,
+                    period = PostPeriod.MONTH,
+                    sortType = PostSortType.UPDATED,
+                )
+
+            // then
+            assertThat(result).extracting("id").doesNotContain(longAgoCreatedPost.id)
+            assertThat(result).extracting("id").contains(olderCreatedRecentlyUpdatedPost.id, newerCreatedPost.id)
+        }
+    }
+
+    @Nested
     @DisplayName("visibleToUserId 필터링")
     inner class VisibleToUserIdFilter {
         @Test

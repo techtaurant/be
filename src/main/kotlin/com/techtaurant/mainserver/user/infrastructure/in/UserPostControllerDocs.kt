@@ -42,7 +42,7 @@ interface UserPostControllerDocs {
         @Parameter(description = "이전 응답의 nextCursor (첫 페이지는 생략)") cursor: String?,
         @Parameter(description = "페이지 크기 (1-100, 기본값 20)") @Min(1) @Max(100) size: Int,
         @Parameter(description = "기간 필터 (WEEK: 7일, MONTH: 30일, YEAR: 365일, ALL: 전체)") period: PostPeriod,
-        @Parameter(description = "정렬 기준 (LATEST: 최신순, VIEW: 조회순, LIKE: 추천순, COMMENT: 댓글순)") sort: PostSortType,
+        @Parameter(description = "정렬 기준 (LATEST: 작성일 최신순, UPDATED: 최근 수정순, VIEW: 조회순, LIKE: 추천순, COMMENT: 댓글순)") sort: PostSortType,
         @Parameter(description = "카테고리 ID 필터 (생략 시 전체)") categoryId: UUID?,
     ): ApiResponse<CursorPageResponse<PostListItemResponse>>
 
