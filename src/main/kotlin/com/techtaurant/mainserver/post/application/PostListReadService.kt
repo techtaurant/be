@@ -51,7 +51,7 @@ class PostListReadService(
      * @param cursor 이전 응답의 nextCursor (null이면 첫 페이지)
      * @param size 페이지 크기
      * @param period 기간 필터 (WEEK, MONTH, YEAR, ALL)
-     * @param sortType 정렬 기준 (LATEST, VIEW, LIKE, COMMENT)
+     * @param sortType 정렬 기준 (LATEST, UPDATED, VIEW, LIKE, COMMENT)
      * @param currentUserId 현재 로그인 사용자 ID (비회원이면 null)
      * @param authorId 작성자 필터 (null이면 전체 조회)
      * @param categoryId 카테고리 필터 (null이면 전체, authorId 지정 시에만 적용)
