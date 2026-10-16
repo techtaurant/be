@@ -98,7 +98,7 @@ JWT 로컬 검증은 최대 300초의 폐기 지연이 있다. 부모 logout은 
 
 `GET /internal/interlight/credits/{user_id}`: service 인증 필요. HTTP 200 data `{balance: credit, held: credit, available: credit, unit:"credit"}`. `available=balance-held`이며 writer 기준으로 읽는다. 존재하는 사용자에게 지갑이 없으면 모두 0이고 조회로 지급하지 않는다. Interlight 브라우저 proxy는 principal의 UUID만 사용한다.
 
-`POST /api/admin/interlight/credits/grants`: 기존 관리자 사용자 인증·권한만 사용한다. service secret만으로 관리자가 되지 않는다. 요청 `{event_key: UUID, user_id: UUID, amount: positive credit, reason: nonempty string}`. HTTP 200 data `{event_key, user_id, amount, balance, held, available}`. 지갑 생성/증액과 GRANT 원장을 한 트랜잭션에 기록한다. 자동 초기 지급·결제 충전은 추가하지 않는다.
+`POST /admin/interlight/credits/grants`: 기존 관리자 사용자 인증·권한만 사용한다. service secret만으로 관리자가 되지 않는다. 요청 `{event_key: UUID, user_id: UUID, amount: positive credit, reason: nonempty string}`. HTTP 200 data `{event_key, user_id, amount, balance, held, available}`. 지갑 생성/증액과 GRANT 원장을 한 트랜잭션에 기록한다. 자동 초기 지급·결제 충전은 추가하지 않는다.
 
 같은 grant event_key와 같은 정규화 요청에는 최초 응답을 재사용한다. 다른 user/amount/reason에는 409다. event_key는 지급 이벤트 UUID이며 수신함 event_id로도 사용한다. 원장 키는 GRANT namespace로 구분하고 금액·사유의 길이/범위는 입력 검증한다. 관리자 권한은 매 요청 현재 상태를 확인한다.
 
