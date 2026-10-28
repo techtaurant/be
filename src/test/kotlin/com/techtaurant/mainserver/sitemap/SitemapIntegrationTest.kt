@@ -26,7 +26,7 @@ import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
-@TestPropertySource(properties = ["sitemap.enabled=true", "sitemap.bucket-name=test", "sitemap.cron=-"])
+@TestPropertySource(properties = ["app.environment=prod", "sitemap.bucket-name=test"])
 class SitemapIntegrationTest : IntegrationTest() {
     @Autowired private lateinit var posts: PostRepository
 

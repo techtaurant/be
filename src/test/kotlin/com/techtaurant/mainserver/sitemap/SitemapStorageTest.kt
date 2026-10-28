@@ -17,7 +17,7 @@ import java.time.Instant
 
 class SitemapStorageTest {
     private val s3 = mockk<S3Client>()
-    private val storage = SitemapStorage(s3, SitemapProperties(true, "isolated-test-bucket"))
+    private val storage = SitemapStorage(s3, "isolated-test-bucket")
 
     @Test
     fun `only 404 means no prior publication and access errors fail closed`() {

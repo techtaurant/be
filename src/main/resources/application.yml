@@ -155,9 +155,5 @@ monitoring:
         username: ${MONITORING_METRICS_USERNAME:prometheus}
         password: ${MONITORING_METRICS_PASSWORD:change-me-prometheus-password}
 
-# Explicit opt-in; infrastructure supplies an isolated bucket per environment.
 sitemap:
-    enabled: ${SITEMAP_ENABLED:false}
     bucket-name: ${SITEMAP_BUCKET_NAME:}
-    site-url: ${SITEMAP_SITE_URL:https://techtaurant.com}
-    cron: ${SITEMAP_CRON:0 0 4 * * *}

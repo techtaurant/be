@@ -6,10 +6,7 @@ import javax.xml.stream.XMLOutputFactory
 
 @Component
 class SitemapXmlWriter {
-    fun write(
-        posts: List<SitemapPost>,
-        siteUrl: String,
-    ): ByteArray {
+    fun write(posts: List<SitemapPost>): ByteArray {
         require(posts.size <= MAX_URLS) { "Sitemap exceeds 50,000 URLs; split before publishing" }
         require(posts.map { it.id }.toSet().size == posts.size) { "Duplicate sitemap URLs" }
         val output = ByteArrayOutputStream()
@@ -21,7 +18,7 @@ class SitemapXmlWriter {
             posts.forEach { post ->
                 xml.writeStartElement("url")
                 xml.writeStartElement("loc")
-                xml.writeCharacters("${siteUrl.trimEnd('/')}/posts/${post.id}")
+                xml.writeCharacters("https://techtaurant.com/posts/${post.id}")
                 xml.writeEndElement()
                 xml.writeStartElement("lastmod")
                 xml.writeCharacters(post.updatedAt.toString())

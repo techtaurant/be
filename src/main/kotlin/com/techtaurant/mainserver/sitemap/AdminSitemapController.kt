@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
-@ConditionalOnProperty("sitemap.enabled", havingValue = "true")
+@ConditionalOnProperty("app.environment", havingValue = "prod")
 class AdminSitemapController(private val service: SitemapGenerationService) {
     @Operation(summary = "사이트맵을 생성해 S3에 게시한다", description = "관리자 전용 동기 실행. 실행 잠금이 있으면 409를 반환합니다.")
     @ApiErrorResponses(includeAuthenticationErrors = true)

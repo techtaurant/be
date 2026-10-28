@@ -17,12 +17,11 @@ import java.util.concurrent.atomic.AtomicLong
 data class SitemapGenerationResult(val urlCount: Int, val sizeBytes: Int, val objectKey: String)
 
 @Service
-@ConditionalOnProperty("sitemap.enabled", havingValue = "true")
+@ConditionalOnProperty("app.environment", havingValue = "prod")
 class SitemapGenerationService(
     private val posts: SitemapPostRepository,
     private val writer: SitemapXmlWriter,
     private val storage: SitemapStorage,
-    private val properties: SitemapProperties,
     @Qualifier("sitemapLockProvider") private val lockProvider: LockProvider,
     private val meters: MeterRegistry,
 ) {
@@ -44,7 +43,7 @@ class SitemapGenerationService(
         try {
             val previous = storage.current()
             val publishedPosts = posts.findPublished()
-            val xml = writer.write(publishedPosts, properties.siteUrl)
+            val xml = writer.write(publishedPosts)
             check(System.nanoTime() - started < TimeUnit.SECONDS.toNanos(90)) { "Sitemap generation deadline exceeded" }
             storage.publish(xml, previous)
             lastPublished.set(Instant.now().epochSecond)

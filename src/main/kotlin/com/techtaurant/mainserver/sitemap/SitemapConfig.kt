@@ -10,7 +10,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import javax.sql.DataSource
 
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty("sitemap.enabled", havingValue = "true")
+@ConditionalOnProperty("app.environment", havingValue = "prod")
 class SitemapConfig {
     // Keep Boot's default scheduler for existing link/cleanup tasks.
     @Bean(defaultCandidate = false)

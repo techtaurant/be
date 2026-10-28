@@ -1,5 +1,6 @@
 package com.techtaurant.mainserver.sitemap
 
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Component
 import software.amazon.awssdk.awscore.AwsRequestOverrideConfiguration
@@ -14,13 +15,20 @@ import java.time.Instant
 data class PublishedSitemap(val etag: String, val lastModified: Instant)
 
 @Component
-@ConditionalOnProperty("sitemap.enabled", havingValue = "true")
-class SitemapStorage(private val s3: S3Client, private val properties: SitemapProperties) {
+@ConditionalOnProperty("app.environment", havingValue = "prod")
+class SitemapStorage(
+    private val s3: S3Client,
+    @Value("\${sitemap.bucket-name}") private val bucketName: String,
+) {
+    init {
+        require(bucketName.isNotBlank()) { "SITEMAP_BUCKET_NAME is required in production" }
+    }
+
     fun current(): PublishedSitemap? =
         try {
             val response =
                 s3.headObject(
-                    HeadObjectRequest.builder().bucket(properties.bucketName).key(KEY)
+                    HeadObjectRequest.builder().bucket(bucketName).key(KEY)
                         .overrideConfiguration(requestConfiguration().build()).build(),
                 )
             PublishedSitemap(requireNotNull(response.eTag()), requireNotNull(response.lastModified()))
@@ -33,7 +41,7 @@ class SitemapStorage(private val s3: S3Client, private val properties: SitemapPr
         previous: PublishedSitemap?,
     ) {
         val request =
-            PutObjectRequest.builder().bucket(properties.bucketName).key(KEY)
+            PutObjectRequest.builder().bucket(bucketName).key(KEY)
                 .contentType("application/xml; charset=utf-8")
                 .cacheControl("no-store")
                 // Reject publication if another writer changed the object since our HEAD request.

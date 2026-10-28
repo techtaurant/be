@@ -25,7 +25,6 @@ class SitemapGenerationServiceTest {
             posts,
             SitemapXmlWriter(),
             storage,
-            SitemapProperties(true, "test"),
             provider,
             meters,
         )

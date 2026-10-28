@@ -8,11 +8,11 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 
 @Component
-@ConditionalOnProperty("sitemap.enabled", havingValue = "true")
+@ConditionalOnProperty("app.environment", havingValue = "prod")
 class SitemapScheduler(private val service: SitemapGenerationService) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    @Scheduled(cron = "\${sitemap.cron:0 0 4 * * *}", zone = "Asia/Seoul", scheduler = "sitemapTaskScheduler")
+    @Scheduled(cron = "0 0 4 * * *", zone = "Asia/Seoul", scheduler = "sitemapTaskScheduler")
     fun generate() {
         try {
             service.generate()
