@@ -81,6 +81,9 @@ dependencies {
     // UUID V7
     implementation("com.github.f4b6a3:uuid-creator:6.0.0")
 
+    // Scheduled task coordination (JDBC provider includes shedlock-core).
+    implementation("net.javacrumbs.shedlock:shedlock-provider-jdbc-template:7.10.1")
+
     // Caffeine Cache
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
 
