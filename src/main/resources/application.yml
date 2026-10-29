@@ -147,6 +147,7 @@ aws:
     s3:
         region: ${AWS_REGION:ap-northeast-2}
         bucket-name: ${AWS_S3_BUCKET_NAME:techtaurant-media-dev}
+        public-bucket-name: ${AWS_S3_PUBLIC_BUCKET_NAME:}
         presigned-url-expire-minutes: ${AWS_S3_PRESIGNED_URL_EXPIRE_MINUTES:15}
         tmp-retention-days: ${AWS_S3_TMP_RETENTION_DAYS:14}
 
@@ -154,6 +155,3 @@ monitoring:
     metrics:
         username: ${MONITORING_METRICS_USERNAME:prometheus}
         password: ${MONITORING_METRICS_PASSWORD:change-me-prometheus-password}
-
-sitemap:
-    bucket-name: ${SITEMAP_BUCKET_NAME:}

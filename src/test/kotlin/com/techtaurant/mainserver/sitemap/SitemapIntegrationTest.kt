@@ -30,7 +30,7 @@ import java.time.Instant
 import java.util.UUID
 import javax.xml.parsers.DocumentBuilderFactory
 
-@TestPropertySource(properties = ["app.environment=prod", "sitemap.bucket-name=test"])
+@TestPropertySource(properties = ["app.environment=prod", "aws.s3.public-bucket-name=test"])
 class SitemapIntegrationTest : IntegrationTest() {
     @Autowired private lateinit var posts: PostRepository
 

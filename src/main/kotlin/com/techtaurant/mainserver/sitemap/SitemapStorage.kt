@@ -18,10 +18,10 @@ data class PublishedSitemap(val etag: String, val lastModified: Instant)
 @ConditionalOnProperty("app.environment", havingValue = "prod")
 class SitemapStorage(
     private val s3: S3Client,
-    @Value("\${sitemap.bucket-name}") private val bucketName: String,
+    @Value("\${aws.s3.public-bucket-name}") private val bucketName: String,
 ) {
     init {
-        require(bucketName.isNotBlank()) { "SITEMAP_BUCKET_NAME is required in production" }
+        require(bucketName.isNotBlank()) { "AWS_S3_PUBLIC_BUCKET_NAME is required in production" }
     }
 
     fun current(): PublishedSitemap? =
