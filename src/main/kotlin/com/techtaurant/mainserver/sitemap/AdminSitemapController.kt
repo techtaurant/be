@@ -8,6 +8,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RestController
 
+/** 관리자 첫 생성·재생성 요청을 정기 실행과 동일한 생성 로직으로 처리합니다. */
 @RestController
 @ConditionalOnProperty("app.environment", havingValue = "prod")
 class AdminSitemapController(private val service: SitemapGenerationService) {
