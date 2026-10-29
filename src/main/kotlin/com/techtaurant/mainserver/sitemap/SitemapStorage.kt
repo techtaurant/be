@@ -59,7 +59,7 @@ class SitemapStorage(
             .apiCallAttemptTimeout(API_ATTEMPT_TIMEOUT)
 
     companion object {
-        const val KEY = "sitemap.xml"
+        const val KEY = "seo/sitemap.xml"
         private val API_CALL_TIMEOUT: Duration = Duration.ofSeconds(30)
         private val API_ATTEMPT_TIMEOUT: Duration = Duration.ofSeconds(10)
     }

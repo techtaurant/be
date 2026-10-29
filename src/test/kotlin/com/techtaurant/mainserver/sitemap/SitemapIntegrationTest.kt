@@ -113,7 +113,7 @@ class SitemapIntegrationTest : IntegrationTest() {
         assertThat(document.getElementsByTagName("lastmod").item(0).textContent).isEqualTo(updatedAt.toString())
         assertThat(response.getInt("data.urlCount")).isEqualTo(1)
         assertThat(response.getInt("data.sizeBytes")).isEqualTo(xml.value.size)
-        assertThat(response.getString("data.objectKey")).isEqualTo("sitemap.xml")
+        assertThat(response.getString("data.objectKey")).isEqualTo("seo/sitemap.xml")
     }
 
     private fun user(role: UserRole) =

@@ -43,7 +43,7 @@ class SitemapStorageTest {
         storage.publish("<urlset/>".toByteArray(), null)
         assertThat(request.captured.overrideConfiguration().get().headers()["If-None-Match"]).containsExactly("*")
         assertThat(request.captured.bucket()).isEqualTo("isolated-test-bucket")
-        assertThat(request.captured.key()).isEqualTo("sitemap.xml")
+        assertThat(request.captured.key()).isEqualTo("seo/sitemap.xml")
         assertThat(request.captured.contentType()).isEqualTo("application/xml; charset=utf-8")
         assertThat(request.captured.cacheControl()).isEqualTo("no-store")
         assertThat(body.captured.contentStreamProvider().newStream().readBytes()).isEqualTo("<urlset/>".toByteArray())
