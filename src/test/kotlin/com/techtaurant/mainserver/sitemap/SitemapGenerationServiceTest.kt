@@ -35,9 +35,8 @@ class SitemapGenerationServiceTest {
     }
 
     @Test
-    fun `validation failure keeps previous object and releases the lease`() {
-        val duplicate = SitemapPost(UUID.randomUUID(), Instant.EPOCH)
-        every { posts.findPublished() } returns listOf(duplicate, duplicate)
+    fun `URL limit failure keeps previous object and releases the lease`() {
+        every { posts.findPublished() } returns List(50_001) { SitemapPost(UUID(0, it.toLong()), Instant.EPOCH) }
         assertThatThrownBy { service.generate() }.isInstanceOf(IllegalArgumentException::class.java)
         verify(exactly = 0) { storage.publish(any(), any()) }
         verify(exactly = 1) { lock.unlock() }

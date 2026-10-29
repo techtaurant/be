@@ -19,7 +19,7 @@ class SitemapConfig {
             poolSize = 1
             setThreadNamePrefix("sitemap-")
             setWaitForTasksToCompleteOnShutdown(true)
-            setAwaitTerminationSeconds(150)
+            setAwaitTerminationSeconds(SHUTDOWN_WAIT_SECONDS)
             setContinueExistingPeriodicTasksAfterShutdownPolicy(false)
             setExecuteExistingDelayedTasksAfterShutdownPolicy(false)
         }
@@ -32,4 +32,8 @@ class SitemapConfig {
                 .usingDbTime()
                 .build(),
         )
+
+    private companion object {
+        const val SHUTDOWN_WAIT_SECONDS = 150
+    }
 }

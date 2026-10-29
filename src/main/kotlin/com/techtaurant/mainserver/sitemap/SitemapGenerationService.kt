@@ -38,13 +38,13 @@ class SitemapGenerationService(
         val started = System.nanoTime()
         val lock =
             lockProvider.lock(
-                LockConfiguration(Instant.now(), "sitemap-publication", Duration.ofMinutes(10), Duration.ofMinutes(1)),
+                LockConfiguration(Instant.now(), "sitemap-publication", LOCK_MAX_DURATION, LOCK_MIN_DURATION),
             ).orElseThrow { ApiException(LockStatus.LOCK_ACQUISITION_FAILED) }
         try {
             val previous = storage.current()
             val publishedPosts = posts.findPublished()
             val xml = writer.write(publishedPosts)
-            check(System.nanoTime() - started < TimeUnit.SECONDS.toNanos(90)) { "Sitemap generation deadline exceeded" }
+            check(System.nanoTime() - started < PRE_PUBLICATION_DEADLINE.toNanos()) { "Sitemap generation deadline exceeded" }
             storage.publish(xml, previous)
             lastPublished.set(Instant.now().epochSecond)
             log.info("Published sitemap: urls={}, bytes={}, key={}", publishedPosts.size, xml.size, SitemapStorage.KEY)
@@ -65,5 +65,11 @@ class SitemapGenerationService(
     // S3 is the durable source of freshness, including after application restarts and other nodes' runs.
     fun refreshPublishedTimestamp() {
         lastPublished.set(storage.current()?.lastModified?.epochSecond ?: 0)
+    }
+
+    private companion object {
+        val LOCK_MAX_DURATION: Duration = Duration.ofMinutes(10)
+        val LOCK_MIN_DURATION: Duration = Duration.ofMinutes(1)
+        val PRE_PUBLICATION_DEADLINE: Duration = Duration.ofSeconds(90)
     }
 }

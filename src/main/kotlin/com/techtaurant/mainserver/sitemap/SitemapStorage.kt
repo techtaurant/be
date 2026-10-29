@@ -55,10 +55,12 @@ class SitemapStorage(
 
     private fun requestConfiguration(): AwsRequestOverrideConfiguration.Builder =
         AwsRequestOverrideConfiguration.builder()
-            .apiCallTimeout(Duration.ofSeconds(30))
-            .apiCallAttemptTimeout(Duration.ofSeconds(10))
+            .apiCallTimeout(API_CALL_TIMEOUT)
+            .apiCallAttemptTimeout(API_ATTEMPT_TIMEOUT)
 
     companion object {
         const val KEY = "sitemap.xml"
+        private val API_CALL_TIMEOUT: Duration = Duration.ofSeconds(30)
+        private val API_ATTEMPT_TIMEOUT: Duration = Duration.ofSeconds(10)
     }
 }

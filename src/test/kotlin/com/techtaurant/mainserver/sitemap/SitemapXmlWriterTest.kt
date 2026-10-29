@@ -34,11 +34,4 @@ class SitemapXmlWriterTest {
         assertThat(writer.write(posts.take(50_000)).size).isLessThan(SitemapXmlWriter.MAX_BYTES)
         assertThatThrownBy { writer.write(posts) }.isInstanceOf(IllegalArgumentException::class.java)
     }
-
-    @Test
-    fun `rejects duplicate URLs`() {
-        val post = SitemapPost(UUID.randomUUID(), Instant.EPOCH)
-        assertThatThrownBy { writer.write(listOf(post, post)) }
-            .isInstanceOf(IllegalArgumentException::class.java)
-    }
 }

@@ -18,6 +18,10 @@ class SitemapPostRepository(private val dsl: DSLContext) {
             .where(POSTS.STATUS.eq(PostStatusEnum.PUBLISHED.name))
             .orderBy(POSTS.ID)
             .limit(SitemapXmlWriter.MAX_URLS + 1)
-            .queryTimeout(30)
+            .queryTimeout(QUERY_TIMEOUT_SECONDS)
             .fetch { SitemapPost(requireNotNull(it.value1()), requireNotNull(it.value2()).toInstant()) }
+
+    private companion object {
+        const val QUERY_TIMEOUT_SECONDS = 30
+    }
 }

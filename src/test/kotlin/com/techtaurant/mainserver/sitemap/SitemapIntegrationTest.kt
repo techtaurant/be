@@ -16,6 +16,9 @@ import net.javacrumbs.shedlock.core.LockConfiguration
 import net.javacrumbs.shedlock.provider.jdbctemplate.JdbcTemplateLockProvider
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.isNull
+import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.ApplicationContext
 import org.springframework.jdbc.core.JdbcTemplate
@@ -25,6 +28,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
+import javax.xml.parsers.DocumentBuilderFactory
 
 @TestPropertySource(properties = ["app.environment=prod", "sitemap.bucket-name=test"])
 class SitemapIntegrationTest : IntegrationTest() {
@@ -77,7 +81,7 @@ class SitemapIntegrationTest : IntegrationTest() {
     }
 
     @Test
-    fun `manual publication requires an administrator and shares the generation lease`() {
+    fun `admin publishes only public URLs with persisted timestamps and duplicate runs are rejected`() {
         val path = "${SecurityConstants.ADMIN_API_PREFIX}/sitemap/runs"
         given().post(path).then().statusCode(401)
         val regular = user(UserRole.USER)
@@ -86,9 +90,30 @@ class SitemapIntegrationTest : IntegrationTest() {
             tokens.createAccessToken(regular.id!!, regular.role),
         ).post(path).then().statusCode(403)
         val admin = user(UserRole.ADMIN)
+        val published = posts.save(Post("public", "body", admin))
+        posts.save(Post("private", "body", admin, status = PostStatusEnum.PRIVATE))
+        posts.save(Post("draft", "body", admin, status = PostStatusEnum.DRAFT))
+        val deleted = posts.save(Post("deleted", "body", admin))
+        jdbc.update("DELETE FROM posts WHERE id = ?", deleted.id)
+        val updatedAt = Instant.parse("2025-01-02T03:04:05Z")
+        jdbc.update("UPDATE posts SET updated_at_utc = ?::timestamptz WHERE id = ?", updatedAt.toString(), published.id)
         val token = tokens.createAccessToken(admin.id!!, admin.role)
-        given().cookie(JwtConstants.ACCESS_TOKEN_COOKIE, token).post(path).then().statusCode(200)
+        val response = given().cookie(JwtConstants.ACCESS_TOKEN_COOKIE, token).post(path).then().statusCode(200).extract().jsonPath()
         given().cookie(JwtConstants.ACCESS_TOKEN_COOKIE, token).post(path).then().statusCode(409)
+
+        val xml = ArgumentCaptor.forClass(ByteArray::class.java)
+        verify(storage).publish(xml.capture() ?: byteArrayOf(), isNull())
+        val document =
+            DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+                .newDocumentBuilder().parse(xml.value.inputStream())
+        assertThat(document.documentElement.namespaceURI).isEqualTo("http://www.sitemaps.org/schemas/sitemap/0.9")
+        assertThat(document.getElementsByTagName("url").length).isEqualTo(1)
+        assertThat(document.getElementsByTagName("loc").item(0).textContent)
+            .isEqualTo("https://techtaurant.com/posts/${published.id}")
+        assertThat(document.getElementsByTagName("lastmod").item(0).textContent).isEqualTo(updatedAt.toString())
+        assertThat(response.getInt("data.urlCount")).isEqualTo(1)
+        assertThat(response.getInt("data.sizeBytes")).isEqualTo(xml.value.size)
+        assertThat(response.getString("data.objectKey")).isEqualTo("sitemap.xml")
     }
 
     private fun user(role: UserRole) =

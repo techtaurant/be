@@ -22,8 +22,12 @@ class SitemapScheduler(private val service: SitemapGenerationService) {
         }
     }
 
-    @Scheduled(fixedDelay = 300_000, scheduler = "sitemapTaskScheduler")
+    @Scheduled(fixedDelay = FRESHNESS_REFRESH_INTERVAL_MILLIS, scheduler = "sitemapTaskScheduler")
     fun refreshPublishedTimestamp() {
         service.refreshPublishedTimestamp()
+    }
+
+    private companion object {
+        const val FRESHNESS_REFRESH_INTERVAL_MILLIS = 300_000L
     }
 }
