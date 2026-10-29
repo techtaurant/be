@@ -22,17 +22,20 @@ class SitemapStorageTest {
     @Test
     fun `only 404 means no prior publication and access errors fail closed`() {
         every { s3.headObject(any<HeadObjectRequest>()) } throws S3Exception.builder().statusCode(404).build()
-        assertThat(storage.current()).isNull()
+        assertThat(storage.current(SitemapStorage.INDEX_KEY)).isNull()
         every { s3.headObject(any<HeadObjectRequest>()) } throws S3Exception.builder().statusCode(403).build()
-        assertThatThrownBy { storage.current() }.isInstanceOf(S3Exception::class.java)
+        assertThatThrownBy { storage.current(SitemapStorage.INDEX_KEY) }.isInstanceOf(S3Exception::class.java)
     }
 
     @Test
     fun `loads durable modification time and ETag`() {
-        every { s3.headObject(any<HeadObjectRequest>()) } returns
+        val request = slot<HeadObjectRequest>()
+        every { s3.headObject(capture(request)) } returns
             HeadObjectResponse.builder()
                 .eTag("etag").lastModified(Instant.EPOCH).build()
-        assertThat(storage.current()).isEqualTo(PublishedSitemap("etag", Instant.EPOCH))
+        assertThat(storage.current(SitemapStorage.INDEX_KEY)).isEqualTo(PublishedSitemap("etag", Instant.EPOCH))
+        assertThat(request.captured.bucket()).isEqualTo("isolated-test-bucket")
+        assertThat(request.captured.key()).isEqualTo("sitemap/index.xml")
     }
 
     @Test
@@ -40,21 +43,21 @@ class SitemapStorageTest {
         val request = slot<PutObjectRequest>()
         val body = slot<RequestBody>()
         every { s3.putObject(capture(request), capture(body)) } returns PutObjectResponse.builder().build()
-        storage.publish("<urlset/>".toByteArray(), null)
+        storage.publish(SitemapStorage.POSTS_KEY, "<urlset/>".toByteArray(), null)
         assertThat(request.captured.overrideConfiguration().get().headers()["If-None-Match"]).containsExactly("*")
         assertThat(request.captured.bucket()).isEqualTo("isolated-test-bucket")
-        assertThat(request.captured.key()).isEqualTo("seo/sitemap.xml")
+        assertThat(request.captured.key()).isEqualTo("sitemap/posts.xml")
         assertThat(request.captured.contentType()).isEqualTo("application/xml; charset=utf-8")
         assertThat(request.captured.cacheControl()).isEqualTo("no-store")
         assertThat(body.captured.contentStreamProvider().newStream().readBytes()).isEqualTo("<urlset/>".toByteArray())
-        storage.publish("<urlset/>".toByteArray(), PublishedSitemap("old-etag", Instant.EPOCH))
+        storage.publish(SitemapStorage.POSTS_KEY, "<urlset/>".toByteArray(), PublishedSitemap("old-etag", Instant.EPOCH))
         assertThat(request.captured.overrideConfiguration().get().headers()["If-Match"]).containsExactly("old-etag")
     }
 
     @Test
     fun `conditional conflict is propagated without an unconditional overwrite`() {
         every { s3.putObject(any<PutObjectRequest>(), any<RequestBody>()) } throws S3Exception.builder().statusCode(412).build()
-        assertThatThrownBy { storage.publish(byteArrayOf(), PublishedSitemap("stale", Instant.EPOCH)) }
+        assertThatThrownBy { storage.publish(SitemapStorage.POSTS_KEY, byteArrayOf(), PublishedSitemap("stale", Instant.EPOCH)) }
             .isInstanceOf(S3Exception::class.java)
     }
 }

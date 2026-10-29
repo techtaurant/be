@@ -16,6 +16,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.isNull
+import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.ApplicationContext
@@ -82,19 +83,30 @@ class SitemapIntegrationTest : IntegrationTest() {
         val response = given().cookie(JwtConstants.ACCESS_TOKEN_COOKIE, token).post(path).then().statusCode(200).extract().jsonPath()
         given().cookie(JwtConstants.ACCESS_TOKEN_COOKIE, token).post(path).then().statusCode(409)
 
+        val keys = ArgumentCaptor.forClass(String::class.java)
         val xml = ArgumentCaptor.forClass(ByteArray::class.java)
-        verify(storage).publish(xml.capture() ?: byteArrayOf(), isNull())
+        verify(storage, times(2)).publish(keys.capture() ?: "", xml.capture() ?: byteArrayOf(), isNull())
+        assertThat(keys.allValues).containsExactly("sitemap/posts.xml", "sitemap/index.xml")
         val document =
             DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
-                .newDocumentBuilder().parse(xml.value.inputStream())
+                .newDocumentBuilder().parse(xml.allValues[0].inputStream())
+        assertThat(document.documentElement.localName).isEqualTo("urlset")
         assertThat(document.documentElement.namespaceURI).isEqualTo("http://www.sitemaps.org/schemas/sitemap/0.9")
         assertThat(document.getElementsByTagName("url").length).isEqualTo(1)
         assertThat(document.getElementsByTagName("loc").item(0).textContent)
             .isEqualTo("https://techtaurant.com/posts/${published.id}")
         assertThat(document.getElementsByTagName("lastmod").item(0).textContent).isEqualTo(updatedAt.toString())
         assertThat(response.getInt("data.urlCount")).isEqualTo(1)
-        assertThat(response.getInt("data.sizeBytes")).isEqualTo(xml.value.size)
-        assertThat(response.getString("data.objectKey")).isEqualTo("seo/sitemap.xml")
+        assertThat(response.getInt("data.sizeBytes")).isEqualTo(xml.allValues.sumOf { it.size })
+        assertThat(response.getList<String>("data.objectKeys")).containsExactly("sitemap/posts.xml", "sitemap/index.xml")
+        val index =
+            DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+                .newDocumentBuilder().parse(xml.allValues[1].inputStream())
+        assertThat(index.documentElement.localName).isEqualTo("sitemapindex")
+        assertThat(index.documentElement.namespaceURI).isEqualTo("http://www.sitemaps.org/schemas/sitemap/0.9")
+        assertThat(index.getElementsByTagName("sitemap").length).isEqualTo(1)
+        assertThat(index.getElementsByTagName("loc").item(0).textContent)
+            .isEqualTo("https://techtaurant.com/sitemap/posts.xml")
     }
 
     private fun user(role: UserRole) =
