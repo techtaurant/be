@@ -1,13 +1,11 @@
 package com.techtaurant.mainserver.sitemap
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 
 /** 기존 예약 작업과 분리된 사이트맵 실행 스레드를 구성합니다. */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty("app.environment", havingValue = "prod")
 class SitemapConfig {
     /**
      * 기존 링크 수집·정리 작업의 기본 스케줄러와 별도로 실행 스레드를 둡니다.

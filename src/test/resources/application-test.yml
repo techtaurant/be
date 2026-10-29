@@ -100,3 +100,4 @@ swagger:
 aws:
   s3:
     bucket-name: techtaurant-media-test
+    public-bucket-name: techtaurant-public-test

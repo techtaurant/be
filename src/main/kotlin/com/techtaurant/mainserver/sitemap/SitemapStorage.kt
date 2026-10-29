@@ -1,7 +1,6 @@
 package com.techtaurant.mainserver.sitemap
 
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Component
 import software.amazon.awssdk.awscore.AwsRequestOverrideConfiguration
 import software.amazon.awssdk.core.sync.RequestBody
@@ -19,13 +18,12 @@ data class PublishedSitemap(val etag: String, val lastModified: Instant)
  * 버킷은 공통 S3 설정을 사용하고, 객체 경로는 [POSTS_KEY]와 [INDEX_KEY]를 사용합니다.
  */
 @Component
-@ConditionalOnProperty("app.environment", havingValue = "prod")
 class SitemapStorage(
     private val s3: S3Client,
     @Value("\${aws.s3.public-bucket-name}") private val bucketName: String,
 ) {
     init {
-        require(bucketName.isNotBlank()) { "AWS_S3_PUBLIC_BUCKET_NAME is required in production" }
+        require(bucketName.isNotBlank()) { "AWS_S3_PUBLIC_BUCKET_NAME is required" }
     }
 
     /**

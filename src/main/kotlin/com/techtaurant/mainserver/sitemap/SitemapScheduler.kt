@@ -3,13 +3,11 @@ package com.techtaurant.mainserver.sitemap
 import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.common.lock.LockStatus
 import org.slf4j.LoggerFactory
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 
-/** 운영 환경의 사이트맵 정기 생성과 게시 시각 지표 갱신을 예약합니다. */
+/** 사이트맵 정기 생성과 게시 시각 지표 갱신을 예약합니다. */
 @Component
-@ConditionalOnProperty("app.environment", havingValue = "prod")
 class SitemapScheduler(private val service: SitemapGenerationService) {
     private val log = LoggerFactory.getLogger(javaClass)
 

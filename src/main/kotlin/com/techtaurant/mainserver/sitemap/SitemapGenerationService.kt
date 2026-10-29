@@ -4,7 +4,6 @@ import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.common.lock.ShedLock
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Service
 import java.time.Duration
 import java.time.Instant
@@ -18,7 +17,6 @@ data class SitemapGenerationResult(val urlCount: Int, val sizeBytes: Int, val ob
  * 정기 실행과 관리자 재실행이 같은 DB 잠금을 사용하며, 게시 결과를 운영 지표에 기록합니다.
  */
 @Service
-@ConditionalOnProperty("app.environment", havingValue = "prod")
 class SitemapGenerationService(
     private val posts: SitemapPostRepository,
     private val writer: SitemapXmlWriter,
