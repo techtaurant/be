@@ -8,7 +8,9 @@ import org.springframework.stereotype.Component
 
 /** 사이트맵 정기 생성과 게시 시각 지표 갱신을 예약합니다. */
 @Component
-class SitemapScheduler(private val service: SitemapGenerationService) {
+class SitemapScheduler(
+    private val service: SitemapGenerationService
+) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     /** 매일 04:00 KST에 생성하며, 다른 실행이 잠금을 보유한 경우 이번 실행을 건너뜁니다. */

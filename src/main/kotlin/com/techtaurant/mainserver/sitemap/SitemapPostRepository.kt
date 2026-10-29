@@ -14,7 +14,9 @@ data class SitemapPost(val id: UUID, val updatedAt: Instant)
  * 게시글 본문과 연관 엔티티는 조회하지 않습니다.
  */
 @Repository
-class SitemapPostRepository(private val dsl: DSLContext) {
+class SitemapPostRepository(
+    private val dsl: DSLContext
+) {
     /**
      * PUBLISHED 게시글을 ID 순서로 최대 50,001건 조회합니다.
      *
