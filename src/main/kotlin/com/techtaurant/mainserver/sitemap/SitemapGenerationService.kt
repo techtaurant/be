@@ -1,12 +1,9 @@
 package com.techtaurant.mainserver.sitemap
 
 import com.techtaurant.mainserver.common.exception.ApiException
-import com.techtaurant.mainserver.common.lock.LockStatus
+import com.techtaurant.mainserver.common.lock.ShedLock
 import io.micrometer.core.instrument.MeterRegistry
-import net.javacrumbs.shedlock.core.LockConfiguration
-import net.javacrumbs.shedlock.core.LockProvider
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Service
 import java.time.Duration
@@ -26,7 +23,7 @@ class SitemapGenerationService(
     private val posts: SitemapPostRepository,
     private val writer: SitemapXmlWriter,
     private val storage: SitemapStorage,
-    @Qualifier("sitemapLockProvider") private val lockProvider: LockProvider,
+    private val shedLock: ShedLock,
     private val meters: MeterRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -49,26 +46,24 @@ class SitemapGenerationService(
      */
     fun generate(): SitemapGenerationResult {
         val started = System.nanoTime()
-        val lock =
-            lockProvider.lock(
-                LockConfiguration(Instant.now(), "sitemap-publication", LOCK_MAX_DURATION, LOCK_MIN_DURATION),
-            ).orElseThrow { ApiException(LockStatus.LOCK_ACQUISITION_FAILED) }
-        try {
-            val previous = storage.current()
-            val publishedPosts = posts.findPublished()
-            val xml = writer.write(publishedPosts)
-            check(System.nanoTime() - started < PRE_PUBLICATION_DEADLINE.toNanos()) { "Sitemap generation deadline exceeded" }
-            storage.publish(xml, previous)
-            lastPublished.set(Instant.now().epochSecond)
-            log.info("Published sitemap: urls={}, bytes={}, key={}", publishedPosts.size, xml.size, SitemapStorage.KEY)
-            return SitemapGenerationResult(publishedPosts.size, xml.size, SitemapStorage.KEY)
-        } catch (exception: Exception) {
-            meters.counter("sitemap.generation.failures").increment()
-            log.error("Sitemap publication failed; inspect S3 freshness before retrying", exception)
-            throw exception
-        } finally {
+        return shedLock.withLock(
+            key = "sitemap-publication",
+            lockAtMostFor = LOCK_MAX_DURATION,
+            lockAtLeastFor = LOCK_MIN_DURATION,
+        ) {
             try {
-                lock.unlock()
+                val previous = storage.current()
+                val publishedPosts = posts.findPublished()
+                val xml = writer.write(publishedPosts)
+                check(System.nanoTime() - started < PRE_PUBLICATION_DEADLINE.toNanos()) { "Sitemap generation deadline exceeded" }
+                storage.publish(xml, previous)
+                lastPublished.set(Instant.now().epochSecond)
+                log.info("Published sitemap: urls={}, bytes={}, key={}", publishedPosts.size, xml.size, SitemapStorage.KEY)
+                SitemapGenerationResult(publishedPosts.size, xml.size, SitemapStorage.KEY)
+            } catch (exception: Exception) {
+                meters.counter("sitemap.generation.failures").increment()
+                log.error("Sitemap publication failed; inspect S3 freshness before retrying", exception)
+                throw exception
             } finally {
                 meters.timer("sitemap.generation.duration").record(System.nanoTime() - started, TimeUnit.NANOSECONDS)
             }

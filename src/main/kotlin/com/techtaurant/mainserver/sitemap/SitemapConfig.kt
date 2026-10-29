@@ -1,15 +1,11 @@
 package com.techtaurant.mainserver.sitemap
 
-import net.javacrumbs.shedlock.core.LockProvider
-import net.javacrumbs.shedlock.provider.jdbctemplate.JdbcTemplateLockProvider
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
-import javax.sql.DataSource
 
-/** 사이트맵 실행 스레드와 여러 서버가 공유할 DB 잠금을 구성합니다. */
+/** 기존 예약 작업과 분리된 사이트맵 실행 스레드를 구성합니다. */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty("app.environment", havingValue = "prod")
 class SitemapConfig {
@@ -27,16 +23,6 @@ class SitemapConfig {
             setContinueExistingPeriodicTasksAfterShutdownPolicy(false)
             setExecuteExistingDelayedTasksAfterShutdownPolicy(false)
         }
-
-    /** 서버별 시계 차이의 영향을 줄이도록 DB 시간을 기준으로 잠금 만료를 판단합니다. */
-    @Bean
-    fun sitemapLockProvider(dataSource: DataSource): LockProvider =
-        JdbcTemplateLockProvider(
-            JdbcTemplateLockProvider.Configuration.builder()
-                .withJdbcTemplate(JdbcTemplate(dataSource))
-                .usingDbTime()
-                .build(),
-        )
 
     private companion object {
         const val SHUTDOWN_WAIT_SECONDS = 150

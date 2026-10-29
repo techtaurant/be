@@ -12,8 +12,6 @@ import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
 import com.techtaurant.mainserver.user.infrastructure.out.UserRepository
 import io.restassured.RestAssured.given
-import net.javacrumbs.shedlock.core.LockConfiguration
-import net.javacrumbs.shedlock.provider.jdbctemplate.JdbcTemplateLockProvider
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentCaptor
@@ -25,7 +23,6 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.test.context.TestPropertySource
 import org.springframework.test.context.bean.override.mockito.MockitoBean
-import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import javax.xml.parsers.DocumentBuilderFactory
@@ -62,22 +59,6 @@ class SitemapIntegrationTest : IntegrationTest() {
     fun `sitemap and existing tasks have separate schedulers`() {
         val existing = context.getBean("taskScheduler", TaskScheduler::class.java)
         assertThat(context.getBean("sitemapTaskScheduler", TaskScheduler::class.java)).isNotSameAs(existing)
-    }
-
-    @Test
-    fun `independent providers share a database lease and recover expired leases`() {
-        fun provider() =
-            JdbcTemplateLockProvider(JdbcTemplateLockProvider.Configuration.builder().withJdbcTemplate(jdbc).usingDbTime().build())
-        val first = provider()
-        val second = provider()
-        val config = LockConfiguration(Instant.now(), "integration-lock", Duration.ofMinutes(10), Duration.ZERO)
-        val held = first.lock(config).orElseThrow()
-        assertThat(second.lock(config)).isEmpty()
-        held.unlock()
-        second.lock(config).orElseThrow()
-        jdbc.update("UPDATE shedlock SET lock_until = (now() AT TIME ZONE 'UTC') - interval '1 second' WHERE name = 'integration-lock'")
-        val recovered = first.lock(config).orElseThrow()
-        recovered.unlock()
     }
 
     @Test
