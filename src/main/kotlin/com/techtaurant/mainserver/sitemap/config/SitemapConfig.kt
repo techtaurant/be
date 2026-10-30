@@ -1,4 +1,4 @@
-package com.techtaurant.mainserver.sitemap
+package com.techtaurant.mainserver.sitemap.config
 
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration

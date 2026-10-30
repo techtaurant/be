@@ -1,5 +1,7 @@
 package com.techtaurant.mainserver.sitemap
 
+import com.techtaurant.mainserver.sitemap.application.SitemapXmlWriter
+import com.techtaurant.mainserver.sitemap.dto.SitemapPost
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test

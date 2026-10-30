@@ -1,5 +1,7 @@
 package com.techtaurant.mainserver.sitemap
 
+import com.techtaurant.mainserver.sitemap.application.SitemapStorage
+import com.techtaurant.mainserver.sitemap.dto.PublishedSitemap
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot

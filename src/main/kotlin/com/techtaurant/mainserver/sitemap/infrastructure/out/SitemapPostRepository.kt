@@ -1,13 +1,11 @@
-package com.techtaurant.mainserver.sitemap
+package com.techtaurant.mainserver.sitemap.infrastructure.out
 
 import com.techtaurant.mainserver.jooq.tables.Posts.Companion.POSTS
 import com.techtaurant.mainserver.post.enums.PostStatusEnum
+import com.techtaurant.mainserver.sitemap.application.SitemapXmlWriter
+import com.techtaurant.mainserver.sitemap.dto.SitemapPost
 import org.jooq.DSLContext
 import org.springframework.stereotype.Repository
-import java.time.Instant
-import java.util.UUID
-
-data class SitemapPost(val id: UUID, val updatedAt: Instant)
 
 /**
  * 사이트맵에 필요한 공개 게시글 ID와 수정 시각을 조회합니다.
@@ -15,7 +13,7 @@ data class SitemapPost(val id: UUID, val updatedAt: Instant)
  */
 @Repository
 class SitemapPostRepository(
-    private val dsl: DSLContext
+    private val dsl: DSLContext,
 ) {
     /**
      * PUBLISHED 게시글을 ID 순서로 최대 50,001건 조회합니다.

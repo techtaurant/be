@@ -1,5 +1,6 @@
-package com.techtaurant.mainserver.sitemap
+package com.techtaurant.mainserver.sitemap.application
 
+import com.techtaurant.mainserver.sitemap.dto.SitemapPost
 import org.springframework.stereotype.Component
 import java.io.ByteArrayOutputStream
 import javax.xml.stream.XMLOutputFactory

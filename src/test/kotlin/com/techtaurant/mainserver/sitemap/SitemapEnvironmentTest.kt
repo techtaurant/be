@@ -1,6 +1,14 @@
 package com.techtaurant.mainserver.sitemap
 
 import com.techtaurant.mainserver.common.lock.ShedLock
+import com.techtaurant.mainserver.sitemap.application.SitemapGenerationService
+import com.techtaurant.mainserver.sitemap.application.SitemapScheduler
+import com.techtaurant.mainserver.sitemap.application.SitemapStorage
+import com.techtaurant.mainserver.sitemap.application.SitemapXmlWriter
+import com.techtaurant.mainserver.sitemap.config.SitemapConfig
+import com.techtaurant.mainserver.sitemap.dto.SitemapGenerationResult
+import com.techtaurant.mainserver.sitemap.infrastructure.`in`.AdminSitemapController
+import com.techtaurant.mainserver.sitemap.infrastructure.out.SitemapPostRepository
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every

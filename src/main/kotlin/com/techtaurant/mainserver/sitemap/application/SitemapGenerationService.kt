@@ -1,7 +1,9 @@
-package com.techtaurant.mainserver.sitemap
+package com.techtaurant.mainserver.sitemap.application
 
 import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.common.lock.ShedLock
+import com.techtaurant.mainserver.sitemap.dto.SitemapGenerationResult
+import com.techtaurant.mainserver.sitemap.infrastructure.out.SitemapPostRepository
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -9,8 +11,6 @@ import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
-
-data class SitemapGenerationResult(val urlCount: Int, val sizeBytes: Int, val objectKeys: List<String>)
 
 /**
  * 공개 게시글 조회, XML 생성, S3 게시를 순서대로 실행합니다.

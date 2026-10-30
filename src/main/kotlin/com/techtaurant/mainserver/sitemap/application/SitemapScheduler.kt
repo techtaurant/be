@@ -1,4 +1,4 @@
-package com.techtaurant.mainserver.sitemap
+package com.techtaurant.mainserver.sitemap.application
 
 import com.techtaurant.mainserver.common.exception.ApiException
 import com.techtaurant.mainserver.common.lock.LockStatus
@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component
 /** 사이트맵 정기 생성과 게시 시각 지표 갱신을 예약합니다. */
 @Component
 class SitemapScheduler(
-    private val service: SitemapGenerationService
+    private val service: SitemapGenerationService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 

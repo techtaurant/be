@@ -1,5 +1,6 @@
-package com.techtaurant.mainserver.sitemap
+package com.techtaurant.mainserver.sitemap.application
 
+import com.techtaurant.mainserver.sitemap.dto.PublishedSitemap
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import software.amazon.awssdk.awscore.AwsRequestOverrideConfiguration
@@ -9,9 +10,6 @@ import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.S3Exception
 import java.time.Duration
-import java.time.Instant
-
-data class PublishedSitemap(val etag: String, val lastModified: Instant)
 
 /**
  * 공개 S3 버킷의 사이트맵 파일 조회와 업로드를 담당합니다.

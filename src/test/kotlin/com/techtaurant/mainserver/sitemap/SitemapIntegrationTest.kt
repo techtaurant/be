@@ -8,6 +8,9 @@ import com.techtaurant.mainserver.security.SecurityConstants
 import com.techtaurant.mainserver.security.enums.OAuthProvider
 import com.techtaurant.mainserver.security.jwt.JwtConstants
 import com.techtaurant.mainserver.security.jwt.JwtTokenProvider
+import com.techtaurant.mainserver.sitemap.application.SitemapStorage
+import com.techtaurant.mainserver.sitemap.dto.SitemapPost
+import com.techtaurant.mainserver.sitemap.infrastructure.out.SitemapPostRepository
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
 import com.techtaurant.mainserver.user.infrastructure.out.UserRepository
