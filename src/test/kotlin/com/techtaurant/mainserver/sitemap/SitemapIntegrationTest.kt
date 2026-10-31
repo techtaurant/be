@@ -118,6 +118,7 @@ class SitemapIntegrationTest : IntegrationTest() {
         repository: PostRepository,
         storage: SitemapStorage,
     ) = ApplicationContextRunner()
+        .withPropertyValues("app.client-base-url=https://techtaurant.com")
         .withUserConfiguration(ShedLockConfig::class.java, SitemapScheduler::class.java, SitemapXmlWriter::class.java)
         .withBean(DataSource::class.java, { dataSource })
         .withBean(PostRepository::class.java, { repository })

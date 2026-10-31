@@ -1,6 +1,7 @@
 package com.techtaurant.mainserver.sitemap
 
 import com.techtaurant.mainserver.post.dto.PostForSitemap
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.nio.file.Files
 import java.nio.file.Path
@@ -10,7 +11,10 @@ import javax.xml.stream.XMLOutputFactory
  * 사이트맵 XML을 직렬화합니다.
  */
 @Component
-class SitemapXmlWriter {
+class SitemapXmlWriter(
+    @Value("\${app.client-base-url}")
+    private val clientBaseUrl: String,
+) {
     /**
      * 홈 및 게시글 사이트맵을 가리키는 인덱스를 생성합니다.
      * FE rewrite를 통해 접근할 공개 주소를 사용하며, 선택 항목인 인덱스 lastmod는 생략합니다.
@@ -19,9 +23,9 @@ class SitemapXmlWriter {
         buildString {
             appendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
             appendLine("<sitemapindex xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">")
-            appendLine("    <sitemap><loc>$CLIENT_BASE_URL/sitemap/home.xml</loc></sitemap>")
+            appendLine("    <sitemap><loc>$clientBaseUrl/sitemap/home.xml</loc></sitemap>")
             for (number in 1..fileCount) {
-                appendLine("    <sitemap><loc>$CLIENT_BASE_URL/sitemap/posts-$number.xml</loc></sitemap>")
+                appendLine("    <sitemap><loc>$clientBaseUrl/sitemap/posts-$number.xml</loc></sitemap>")
             }
             appendLine("</sitemapindex>")
         }.toByteArray(Charsets.UTF_8)
@@ -31,7 +35,7 @@ class SitemapXmlWriter {
         buildString {
             appendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
             appendLine("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">")
-            appendLine("    <url><loc>$CLIENT_BASE_URL/posts</loc></url>")
+            appendLine("    <url><loc>$clientBaseUrl/posts</loc></url>")
             appendLine("</urlset>")
         }.toByteArray(Charsets.UTF_8)
 
@@ -57,7 +61,7 @@ class SitemapXmlWriter {
                     count++
                     xml.writeStartElement("url")
                     xml.writeStartElement("loc")
-                    xml.writeCharacters("$CLIENT_BASE_URL/posts/${post.id}")
+                    xml.writeCharacters("$clientBaseUrl/posts/${post.id}")
                     xml.writeEndElement()
                     xml.writeStartElement("lastmod")
                     xml.writeCharacters(post.updatedAt.toString())
@@ -76,7 +80,6 @@ class SitemapXmlWriter {
     }
 
     companion object {
-        private const val CLIENT_BASE_URL = "https://techtaurant.com"
         const val MAX_URLS = 50_000
         const val MAX_BYTES = 50 * 1024 * 1024
     }

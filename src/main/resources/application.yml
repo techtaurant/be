@@ -48,6 +48,7 @@ decorator:
             log-format: "%(sql)"
 
 app:
+    client-base-url: ${CLIENT_BASE_URL:https://techtaurant.com}
     environment: ${APP_ENVIRONMENT:dev}
     # OTel SDK 표준 env와 기존 프로젝트 env 중 하나만 있어도 동일하게 해석한다.
     otel-collector-endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}

@@ -18,7 +18,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 class SitemapSchedulerTest {
     private val posts = mockk<PostRepository>()
     private val storage = mockk<SitemapStorage>(relaxed = true)
-    private val scheduler = SitemapScheduler(posts, SitemapXmlWriter(), storage)
+    private val scheduler = SitemapScheduler(posts, SitemapXmlWriter("https://techtaurant.com"), storage)
 
     @Test
     fun `reads successive chunks and uploads the file before index then deletes the temporary file`() {

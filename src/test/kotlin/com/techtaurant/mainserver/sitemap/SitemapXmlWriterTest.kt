@@ -13,7 +13,7 @@ import java.util.UUID
 import javax.xml.parsers.DocumentBuilderFactory
 
 class SitemapXmlWriterTest {
-    private val writer = SitemapXmlWriter()
+    private val writer = SitemapXmlWriter("https://techtaurant.com")
 
     @TempDir lateinit var tempDir: Path
 
