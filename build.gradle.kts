@@ -81,6 +81,10 @@ dependencies {
     // UUID V7
     implementation("com.github.f4b6a3:uuid-creator:6.0.0")
 
+    // ShedLock - DB 기반 스케줄러 중복 실행 방지
+    implementation("net.javacrumbs.shedlock:shedlock-spring:7.10.1")
+    implementation("net.javacrumbs.shedlock:shedlock-provider-jdbc-template:7.10.1")
+
     // Caffeine Cache
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
 

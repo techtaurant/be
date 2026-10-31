@@ -15,6 +15,7 @@ import com.techtaurant.mainserver.jooq.tables.records.TagsRecord
 import com.techtaurant.mainserver.jooq.tables.records.UsersRecord
 import com.techtaurant.mainserver.post.application.PostWithSortValue
 import com.techtaurant.mainserver.post.dto.PostCursor
+import com.techtaurant.mainserver.post.dto.PostForSitemap
 import com.techtaurant.mainserver.post.entity.Category
 import com.techtaurant.mainserver.post.entity.Post
 import com.techtaurant.mainserver.post.entity.PostPeriod
@@ -310,6 +311,18 @@ class PostRepositoryCustomImpl(
 
         return fetchPosts(listOf(lockedPostId)).firstOrNull()
     }
+
+    override fun findPostsForSitemap(
+        afterId: UUID?,
+        limit: Int,
+    ): List<PostForSitemap> =
+        dsl.select(POSTS.ID, POSTS.UPDATED_AT_UTC)
+            .from(POSTS)
+            .where(POSTS.STATUS.eq(PostStatusEnum.PUBLISHED.name))
+            .and(afterId?.let { POSTS.ID.gt(it) } ?: DSL.noCondition())
+            .orderBy(POSTS.ID)
+            .limit(limit)
+            .fetch { PostForSitemap(requireNotNull(it.value1()), requireNotNull(it.value2()).toInstant()) }
 
     override fun findPublishedPostsByIdIn(postIds: List<UUID>): List<Post> =
         fetchPosts(fetchPostIds(POSTS.ID.`in`(postIds).and(POSTS.STATUS.eq(PostStatusEnum.PUBLISHED.name))))
