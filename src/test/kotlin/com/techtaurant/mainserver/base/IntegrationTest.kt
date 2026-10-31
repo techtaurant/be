@@ -1,6 +1,6 @@
 package com.techtaurant.mainserver.base
 
-import com.techtaurant.mainserver.sitemap.application.SitemapScheduler
+import com.techtaurant.mainserver.sitemap.SitemapScheduler
 import io.restassured.RestAssured
 import org.junit.jupiter.api.BeforeEach
 import org.springframework.beans.factory.annotation.Autowired

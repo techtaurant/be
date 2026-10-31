@@ -2,6 +2,7 @@ package com.techtaurant.mainserver.post.infrastructure.out
 
 import com.techtaurant.mainserver.post.application.PostWithSortValue
 import com.techtaurant.mainserver.post.dto.PostCursor
+import com.techtaurant.mainserver.post.dto.PostForSitemap
 import com.techtaurant.mainserver.post.entity.Post
 import com.techtaurant.mainserver.post.entity.PostPeriod
 import com.techtaurant.mainserver.post.entity.PostSortType
@@ -115,6 +116,18 @@ interface PostRepositoryCustom {
     fun findPostByIdWithAuthor(postId: UUID): Post?
 
     fun findPostByIdWithAuthorForUpdate(postId: UUID): Post?
+
+    /**
+     * 사이트맵에 필요한 PUBLISHED 게시글 ID와 실제 수정 시각만 ID 순서로 조회합니다.
+     * 본문과 연관 엔티티는 조회하지 않으며, 마지막 ID 이후를 청크 단위로 반환합니다.
+     *
+     * @param afterId 직전 청크의 마지막 ID. 첫 조회는 null
+     * @param limit 청크당 최대 조회 개수
+     */
+    fun findPostsForSitemap(
+        afterId: UUID?,
+        limit: Int,
+    ): List<PostForSitemap>
 
     fun findPublishedPostsByIdIn(postIds: List<UUID>): List<Post>
 
