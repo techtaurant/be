@@ -1,7 +1,8 @@
-package com.techtaurant.mainserver.sitemap
+package com.techtaurant.mainserver.sitemap.application
 
 import com.techtaurant.mainserver.post.dto.PostForSitemap
 import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
+import com.techtaurant.mainserver.sitemap.infrastructure.out.S3SitemapStorage
 import io.mockk.every
 import io.mockk.mockk
 import org.assertj.core.api.Assertions.assertThat
@@ -25,7 +26,7 @@ class SitemapEnvironmentTest {
         val posts = mockk<PostRepository>()
         val requests = mutableListOf<PutObjectRequest>()
         val postId = UUID.randomUUID()
-        every { posts.findPostsForSitemap(null, 1_000) } returns listOf(PostForSitemap(postId, Instant.EPOCH))
+        every { posts.findPostsForSitemap(null, 50_000) } returns listOf(PostForSitemap(postId, Instant.EPOCH))
         every { s3.putObject(any<PutObjectRequest>(), any<RequestBody>()) } answers {
             requests.add(firstArg())
             val document =
@@ -38,7 +39,7 @@ class SitemapEnvironmentTest {
                 "sitemap/home.xml" -> assertThat(locations.item(0).textContent).isEqualTo("$clientBaseUrl/posts")
                 "sitemap/index.xml" ->
                     assertThat((0 until locations.length).map { locations.item(it).textContent })
-                        .containsExactly("$clientBaseUrl/sitemap/home.xml", "$clientBaseUrl/sitemap/posts-1.xml")
+                        .containsExactly("$clientBaseUrl/sitemap/posts-1.xml", "$clientBaseUrl/sitemap/home.xml")
             }
             PutObjectResponse.builder().build()
         }
@@ -53,7 +54,8 @@ class SitemapEnvironmentTest {
             .withBean(PostRepository::class.java, { posts })
             .withUserConfiguration(
                 SitemapScheduler::class.java,
-                SitemapStorage::class.java,
+                S3SitemapStorage::class.java,
+                SitemapService::class.java,
                 SitemapXmlWriter::class.java,
             ).run { context ->
                 assertThat(context).hasNotFailed()

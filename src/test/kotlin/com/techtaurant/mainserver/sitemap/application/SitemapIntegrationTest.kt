@@ -1,4 +1,4 @@
-package com.techtaurant.mainserver.sitemap
+package com.techtaurant.mainserver.sitemap.application
 
 import com.techtaurant.mainserver.base.IntegrationTest
 import com.techtaurant.mainserver.config.ShedLockConfig
@@ -7,6 +7,7 @@ import com.techtaurant.mainserver.post.entity.Post
 import com.techtaurant.mainserver.post.enums.PostStatusEnum
 import com.techtaurant.mainserver.post.infrastructure.out.PostRepository
 import com.techtaurant.mainserver.security.enums.OAuthProvider
+import com.techtaurant.mainserver.sitemap.infrastructure.out.SitemapStorage
 import com.techtaurant.mainserver.user.entity.User
 import com.techtaurant.mainserver.user.enums.UserRole
 import com.techtaurant.mainserver.user.infrastructure.out.UserRepository
@@ -70,13 +71,13 @@ class SitemapIntegrationTest : IntegrationTest() {
     fun `independent Spring contexts skip the same active lock and honor the minimum lease`() {
         val repository = mockk<PostRepository>()
         val storage = mockk<SitemapStorage>(relaxed = true)
-        every { repository.findPostsForSitemap(null, 1_000) } returns emptyList()
+        every { repository.findPostsForSitemap(null, 50_000) } returns listOf(PostForSitemap(UUID.randomUUID(), Instant.EPOCH))
         runner(repository, storage).run { first ->
             runner(repository, storage).run { second ->
                 val firstScheduler = first.getBean(SitemapScheduler::class.java)
                 val secondScheduler = second.getBean(SitemapScheduler::class.java)
                 assertThat(AopUtils.isAopProxy(firstScheduler)).isTrue()
-                every { storage.publishFile(any(), any()) } answers {
+                every { storage.publishXml("sitemap/posts-1.xml", any()) } answers {
                     assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse()
                     val contender = Executors.newSingleThreadExecutor()
                     try {
@@ -88,7 +89,7 @@ class SitemapIntegrationTest : IntegrationTest() {
                 firstScheduler.generate()
                 secondScheduler.generate()
                 verify(exactly = 1) { repository.findPostsForSitemap(any(), any()) }
-                verify(exactly = 1) { storage.publishFile(any(), any()) }
+                verify(exactly = 1) { storage.publishXml("sitemap/posts-1.xml", any()) }
 
                 jdbc.update("UPDATE shedlock SET lock_until = (now() AT TIME ZONE 'UTC') - interval '1 second'")
                 secondScheduler.generate()
@@ -101,16 +102,16 @@ class SitemapIntegrationTest : IntegrationTest() {
     fun `failed annotation protected execution can run again after the minimum lease expires`() {
         val repository = mockk<PostRepository>()
         val storage = mockk<SitemapStorage>(relaxed = true)
-        every { repository.findPostsForSitemap(null, 1_000) } throws IllegalStateException("DB unavailable")
+        every { repository.findPostsForSitemap(null, 50_000) } throws IllegalStateException("DB unavailable")
         runner(repository, storage).run { context ->
             val scheduler = context.getBean(SitemapScheduler::class.java)
             assertThatThrownBy { scheduler.generate() }.isInstanceOf(IllegalStateException::class.java)
-            every { repository.findPostsForSitemap(null, 1_000) } returns emptyList()
+            every { repository.findPostsForSitemap(null, 50_000) } returns listOf(PostForSitemap(UUID.randomUUID(), Instant.EPOCH))
             scheduler.generate()
-            verify(exactly = 0) { storage.publishFile(any(), any()) }
+            verify(exactly = 0) { storage.publishXml("sitemap/posts-1.xml", any()) }
             jdbc.update("UPDATE shedlock SET lock_until = (now() AT TIME ZONE 'UTC') - interval '1 second'")
             scheduler.generate()
-            verify(exactly = 1) { storage.publishFile(any(), any()) }
+            verify(exactly = 1) { storage.publishXml("sitemap/posts-1.xml", any()) }
         }
     }
 
@@ -119,7 +120,12 @@ class SitemapIntegrationTest : IntegrationTest() {
         storage: SitemapStorage,
     ) = ApplicationContextRunner()
         .withPropertyValues("app.client-base-url=https://techtaurant.com")
-        .withUserConfiguration(ShedLockConfig::class.java, SitemapScheduler::class.java, SitemapXmlWriter::class.java)
+        .withUserConfiguration(
+            ShedLockConfig::class.java,
+            SitemapScheduler::class.java,
+            SitemapService::class.java,
+            SitemapXmlWriter::class.java,
+        )
         .withBean(DataSource::class.java, { dataSource })
         .withBean(PostRepository::class.java, { repository })
         .withBean(SitemapStorage::class.java, { storage })
