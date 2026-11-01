@@ -1,5 +1,6 @@
 package com.techtaurant.mainserver.base
 
+import com.techtaurant.mainserver.sitemap.application.SitemapScheduler
 import io.restassured.RestAssured
 import org.junit.jupiter.api.BeforeEach
 import org.springframework.beans.factory.annotation.Autowired
@@ -9,6 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.images.builder.ImageFromDockerfile
@@ -19,6 +21,9 @@ import java.time.Duration
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 abstract class IntegrationTest {
+    // 자동 테스트 실행 시 예약 작업이 실제 S3에 접근하지 않도록 대체한다.
+    @MockitoBean private lateinit var sitemapScheduler: SitemapScheduler
+
     @LocalServerPort
     protected var port: Int = 0
 
