@@ -14,6 +14,11 @@ class SitemapXmlWriter(
     @Value("\${app.client-base-url}")
     private val clientBaseUrl: String,
 ) {
+    companion object {
+        const val MAX_URLS = 50_000
+        const val MAX_BYTES = 50 * 1024 * 1024
+    }
+
     /**
      * 전달받은 사이트맵 파일 경로를 가리키는 인덱스를 생성합니다.
      * FE rewrite를 통해 접근할 공개 주소를 사용하며, 선택 항목인 인덱스 lastmod는 생략합니다.
@@ -63,10 +68,5 @@ class SitemapXmlWriter(
         }
         require(output.size() <= MAX_BYTES) { "Sitemap exceeds 50 MiB; split before publishing" }
         return output.toByteArray()
-    }
-
-    companion object {
-        const val MAX_URLS = 50_000
-        const val MAX_BYTES = 50 * 1024 * 1024
     }
 }
