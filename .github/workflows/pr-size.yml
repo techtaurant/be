@@ -1,0 +1,32 @@
+name: PR Size
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  size:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check additions and deletions
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const parameters = { ...context.repo, pull_number: context.issue.number };
+            const { data: pr } = await github.rest.pulls.get(parameters);
+            const total = pr.additions + pr.deletions;
+            core.info(`additions=${pr.additions} deletions=${pr.deletions} total=${total} limit=500`);
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              ...parameters, per_page: 100,
+            });
+            for (const file of files) {
+              if (file.patch === undefined) {
+                core.info(`Changed file without a patch (binary or omitted): ${JSON.stringify(file.filename)} (${file.status})`);
+              }
+            }
+            if (total > 500) {
+              core.setFailed(`PR changes ${total} lines; the maximum is 500 additions + deletions.`);
+            }
